@@ -26,6 +26,28 @@ origin  https://github.com/user/project.git (fetch)
 origin  https://github.com/user/project.git (push)
 ```
 
+### 查看本地分支与远程分支的关联关系
+
+使用 `git branch -vv` 可以查看本地分支与远程分支的关联关系：
+
+```bash
+git branch -vv
+```
+
+输出示例：
+
+```
+* master  a1b2c3d [origin/master] 最新提交信息
+  dev     e4f5g6h [origin/dev] 开发分支提交信息
+```
+
+说明：
+
+* `*` 表示当前所在分支
+* `a1b2c3d` 是本地分支最新的提交哈希值
+* `[origin/master]` 表示关联的远程分支
+* 后面是该提交的简要信息
+
 ## 三、拉取远程更新（不合并）
 
 使用 `git fetch` 获取远程分支的最新提交，**不会自动合并到当前分支**：
@@ -114,6 +136,7 @@ CONFLICT (content): Merge conflict in path/to/file
 | 场景          | 命令                                           |
 | ----------- | -------------------------------------------- |
 | 查看远程仓库信息    | `git remote -v`                              |
+| 查看分支关联关系    | `git branch -vv`                             |
 | 拉取远程更新（不合并） | `git fetch origin`                           |
 | 对比文件差异      | `git diff origin/master -- path/to/file`     |
 | 获取远程文件替换本地  | `git checkout origin/master -- path/to/file` |
