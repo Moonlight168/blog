@@ -1,3 +1,0 @@
-import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/tag/vuepress-theme-reco/index.html.vue"
-const data = JSON.parse("{\"path\":\"/tag/vuepress-theme-reco/\",\"title\":\"标签: vuepress-theme-reco\",\"lang\":\"zh-CN\",\"frontmatter\":{\"dir\":{\"index\":false},\"index\":false,\"feed\":false,\"sitemap\":false,\"title\":\"标签: vuepress-theme-reco\",\"blog\":{\"type\":\"category\",\"name\":\"vuepress-theme-reco\",\"key\":\"tag\"},\"layout\":\"Blog\"},\"git\":{},\"readingTime\":{\"minutes\":0,\"words\":0},\"filePathRelative\":null,\"excerpt\":\"\"}")
-export { comp, data }
