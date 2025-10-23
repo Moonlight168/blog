@@ -8,7 +8,7 @@ name: 自动部署到 GitHub Pages
 
 on:
   push:
-    branches: [github-pages]
+    branches: [gh-pages]
 
 jobs:
   deploy:
