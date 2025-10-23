@@ -1,0 +1,64 @@
+# 配置权限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+name: 自动部署到 GitHub Pages
+
+on:
+  push:
+    branches: [github-pages]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # 1. 拉取代码
+      - name: 拉取代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2. 缓存 node_modules（核心优化）
+      - name: 缓存依赖
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      # 3. 安装 Node.js
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: "npm"  # 配合 actions/cache 双重缓存，进一步加速
+
+      # 4. 安装依赖（仅缓存未命中时执行）
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: "npm"
+
+
+      - name: 安装依赖
+        run: npm ci
+    
+    
+    # 6. 上传构建产物
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'src/.vuepress/dist'
+
+      # 7. 部署到 GitHub Pages
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
