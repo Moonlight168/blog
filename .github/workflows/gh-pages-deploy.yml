@@ -37,7 +37,7 @@ jobs:
 
       # 5️⃣ 构建项目
       - name: 构建项目
-        run: npm run build
+        run: npm run docs:build
 
       # 6️⃣ 部署到 gh-pages 分支
       - name: 部署到 gh-pages 分支
