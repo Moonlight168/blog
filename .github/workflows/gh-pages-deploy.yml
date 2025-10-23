@@ -1,60 +1,45 @@
-# 配置权限
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# 自动部署的名称
+name: GitHub pages deploy
 
-name: 自动部署到 GitHub Pages
-
+# 自动部署的条件
 on:
   push:
-    branches: [gh-pages]
+    branches:
+      - gh-pages  # 触发部署的本地分支
 
 jobs:
-  deploy:
+  # 构建网站并部署到 GitHub Pages
+  deploy-gh-pages:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      # 1. 拉取代码
-      - name: 拉取代码
+      # 第一步: 下载源码
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # 获取完整历史，保证正确生成最后更新时间
 
-      # 2. 缓存 node_modules（核心优化）
-      - name: 缓存依赖
-        uses: actions/cache@v3
+      # 缓存 node_modules 以避免重复安装
+      - uses: actions/cache@v3
+        id: node-modules
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          path: node_modules/
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-node-modules-
 
-      # 3. 安装 Node.js
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
+      # 安装依赖
+      - name: Install Deps
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: yarn install --frozen-lockfile
+
+      # 构建项目
+      - name: Build
+        run: yarn run build
+
+      # 部署到 gh-pages 分支
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          node-version: 18
-          cache: "npm"  # 配合 actions/cache 双重缓存，进一步加速
-
-      # 4. 安装依赖（仅缓存未命中时执行）
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: "npm"
-
-
-      - name: 安装依赖
-        run: npm ci
-
-      - name: 构建 VuePress
-        run: npm run docs:build
-
-      # 7. 部署到 GitHub Pages
-      - name: 部署到 GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          branch: gh-pages  # 远程分支
+          folder: dist      # 构建输出目录
