@@ -1,0 +1,114 @@
+// place your custom styles here
+
+:root {
+  // 深色模式主次要文字色
+  --color-fg-default: #5D67E8;
+  --color-fg-muted: #f3f3f3;
+
+  // 若需要兼容浅色模式，可通过媒体查询切换
+  @media (prefers-color-scheme: light) {
+    --color-fg-default: #5D67E8;
+    --color-fg-muted: #f3f3f3;
+  }
+}
+
+.vp-blogger-avatar {
+  position: relative;
+  width: 160px !important; /* 缩小一点，默认是 ~150px 左右 */
+  height: 160px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  z-index: 1;
+  box-shadow: 0 0 50px rgba(255, 255, 255, 0.3);
+}
+
+
+.vp-navbar {
+  background: transparent;
+  backdrop-filter: blur(3px); /* 模糊强度 */
+  -webkit-backdrop-filter: blur(10px); /* Safari 兼容 */
+  border: 1px solid rgba(255, 255, 255, 0.3); /* 轻微边框 */
+  width: 100%;
+  z-index: 9999 !important;     /* 确保在所有元素之上 */
+}
+
+// 放入 .vuepress/styles/index.scss 中
+.vp-blog-hero-title {
+  /* 字体渐变核心 */
+  background-image: linear-gradient(to right, #5D67E8, #ef4444);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+
+  /* 其他字体样式（可选） */
+  font-size: 4.5rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.vp-blog-hero-description {
+  // 文字样式
+  font-size: 1.25rem;
+  line-height: 1.6;
+  max-width: 600px;
+  margin: 0 auto 2rem;
+
+  // 文字颜色（使用你的变量）
+  color: var(--color-fg-muted);
+
+  // 响应式字体大小
+  @media (max-width: 768px) {
+    font-size: 1.125rem;
+  }
+}
+
+// 针对 data-theme="dark" 的深色模式反转 vp-icon 颜色
+html[data-theme="dark"] .vp-icon {
+  filter: invert(1) hue-rotate(180deg);
+  // invert(1) 反转颜色，hue-rotate 修正色调（可选，根据图标颜色调整）
+}
+
+/* 全局表格样式：解决thead/tbody超出、图片过大问题 */
+// 1. 表格容器：限制整体范围，超出滚动
+table {
+  width: 100%;          // 表格占满父容器
+  max-width: 100%;       // 禁止超出页面宽度
+  table-layout: fixed;   // 固定列宽，不随内容扩张
+  border-collapse: collapse; // 合并边框，消除额外间距
+  margin: 1rem 0;        // 上下留白，避免拥挤
+  display: block;        // 启用高度限制
+  max-height: 600px;     // 表格最大高度（可按需调整，如 500px）
+  overflow-y: auto;      // 内容超出时纵向滚动
+}
+
+// 2. 表头(thead)：固定样式，避免错位
+table thead {
+  background-color: #f5f7fa; // 表头背景色，区分内容
+  position: sticky;          // 滚动时表头固定在顶部（关键！）
+  top: 0;                    // 表头固定在容器顶部
+  z-index: 1;                // 防止被表体内容遮挡
+}
+
+// 3. 表头/表体单元格：统一样式，限制内容
+table th,
+.markdown-body table td {
+  padding: 0.8rem 1rem;   // 单元格内边距，优化排版
+  border: 1px solid #e5e7eb; // 单元格边框，清晰分隔
+  text-align: left;       // 文字左对齐（可改 center）
+  white-space: nowrap;    // 禁止文字换行，避免单元格变高
+  overflow: hidden;       // 超出内容隐藏
+  text-overflow: ellipsis; // 超出内容显示省略号（优化长文本）
+}
+
+/* 表格内图片：强制占满单元格，不保持原比例 */
+table img {
+  width: 100%;           /* 宽度强制占满单元格 */
+  height: 100%;          /* 高度强制占满单元格 */
+  object-fit: cover;     /* 图片填充单元格，超出部分裁剪（保持内容完整） */
+  display: block;        /* 消除图片下方空白 */
+}
+
+// 5. 鼠标悬停行：优化交互体验（可选）
+table tbody tr:hover {
+  background-color: #fafbfc; //  hover 时行背景变色
+}

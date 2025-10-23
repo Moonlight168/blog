@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/zh/series/myprojects/淘票票/项目基础.html.vue"
+const data = JSON.parse("{\"path\":\"/zh/series/myprojects/%E6%B7%98%E7%A5%A8%E7%A5%A8/%E9%A1%B9%E7%9B%AE%E5%9F%BA%E7%A1%80.html\",\"title\":\"淘票票项目基础文档\",\"lang\":\"en-US\",\"frontmatter\":{},\"readingTime\":{\"minutes\":2.77,\"words\":831},\"filePathRelative\":\"zh/series/myprojects/淘票票/项目基础.md\",\"excerpt\":\"\\n<h2>1. 数据库表关系</h2>\\n<p>淘票票项目采用分库分表的设计，主要数据库包括：</p>\\n<h3>1.1 用户相关数据库 (taopiaopiao_user_0, taopiaopiao_user_1)</h3>\\n<ul>\\n<li><code>t_user_0</code>, <code>t_user_1</code>: 用户基本信息表</li>\\n<li><code>t_ticket_user_0</code>, <code>t_ticket_user_1</code>: 购票人信息表</li>\\n<li><code>t_user_email_0</code>, <code>t_user_email_1</code>: 用户邮箱信息表</li>\\n<li><code>t_user_mobile_0</code>, <code>t_user_mobile_1</code>: 用户手机号信息表</li>\\n</ul>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

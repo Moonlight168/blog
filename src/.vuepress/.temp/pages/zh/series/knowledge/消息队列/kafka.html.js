@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/zh/series/knowledge/消息队列/kafka.html.vue"
+const data = JSON.parse("{\"path\":\"/zh/series/knowledge/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97/kafka.html\",\"title\":\"Kafka\",\"lang\":\"en-US\",\"frontmatter\":{\"title\":\"Kafka\",\"date\":\"2025-05-21T00:00:00.000Z\",\"series\":\"消息队列\"},\"readingTime\":{\"minutes\":6.73,\"words\":2019},\"filePathRelative\":\"zh/series/knowledge/消息队列/kafka.md\",\"excerpt\":\"<h2>Kafka 是什么？</h2>\\n<p><strong>回答：</strong><br>\\nKafka 是一个分布式流平台，主要用于高吞吐量的消息传递、日志收集、事件流处理等应用场景。它本质上是一个发布-订阅模式的消息队列，但具有更高的吞吐量和分布式架构。</p>\\n<h4>Kafka 的特点：</h4>\\n<ul>\\n<li><strong>高吞吐量</strong>：Kafka 能够处理非常高的消息吞吐量，适合大规模数据流的实时处理。</li>\\n<li><strong>分布式架构</strong>：Kafka 支持多节点集群，可以横向扩展，具备高可用性。</li>\\n<li><strong>持久化</strong>：Kafka 消息默认会持久化到磁盘，且支持日志的多副本备份，确保数据不会丢失。</li>\\n<li><strong>消息顺序性</strong>：Kafka 保证每个分区内消息的顺序性。</li>\\n<li><strong>灵活的消息消费模式</strong>：支持消费者组，消费者可以独立消费消息，也可以作为消费者组共同消费一个主题的数据。</li>\\n<li><strong>高可扩展性</strong>：Kafka 能够在集群中扩展更多的分区来增加负载能力，并且消息的读取可以通过并行消费提高吞吐量。</li>\\n</ul>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/article/前端/JavaScript 中 async 与 await 的原理及应用详解.html.vue"
+const data = JSON.parse("{\"path\":\"/article/%E5%89%8D%E7%AB%AF/JavaScript%20%E4%B8%AD%20async%20%E4%B8%8E%20await%20%E7%9A%84%E5%8E%9F%E7%90%86%E5%8F%8A%E5%BA%94%E7%94%A8%E8%AF%A6%E8%A7%A3.html\",\"title\":\"JavaScript 中 async 与 await 的原理及应用详解\",\"lang\":\"zh-CN\",\"frontmatter\":{\"title\":\"JavaScript 中 async 与 await 的原理及应用详解\",\"date\":\"2025-06-13T00:00:00.000Z\",\"categories\":[\"前端\"],\"tags\":[\"JS\"]},\"readingTime\":{\"minutes\":3.43,\"words\":1030},\"filePathRelative\":\"article/前端/JavaScript 中 async 与 await 的原理及应用详解.md\",\"excerpt\":\"<p>在JavaScript异步编程领域，<code>async</code>和<code>await</code>是极为重要的语法特性。它们基于Promise和Generator函数，为异步操作提供了更简洁、易读的语法，极大地改善了开发者处理异步任务的体验。本文将深入剖析<code>async</code>和<code>await</code>的原理、执行机制以及实际应用场景。</p>\\n<h2>一、async与await基础概念</h2>\\n<p><code>async</code>是用于声明异步函数的关键字，它返回的是一个<code>Promise</code>对象。<code>await</code>则只能在<code>async</code>函数内部使用，用于等待一个<code>Promise</code>对象的状态变为<code>fulfilled</code>或<code>rejected</code> ，并获取其结果。示例代码如下：</p>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}
