@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/article/开发工具/docker.html.vue"
+const data = JSON.parse("{\"path\":\"/article/%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7/docker.html\",\"title\":\"Docker的使用\",\"lang\":\"zh-CN\",\"frontmatter\":{\"title\":\"Docker的使用\",\"date\":\"2025-06-09T00:00:00.000Z\",\"categories\":[\"开发工具\"],\"tags\":[\"Docker\"]},\"readingTime\":{\"minutes\":2.05,\"words\":616},\"filePathRelative\":\"article/开发工具/docker.md\",\"excerpt\":\"\\n<p>Docker 是一种轻量级容器技术，能够将应用及其依赖打包在一起，在任何支持 Docker 的环境中快速运行，极大地简化了部署流程。</p>\\n<h2>一、Docker 基础概念</h2>\\n<ul>\\n<li><strong>镜像（Image）</strong>：Docker 镜像是容器的模板，可以理解为一个完整的操作系统快照。</li>\\n<li><strong>容器（Container）</strong>：镜像运行起来就是容器，是镜像的一个运行实例。</li>\\n<li><strong>仓库（Repository）</strong>：用来存储镜像的地方，分为公共仓库（如 Docker Hub）和私有仓库。</li>\\n<li><strong>Dockerfile</strong>：定义如何构建镜像的脚本。</li>\\n</ul>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

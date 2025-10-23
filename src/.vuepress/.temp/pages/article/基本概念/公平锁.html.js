@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/article/基本概念/公平锁.html.vue"
+const data = JSON.parse("{\"path\":\"/article/%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5/%E5%85%AC%E5%B9%B3%E9%94%81.html\",\"title\":\"公平锁\",\"lang\":\"zh-CN\",\"frontmatter\":{\"title\":\"公平锁\",\"date\":\"2025-10-19T00:00:00.000Z\",\"series\":\"基本概念\"},\"readingTime\":{\"minutes\":3.23,\"words\":968},\"filePathRelative\":\"article/基本概念/公平锁.md\",\"excerpt\":\"<h2>一、什么是公平锁</h2>\\n<p>公平锁（Fair Lock）是一种按照 <strong>线程请求锁的先后顺序</strong> 来分配锁资源的机制。<br>\\n简单来说，<strong>谁先申请锁，谁就先获得锁</strong>，像排队买票一样遵循“先来先得”的原则。</p>\\n<p>在多线程环境下，公平锁能够确保每个线程都有机会依次获得锁，避免线程“饿死”（长期得不到执行机会）。</p>\\n<hr>\\n<h2>二、公平锁与非公平锁的区别</h2>\\n<table>\\n<thead>\\n<tr>\\n<th>对比项</th>\\n<th>公平锁（Fair Lock）</th>\\n<th>非公平锁（Non-Fair Lock）</th>\\n</tr>\\n</thead>\\n<tbody>\\n<tr>\\n<td>获取顺序</td>\\n<td>按请求先后顺序（FIFO）获取锁</td>\\n<td>新线程可直接竞争锁，可能插队成功</td>\\n</tr>\\n<tr>\\n<td>公平性</td>\\n<td>高（不会饿死线程）</td>\\n<td>低（可能长期抢不到锁）</td>\\n</tr>\\n<tr>\\n<td>性能</td>\\n<td>略低（需维护等待队列）</td>\\n<td>较高（减少排队调度开销）</td>\\n</tr>\\n<tr>\\n<td>使用场景</td>\\n<td>对公平性要求高的业务</td>\\n<td>对性能要求高的业务</td>\\n</tr>\\n</tbody>\\n</table>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

@@ -1,0 +1,5 @@
+# 忽略依赖包
+node_modules/
+
+# 忽略 VuePress 打包产物（根据你的实际输出目录调整）
+src/.vuepress/dist/

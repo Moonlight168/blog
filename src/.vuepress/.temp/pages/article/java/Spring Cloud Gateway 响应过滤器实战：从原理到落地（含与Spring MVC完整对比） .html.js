@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/article/java/Spring Cloud Gateway 响应过滤器实战：从原理到落地（含与Spring MVC完整对比） .html.vue"
+const data = JSON.parse("{\"path\":\"/article/java/Spring%20Cloud%20Gateway%20%E5%93%8D%E5%BA%94%E8%BF%87%E6%BB%A4%E5%99%A8%E5%AE%9E%E6%88%98%EF%BC%9A%E4%BB%8E%E5%8E%9F%E7%90%86%E5%88%B0%E8%90%BD%E5%9C%B0%EF%BC%88%E5%90%AB%E4%B8%8ESpring%20MVC%E5%AE%8C%E6%95%B4%E5%AF%B9%E6%AF%94%EF%BC%89%20.html\",\"title\":\"Spring Cloud Gateway 响应过滤器实战：从原理到落地（含与Spring MVC完整对比）\",\"lang\":\"zh-CN\",\"frontmatter\":{\"title\":\"Spring Cloud Gateway 响应过滤器实战：从原理到落地（含与Spring MVC完整对比）\",\"date\":\"2025-10-18T00:00:00.000Z\",\"series\":\"Java\",\"tags\":[\"Reactor\",\"Spring Cloud Gateway\"]},\"readingTime\":{\"minutes\":9.07,\"words\":2721},\"filePathRelative\":\"article/java/Spring Cloud Gateway 响应过滤器实战：从原理到落地（含与Spring MVC完整对比） .md\",\"excerpt\":\"<p>在微服务架构中，网关是请求和响应的“必经之路”。处理响应体（如加密、校验、脱敏）是网关的高频需求，但很多开发者会困惑：“为什么我配置的响应过滤器，看似在控制器前执行？”“order值和执行阶段到底是什么关系？”更会疑惑：“Gateway的过滤器和Spring MVC的拦截器有什么区别？该怎么选？”</p>\\n<h2>一、基础认知：Gateway与Spring MVC的核心定位差异</h2>\\n<p>在对比过滤器之前，先明确两者的本质区别——定位不同决定了过滤器的设计逻辑不同：</p>\\n<table>\\n<thead>\\n<tr>\\n<th>框架</th>\\n<th>定位</th>\\n<th>核心场景</th>\\n<th>底层依赖</th>\\n<th>数据处理模式</th>\\n</tr>\\n</thead>\\n<tbody>\\n<tr>\\n<td>Spring Cloud Gateway</td>\\n<td>微服务网关（跨服务）</td>\\n<td>路由转发、跨服务鉴权、全局响应处理</td>\\n<td>Netty（非阻塞IO）</td>\\n<td>响应式流（Flux/Mono）</td>\\n</tr>\\n<tr>\\n<td>Spring MVC</td>\\n<td>单体/服务内部控制器</td>\\n<td>服务内请求处理、接口级拦截</td>\\n<td>Servlet API（阻塞IO）</td>\\n<td>同步请求响应</td>\\n</tr>\\n</tbody>\\n</table>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

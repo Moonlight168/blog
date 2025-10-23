@@ -1,0 +1,31 @@
+---
+home: true
+layout: Blog
+icon: house
+title: 主页 | GGBOND
+#heroImage: assets/logo/小猪储蓄罐.png #头像
+bgImage: assets/bg/bg-light.jpg
+bgImageDark: assets/bg/bg-dark.jpg
+heroText: Hi，Welcome~
+heroFullScreen: true
+tagline: 热爱编码与技术探索,记录实践项目与开发心得,分享高效工具与 AI 编程技巧
+projects:
+  - icon: /assets/icon/淘票票icon.png
+    name: 淘票票
+    desc: 一个基于 Spring Cloud Alibaba 构建的高并发票务系统，专注于演唱会/大型活动的高并发抢票场景。
+    link: series/myprojects/淘票票/
+
+  - icon: /assets/icon/cloud_flow.png
+    name: FlowMind
+    desc: 基于云原生与大模型的智能审批工作流编排平台
+    link: series/myprojects/FlowMind/
+    
+  - icon: /assets/icon/校园.png
+    name: 邮院通
+    desc: 一个校园一站式服务平台 + AI 智能助手
+    link: series/myprojects/邮院通/
+footer:
+  startYear: 2025
+  record: null                    # 京ICP备-123456号
+  cyberSecurityRecord: null       # 京公网安备 11010502038973号
+---

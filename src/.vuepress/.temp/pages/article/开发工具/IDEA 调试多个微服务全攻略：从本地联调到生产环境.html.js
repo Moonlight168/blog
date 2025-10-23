@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/article/开发工具/IDEA 调试多个微服务全攻略：从本地联调到生产环境.html.vue"
+const data = JSON.parse("{\"path\":\"/article/%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7/IDEA%20%E8%B0%83%E8%AF%95%E5%A4%9A%E4%B8%AA%E5%BE%AE%E6%9C%8D%E5%8A%A1%E5%85%A8%E6%94%BB%E7%95%A5%EF%BC%9A%E4%BB%8E%E6%9C%AC%E5%9C%B0%E8%81%94%E8%B0%83%E5%88%B0%E7%94%9F%E4%BA%A7%E7%8E%AF%E5%A2%83.html\",\"title\":\"IDEA 调试多个微服务全攻略：从本地联调到生产环境\",\"lang\":\"zh-CN\",\"frontmatter\":{\"title\":\"IDEA 调试多个微服务全攻略：从本地联调到生产环境\",\"date\":\"2025-10-18T00:00:00.000Z\",\"categories\":[\"开发工具\"],\"tags\":[\"IDEA\"]},\"readingTime\":{\"minutes\":5.19,\"words\":1557},\"filePathRelative\":\"article/开发工具/IDEA 调试多个微服务全攻略：从本地联调到生产环境.md\",\"excerpt\":\"<p>在微服务架构中，跨服务调试是开发人员的“必修课”——一个请求可能涉及 5~10 个服务的调用，任何一个环节出错都可能导致整个链路失败。本文将结合 <strong>IDEA 调试功能</strong>和 <strong>生产级实践</strong>，详细讲解如何高效调试多个微服务，重点解决“请求链断裂”“服务依赖冲突”“远程调试安全”等核心问题。</p>\\n<h2>一、调试前的准备：环境与配置</h2>\\n<p>在开始调试前，必须确保以下基础条件满足，否则可能遇到“断点不触发”“服务不可达”等问题。</p>\\n<h3>1. 统一代码版本</h3>\\n<ul>\\n<li><strong>本地与远程一致</strong>：通过 Git 等版本控制系统确保本地代码与远程服务器代码完全一致，否则调试时可能出现“代码行错位”。</li>\\n<li><strong>分支管理</strong>：建议在 <strong>feature 分支</strong>调试，避免污染主分支。调试完成后通过 Pull Request 合并代码。</li>\\n</ul>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/zh/series/knowledge/消息队列/rabbitmq.html.vue"
+const data = JSON.parse("{\"path\":\"/zh/series/knowledge/%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97/rabbitmq.html\",\"title\":\"RabbitMQ\",\"lang\":\"en-US\",\"frontmatter\":{\"title\":\"RabbitMQ\",\"date\":\"2025-05-21T00:00:00.000Z\",\"series\":\"消息队列\"},\"readingTime\":{\"minutes\":2.48,\"words\":745},\"filePathRelative\":\"zh/series/knowledge/消息队列/rabbitmq.md\",\"excerpt\":\"<h2>RabbitMQ 中有哪些常见的交换器（Exchange）类型，它们有什么区别？</h2>\\n<p><strong>回答:</strong> 常见的交换器类型有 Direct、Fanout、Topic 和 Headers。</p>\\n<ul>\\n<li><strong>Direct</strong> ：消息会被发送到 Binding Key 和 Routing Key 完全匹配的队列。适用于需要精确匹配的场景，比如根据日志级别将日志消息发送到不同队列。</li>\\n<li><strong>Fanout</strong>：消息会被发送到所有绑定到该交换器的队列，忽略 Binding Key。常用于广播消息的场景，比如群发通知。</li>\\n<li><strong>Topic</strong>：消息会根据 Routing Key 和 Binding Key 的模式匹配规则发送到队列。Binding Key 可以使用通配符，比如 *.log 表示匹配所有以 .log 结尾的 Routing Key，适用于需要按规则分发消息的场景。</li>\\n<li><strong>Headers</strong>：不依赖于 Routing Key 与 Binding Key 的匹配规则，而是根据发送的消息内容中的 headers 属性进行匹配。在实际应用中较少使用。</li>\\n</ul>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

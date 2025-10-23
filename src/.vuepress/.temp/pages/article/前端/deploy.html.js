@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/article/前端/deploy.html.vue"
+const data = JSON.parse("{\"path\":\"/article/%E5%89%8D%E7%AB%AF/deploy.html\",\"title\":\"将 VuePress 博客部署到 GitHub Pages 的完整流程\",\"lang\":\"zh-CN\",\"frontmatter\":{\"title\":\"将 VuePress 博客部署到 GitHub Pages 的完整流程\",\"date\":\"2025-05-17T00:00:00.000Z\",\"categories\":[\"前端\"],\"tags\":[\"vuepress-theme-reco\"]},\"readingTime\":{\"minutes\":2.33,\"words\":699},\"filePathRelative\":\"article/前端/deploy.md\",\"excerpt\":\"<p>本文将详细介绍如何将使用 VuePress 构建的博客部署到 GitHub Pages 上，包括本地构建、生成静态文件、推送到 <code>gh-pages</code> 分支以及自定义域名绑定等。</p>\\n<h2>一、前提条件</h2>\\n<p>在开始部署之前，请确保你已经完成了以下准备工作：</p>\\n<ul>\\n<li>已经搭建好 VuePress 项目并可本地正常访问</li>\\n<li>已将博客项目推送至 GitHub 仓库（如：<code>https://github.com/你的用户名/你的仓库名</code>）</li>\\n<li>安装了 Node.js 和 Git</li>\\n<li>本地可正常构建 VuePress 静态文件</li>\\n</ul>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}

@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/article/基本概念/Sentinel.html.vue"
+const data = JSON.parse("{\"path\":\"/article/%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5/Sentinel.html\",\"title\":\"Sentinel\",\"lang\":\"zh-CN\",\"frontmatter\":{\"title\":\"Sentinel\",\"date\":\"2025-10-19T00:00:00.000Z\",\"series\":\"基本概念\"},\"readingTime\":{\"minutes\":3.61,\"words\":1083},\"filePathRelative\":\"article/基本概念/Sentinel.md\",\"excerpt\":\"<h2>一、什么是 Sentinel</h2>\\n<p>Sentinel（哨兵）是 Redis 官方提供的 <strong>高可用（High Availability）解决方案</strong>，主要用于 <strong>监控主从集群的运行状态</strong>，并在主节点出现故障时自动完成 <strong>故障转移（Failover）</strong>。</p>\\n<p>简单来说，Sentinel 是 Redis 的“监控者”和“指挥官”，它能够在主节点宕机时自动选出新的主节点，保证 Redis 服务的持续可用。</p>\\n<hr>\\n<h2>二、Sentinel 的核心功能</h2>\\n<ol>\\n<li>\\n<p><strong>监控（Monitoring）</strong><br>\\nSentinel 会不断地检查主节点（master）和从节点（slave）的运行状态，判断节点是否在线。</p>\\n</li>\\n<li>\\n<p><strong>通知（Notification）</strong><br>\\n一旦检测到节点故障，Sentinel 会通过消息通知系统管理员或其他应用程序。</p>\\n</li>\\n<li>\\n<p><strong>自动故障转移（Automatic Failover）</strong><br>\\n当主节点被判定为不可用时，Sentinel 会自动将一个从节点提升为新的主节点，并通知其他从节点和客户端进行切换。</p>\\n</li>\\n<li>\\n<p><strong>配置中心（Configuration Provider）</strong><br>\\nSentinel 会动态更新主节点信息，客户端可以通过 Sentinel 获取当前主节点的地址，实现自动连接切换。</p>\\n</li>\\n</ol>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}
