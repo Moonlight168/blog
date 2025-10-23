@@ -1,0 +1,16 @@
+import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/zh/series/knowledge/我的项目/淘票票.html.vue"
+const data = JSON.parse("{\"path\":\"/zh/series/knowledge/%E6%88%91%E7%9A%84%E9%A1%B9%E7%9B%AE/%E6%B7%98%E7%A5%A8%E7%A5%A8.html\",\"title\":\"淘票票\",\"lang\":\"en-US\",\"frontmatter\":{\"series\":\"我的项目\",\"title\":\"淘票票\"},\"readingTime\":{\"minutes\":1.15,\"words\":346},\"filePathRelative\":\"zh/series/knowledge/我的项目/淘票票.md\",\"excerpt\":\"<h3>说一说你在这个项目中是如何进行分库分表的，为什么要这样做？</h3>\\n<p><strong>回答：</strong><br>\\n在这个项目中，我使用 <strong>ShardingSphere</strong> 来实现分库分表。用户表、手机号表、邮箱表等核心数据表都做了分库分表处理，例如：</p>\\n<ul>\\n<li>\\n<p><strong>用户表 <code>t_user</code></strong></p>\\n<ul>\\n<li>分库键：<code>id</code>，分表键：<code>id</code></li>\\n<li>分片算法：MOD 取模</li>\\n<li>实际表：<code>ds_0.t_user_0</code>、<code>ds_1.t_user_1</code></li>\\n<li>根据用户 ID 自动路由到对应数据库和表</li>\\n</ul>\\n</li>\\n<li>\\n<p><strong>手机号表 <code>t_user_mobile</code> / 邮箱表 <code>t_user_email</code></strong></p>\\n<ul>\\n<li>分库键 / 分表键：<code>mobile</code> / <code>email</code></li>\\n<li>分片算法：HASH_MOD</li>\\n<li>自动计算落到具体的数据库和表，保证唯一性和高并发查询性能</li>\\n</ul>\\n</li>\\n</ul>\"}")
+export { comp, data }
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updatePageData) {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ data }) => {
+    __VUE_HMR_RUNTIME__.updatePageData(data)
+  })
+}
