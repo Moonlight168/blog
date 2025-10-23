@@ -8,5 +8,7 @@ icon: /assets/icon/git.png
 
 `git reset`  :取消暂存
 
-`git rm -r --cached src/.vuepress/temp ` 
+`git rm -r --cached . ` 
 清除 Git 对该目录的跟踪（--cached 表示仅清除本地跟踪，不删除文件）
+
+`git ls-files`  列出仓库中所有以追踪文件
