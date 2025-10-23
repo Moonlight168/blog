@@ -50,8 +50,11 @@ jobs:
 
       - name: 安装依赖
         run: npm ci
-    
-    
+
+      # 进入 src 目录执行构建
+      - name: 打包 VuePress
+        run: cd src && npm run build
+
     # 6. 上传构建产物
       - name: 上传构建产物
         uses: actions/upload-pages-artifact@v3
