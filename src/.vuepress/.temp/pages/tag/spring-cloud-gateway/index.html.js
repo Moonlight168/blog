@@ -1,3 +1,0 @@
-import comp from "F:/MyBlogSite/vuepress-theme-hope/my-docs/src/.vuepress/.temp/pages/tag/spring-cloud-gateway/index.html.vue"
-const data = JSON.parse("{\"path\":\"/tag/spring-cloud-gateway/\",\"title\":\"标签: Spring Cloud Gateway\",\"lang\":\"zh-CN\",\"frontmatter\":{\"dir\":{\"index\":false},\"index\":false,\"feed\":false,\"sitemap\":false,\"title\":\"标签: Spring Cloud Gateway\",\"blog\":{\"type\":\"category\",\"name\":\"Spring Cloud Gateway\",\"key\":\"tag\"},\"layout\":\"Blog\"},\"git\":{},\"readingTime\":{\"minutes\":0,\"words\":0},\"filePathRelative\":null,\"excerpt\":\"\"}")
-export { comp, data }
