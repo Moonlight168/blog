@@ -1,45 +1,52 @@
 # 自动部署的名称
-name: GitHub pages deploy
+name: GitHub Pages Deploy
 
 # 自动部署的条件
 on:
   push:
     branches:
-      - gh-pages  # 触发部署的本地分支
+      - gh-pages  # 本地分支 push 到 GitHub 的 gh-pages 分支触发
 
 jobs:
-  # 构建网站并部署到 GitHub Pages
   deploy-gh-pages:
     runs-on: ubuntu-latest
 
     steps:
-      # 第一步: 下载源码
+      # 1️⃣ 检出源码
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 获取完整历史，保证正确生成最后更新时间
+          fetch-depth: 0  # 获取完整历史，保证 VuePress 等可以生成正确更新时间
 
-      # 缓存 node_modules 以避免重复安装
+      # 2️⃣ 安装 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20  # 根据项目需求调整 Node 版本
+
+      # 3️⃣ 缓存 node_modules
       - uses: actions/cache@v3
         id: node-modules
         with:
-          path: node_modules/
+          path: node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-node-modules-
 
-      # 安装依赖
-      - name: Install Deps
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: yarn install --frozen-lockfile
+      # 4️⃣ 安装依赖（保证成功）
+      - name: Install Dependencies
+        run: |
+          echo "Cache hit: ${{ steps.node-modules.outputs.cache-hit }}"
+          npm install -g yarn   # 确保 yarn 可用
+          yarn install --frozen-lockfile
 
-      # 构建项目
+      # 5️⃣ 构建项目
       - name: Build
         run: yarn run build
 
-      # 部署到 gh-pages 分支
-      - name: Deploy
+      # 6️⃣ 部署到 gh-pages 分支
+      - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          branch: gh-pages  # 远程分支
-          folder: dist      # 构建输出目录
+          branch: gh-pages   # 远程分支
+          folder: dist       # 构建输出目录
