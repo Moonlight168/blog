@@ -42,6 +42,7 @@ ssh-keygen -t ed25519 -C "Moonlight168@users.noreply.github.com"
 - 按三次回车（使用默认路径，不设密码）
 - 密钥将生成在 `C:\Users\你的用户名\.ssh\` 目录下
 
+![](imgs/img_2.png)
 > 💡 邮箱建议使用 GitHub 的 **noreply 邮箱**（格式：`用户名@users.noreply.github.com`），保护隐私。
 
 ---
@@ -98,6 +99,13 @@ git remote -v
 ---
 
 ### 7️⃣ 推送吧！
+
+
+```bash
+# 在本地设置 Git邮箱
+git config user.email "Moonlight168@users.noreply.github.com"
+```
+
 
 ```bash
 git add .
