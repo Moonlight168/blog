@@ -3,11 +3,14 @@ name: GitHub Pages Deploy
 on:
   push:
     branches:
-      - gh-pages  # 推送 master 分支触发
+      - master  # 推送 master 分支触发
 
 jobs:
   deploy-gh-pages:
     runs-on: ubuntu-latest
+    permissions:
+      pages: write      # 必须授权
+      id-token: write   # 必须授权
 
     steps:
       # 1️⃣ 检出源码
