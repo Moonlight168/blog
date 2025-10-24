@@ -32,8 +32,11 @@ git rm -r --cached <目录>
 
 ## 远程仓库推送
 ```bash
-# 推送**当前本地分支**到远程 `gh-pages` 分支
-git push origin HEAD:gh-pages  
+# 推送当前本地分支到远程 `gh-pages` 分支并追踪
+git push -u origin HEAD:gh-pages  
+# 强制推送当前本地分支到远程 `gh-pages` 分支并追踪
+git push -f -u origin HEAD:gh-pages  
+
 ```
 
 
