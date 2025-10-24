@@ -84,11 +84,19 @@ pause
 
 2. 登录 DNS 服务商（如 Cloudflare）添加一条 CNAME 记录：
 
+![img_1.png](imges/img_1.png)
+
 | 类型    | 主机记录 | 目标地址                   |
 | ----- |------|------------------------|
 | CNAME | @    | your-github-account.github.io |
 
 3. 返回 GitHub Pages 设置页面，绑定这个域名（Custom domain）。
+
+### GitHub 强制验证所有常见变体
+
+为防止配置疏漏导致服务中断，GitHub 会主动探测 `www.<your-domain>` 是否也能正确指向你的 Pages 站点。如果 DNS 无法解析 `www` 子域，GitHub 就认为“域名配置不完整”，从而报错：
+
+`Domain's DNS record could not be retrieved (InvalidDNSError)`
 
 ## 六、常见问题排查
 
