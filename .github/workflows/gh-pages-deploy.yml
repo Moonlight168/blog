@@ -1,50 +1,44 @@
-name: GitHub Pages Deploy
+name: Deploy VuePress Site to GitHub Pages
 
 on:
   push:
-    branches:
-      - master  # 推送 master 分支触发
+    branches: [ master ]  # 监听源码分支
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  deploy-gh-pages:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    permissions:
-      pages: write      # 必须授权
-      id-token: write   # 必须授权
 
     steps:
-      # 1️⃣ 检出源码
-      - name: 检出源码
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # 2️⃣ 安装 Node.js
-      - name: 安装 Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      # 3️⃣ 缓存 node_modules（加速安装）
-      - uses: actions/cache@v3
-        id: node-modules
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      - name: Install dependencies
+        run: npm ci
 
-      # 4️⃣ 安装依赖
-      - name: 安装依赖
-        run: npm ci  # 使用 package-lock.json 严格安装
-
-      # 5️⃣ 构建项目
-      - name: 构建项目
+      - name: Build VuePress site
         run: npm run docs:build
 
-      # 6️⃣ 部署到 gh-pages 分支
-      - name: 部署到 gh-pages 分支
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          branch: gh-pages
-          folder: src/.vuepress/dist
+          path: src/.vuepress/dist  # 构建输出目录
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
