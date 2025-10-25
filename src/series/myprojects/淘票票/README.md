@@ -1,6 +1,7 @@
 ---
 order: 1
 title: 项目介绍
+icon: /assets/icon/介绍.png
 dir:
     text: 淘票票
     icon: /assets/icon/淘票票icon.png

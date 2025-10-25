@@ -1,3 +1,15 @@
-// you can change colors here
+// palette.scss
+// 导航栏布局变量（覆盖或使用默认值）
+$navbar-height: 4rem; // 桌面端导航栏高度（默认 3.75rem）
+$navbar-padding-x: 2rem; // 桌面端水平填充（默认 1.5rem）
+$navbar-padding-y: 0.8rem; // 桌面端垂直填充（默认 0.7rem）
 
+// 移动端导航栏变量
+$navbar-mobile-height: 3.5rem; // 移动端高度（默认 3.25rem）
+$navbar-mobile-padding-x: 1.2rem; // 移动端水平填充（默认 1rem）
+$navbar-mobile-padding-y: 0.6rem; // 移动端垂直填充（默认 0.5rem）
+
+// 其他布局变量（可选，根据需要配置）
+$sidebar-width: 20rem; // 侧边栏宽度（默认 18rem）
+$content-width: 800px; // 内容宽度（默认 780px）
 

@@ -1,6 +1,7 @@
 ---
-series: myprojects
-title:  项目介绍
+order: 1
+title: 项目介绍
+icon: /assets/icon/介绍.png
 dir:
   text: 邮院通
   icon: /assets/icon/校园.png

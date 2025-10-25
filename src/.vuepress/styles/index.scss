@@ -23,14 +23,14 @@
 }
 
 
-.vp-navbar {
-  background: transparent;
-  backdrop-filter: blur(3px); /* 模糊强度 */
-  -webkit-backdrop-filter: blur(10px); /* Safari 兼容 */
-  border: 1px solid rgba(255, 255, 255, 0.3); /* 轻微边框 */
-  width: 100%;
-  z-index: 9999 !important;     /* 确保在所有元素之上 */
-}
+//.vp-navbar {
+//  background: transparent;
+//  backdrop-filter: blur(3px); /* 模糊强度 */
+//  -webkit-backdrop-filter: blur(10px); /* Safari 兼容 */
+//  border: 1px solid rgba(255, 255, 255, 0.3); /* 轻微边框 */
+//  width: 100%;
+//  z-index: 9999 !important;     /* 确保在所有元素之上 */
+//}
 
 // 放入 .vuepress/styles/index.scss 中
 .vp-blog-hero-title {
