@@ -82,13 +82,9 @@ pause
 
 ![img.png](imges/img.png)
 
-2. 登录 DNS 服务商（如 Cloudflare）添加一条 CNAME 记录：
+2. 登录 DNS 服务商（如 Cloudflare）添加两条 CNAME 记录：
 
 ![img_1.png](imges/img_1.png)
-
-| 类型    | 主机记录 | 目标地址                   |
-| ----- |------|------------------------|
-| CNAME | @    | your-github-account.github.io |
 
 3. 返回 GitHub Pages 设置页面，绑定这个域名（Custom domain）。
 
