@@ -1,7 +1,6 @@
 ---
 title: Git常用命令
 date: 2025-10-23
-updated: 2025-10-23
 icon: /assets/icon/git.png
 category: 开发工具
 tag:
