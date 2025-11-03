@@ -39,7 +39,7 @@ export const zhNavbar = navbar([
     children: [{
         text: "技术分享",
         icon: "/assets/icon/技术分享.png",
-        link: "/article/",
+        link: "/blogs/",
       },
       {
         text: "开发工具",

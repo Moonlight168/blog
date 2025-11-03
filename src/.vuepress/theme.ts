@@ -27,7 +27,6 @@ export default hopeTheme({
   // 设置repo标签显示为GitHub
   repoLabel: "GitHub",
 
-
   docsDir: "src",
   docsRepo: "blog",
 
@@ -46,16 +45,16 @@ export default hopeTheme({
 
     "/": {
       //自定义博客标签
-/*      blogLocales: {
+      blogLocales: {
         article: "博客",
         articleList: "文章列表",
         category: "分类",
         tag: "标签",
-        timeline: "时间轴", // 将 Timeline 改为「时间轴」
+        timeline: "成长轨迹", // 将 Timeline 改为「时间轴」
         all: "全部",
         intro: "个人介绍",
-        star: "星标文章",
-      },*/
+        star: "星标博客",
+      },
 
       // navbar
        navbar: zhNavbar,
@@ -124,7 +123,16 @@ export default hopeTheme({
   },
 
   plugins: {
-    blog: true,
+    blog: {
+      // 过滤规则：仅 `/blogs/` 目录下的 .md 文件视为文章
+      filter(page) {
+        // page.path 是页面的路由路径（如 /blogs/xxx.html 或 /blogs/xxx/）
+        // 匹配以 /blogs/ 开头的路径（排除根目录的 /blogs.html 单页）
+        return page.path.startsWith('/blogs/');
+      },
+      hotReload: true,
+      article: '/blogs/',
+    },
     components: {
       components: ["Badge", "VPCard"],
     },
