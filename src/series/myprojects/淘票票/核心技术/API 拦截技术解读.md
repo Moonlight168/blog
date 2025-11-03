@@ -1,4 +1,9 @@
-# 淘票票项目API限制功能深度解析与最佳实践
+---
+title: API 拦截技术解读
+order: 20
+---
+
+# API 拦截技术解读
 
 ## 1. 概述
 
@@ -17,7 +22,7 @@ API限制功能主要由以下几个核心组件构成：
 
 ### 2.2 工作流程
 
-```mermaid
+```
 graph TD
     A[HTTP请求到达网关] --> B{是否需要API限制?}
     B -->|是| C[获取用户ID和IP地址]
@@ -36,7 +41,7 @@ graph TD
 
 ### 3.1 脚本功能概述
 
-[apiLimit.lua](file://F:\MyProjects\taopiaopiao\taopiaopiao-server\taopiaopiao-gateway-service\src\main\resources\lua\apiLimit.lua)脚本是API限制功能的核心，它实现了以下功能：
+apiLimit.lua脚本是API限制功能的核心，它实现了以下功能：
 
 1. **计数统计**：对API访问进行计数
 2. **阈值检查**：检查访问次数是否超过设定阈值
@@ -47,7 +52,7 @@ graph TD
 
 #### 3.2.1 初始化阶段
 
-```lua
+```
 -- 初始化变量
 local trigger_result = 0
 local trigger_call_Stat = 0
@@ -73,7 +78,7 @@ local message_index = -1
 
 #### 3.2.2 基础计数和阈值检查
 
-```lua
+```
 -- 对规则key进行计数统计
 local count = tonumber(redis.call('incrby', rule_key, 1))
 if (count == 1) then
@@ -102,7 +107,8 @@ end
 ```
 
 这部分逻辑实现了基础的计数和阈值检查功能：
-1. 使用`INCRBY`命令对访问次数进行递增
+
+1. 使用 `INCRBY`命令对访问次数进行递增
 2. 如果是第一次访问，设置过期时间以实现时间窗口功能
 3. 检查访问次数是否超过阈值
 4. 如果超过阈值且是首次触发，设置限制key并记录到有序集合中
@@ -110,7 +116,7 @@ end
 
 #### 3.2.3 深度规则处理
 
-```lua
+```
 -- 处理深度规则（时间段规则）
 if (api_rule_type == 2) then
     local depthRules = apiRule.depthRules
@@ -170,24 +176,26 @@ end
 ```
 
 深度规则处理逻辑更加复杂，支持基于时间段的精细化控制：
+
 1. 遍历所有深度规则
 2. 清除过期数据，保持有序集合的清洁
 3. 在有效时间窗口内进行检查
 4. 计算统计时间范围，确保只统计指定时间窗口内的请求
-5. 使用`ZCOUNT`命令统计时间窗口内的请求数量
+5. 使用 `ZCOUNT`命令统计时间窗口内的请求数量
 6. 检查是否超过深度规则阈值
 7. 如果超过阈值且是首次触发，设置深度规则限制key
 8. 检查深度规则限制key是否存在，确定是否触发限制
 
 #### 3.2.4 结果返回
 
-```lua
+```
 -- 返回结果
 return string.format('{"triggerResult": %d, "triggerCallStat": %d, "apiCount": %d, "threshold": %d, "messageIndex": %d}'
 ,trigger_result,trigger_call_Stat,api_count,threshold,message_index)
 ```
 
 脚本最后以JSON格式返回执行结果，包括：
+
 - `triggerResult`：是否触发限制（0/1）
 - `triggerCallStat`：触发类型（1=基础规则，2=深度规则）
 - `apiCount`：当前API访问次数
@@ -198,7 +206,7 @@ return string.format('{"triggerResult": %d, "triggerCallStat": %d, "apiCount": %
 
 ### 4.1 ApiRestrictService
 
-[ApiRestrictService](file://F:\MyProjects\taopiaopiao\taopiaopiao-server\taopiaopiao-gateway-service\src\main\java\com\taopiaopiao\service\ApiRestrictService.java#L41-L311)是API限制功能的Java服务层实现，主要负责：
+ApiRestrictService是API限制功能的Java服务层实现，主要负责：
 
 1. **路径匹配**：检查请求URI是否需要进行API限制
 2. **规则获取**：从Redis获取限流规则配置
@@ -207,7 +215,7 @@ return string.format('{"triggerResult": %d, "triggerCallStat": %d, "apiCount": %
 
 #### 4.1.1 路径匹配
 
-```java
+```
 public boolean checkApiRestrict(String requestUri){
     if (gatewayProperty.getApiRestrictPaths() != null) {
         for (String apiRestrictPath : gatewayProperty.getApiRestrictPaths()) {
@@ -225,61 +233,61 @@ public boolean checkApiRestrict(String requestUri){
 
 #### 4.1.2 规则参数准备
 
-```java
+```
 public JSONObject getRuleParameter(int apiRuleType, String commonKey, RuleVo ruleVo){
     JSONObject parameter = new JSONObject();
-    
+  
     parameter.put("apiRuleType",apiRuleType);
-    
+  
     String ruleKey = "rule_api_limit" + "_" + commonKey;
     parameter.put("ruleKey",ruleKey);
-    
+  
     parameter.put("statTime",String.valueOf(Objects.equals(ruleVo.getStatTimeType(), RuleTimeUnit.SECOND.getCode()) ? ruleVo.getStatTime() : ruleVo.getStatTime() * 60));
-    
+  
     parameter.put("threshold",ruleVo.getThreshold());
-    
+  
     parameter.put("effectiveTime",String.valueOf(Objects.equals(ruleVo.getEffectiveTimeType(), RuleTimeUnit.SECOND.getCode()) ? ruleVo.getEffectiveTime() : ruleVo.getEffectiveTime() * 60));
-    
+  
     parameter.put("ruleLimitKey", RedisKeyBuild.createRedisKey(RedisKeyManage.RULE_LIMIT,commonKey).getRelKey());
-    
+  
     parameter.put("zSetRuleStatKey", RedisKeyBuild.createRedisKey(RedisKeyManage.Z_SET_RULE_STAT,commonKey).getRelKey());
-    
+  
     return parameter;
 }
 ```
 
 准备基础规则参数，包括规则类型、统计时间、阈值、有效时间等。
 
-```java
+```
 public JSONObject getDepthRuleParameter(JSONObject parameter,String commonKey,List<DepthRuleVo> depthRuleVoList){
     // 对深度规则按开始时间窗口排序
     depthRuleVoList = sortStartTimeWindow(depthRuleVoList);
-    
+  
     parameter.put("depthRuleSize",String.valueOf(depthRuleVoList.size()));
-    
+  
     parameter.put("currentTime",System.currentTimeMillis());
-    
+  
     List<JSONObject> depthRules = new ArrayList<>();
     for (int i = 0; i < depthRuleVoList.size(); i++) {
         JSONObject depthRule = new JSONObject();
         DepthRuleVo depthRuleVo = depthRuleVoList.get(i);
-        
+      
         depthRule.put("statTime",Objects.equals(depthRuleVo.getStatTimeType(), RuleTimeUnit.SECOND.getCode()) ? depthRuleVo.getStatTime() : depthRuleVo.getStatTime() * 60);
-        
+      
         depthRule.put("threshold",depthRuleVo.getThreshold());
-        
+      
         depthRule.put("effectiveTime",String.valueOf(Objects.equals(depthRuleVo.getEffectiveTimeType(), RuleTimeUnit.SECOND.getCode()) ? depthRuleVo.getEffectiveTime() : depthRuleVo.getEffectiveTime() * 60));
-        
+      
         depthRule.put("depthRuleLimit", RedisKeyBuild.createRedisKey(RedisKeyManage.DEPTH_RULE_LIMIT,i,commonKey).getRelKey());
-        
+      
         depthRule.put("startTimeWindowTimestamp",depthRuleVo.getStartTimeWindowTimestamp());
         depthRule.put("endTimeWindowTimestamp",depthRuleVo.getEndTimeWindowTimestamp());
-        
+      
         depthRules.add(depthRule);
     }
-    
+  
     parameter.put("depthRules",depthRules);
-    
+  
     return parameter;
 }
 ```
@@ -288,9 +296,9 @@ public JSONObject getDepthRuleParameter(JSONObject parameter,String commonKey,Li
 
 ### 4.2 ApiRestrictCacheOperate
 
-[ApiRestrictCacheOperate](file://F:\MyProjects\taopiaopiao\taopiaopiao-server\taopiaopiao-gateway-service\src\main\java\com\taopiaopiao\service\lua\ApiRestrictCacheOperate.java#L23-L46)负责执行Lua脚本：
+ApiRestrictCacheOperate负责执行Lua脚本：
 
-```java
+```
 @PostConstruct
 public void init(){
     try {
@@ -308,7 +316,7 @@ public ApiRestrictData apiRuleOperate(List<String> keys, Object[] args){
 }
 ```
 
-通过Spring的RedisTemplate执行Lua脚本，并将结果解析为[ApiRestrictData](file://F:\MyProjects\taopiaopiao\taopiaopiao-server\taopiaopiao-gateway-service\src\main\java\com\taopiaopiao\service\ApiRestrictData.java#L12-L32)对象。
+通过Spring的RedisTemplate执行Lua脚本，并将结果解析为ApiRestrictData对象。
 
 ## 5. 限流策略详解
 

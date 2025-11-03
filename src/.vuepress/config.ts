@@ -6,4 +6,5 @@ export default defineUserConfig({
   base: "/",
   lang: "zh-CN",
   theme,
+
 });

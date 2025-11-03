@@ -112,3 +112,13 @@ table img {
 table tbody tr:hover {
   background-color: #fafbfc; //  hover 时行背景变色
 }
+
+
+.mermaid-content svg,
+.mermaid-content img {
+  max-width: 100%; /* 继承父容器宽度限制 */
+  max-height: 100%; /* 继承父容器高度限制 */
+  width: auto; /* 禁止宽度强制拉伸（保证比例） */
+  height: auto; /* 禁止高度强制拉伸（保证比例） */
+  object-fit: contain; /* 可选：确保图表完整显示，不裁剪 */
+}

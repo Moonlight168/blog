@@ -10,7 +10,7 @@ dir:
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)  ![Java](https://img.shields.io/badge/Java-17-orange)  ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.x-brightgreen)  ![Build](https://img.shields.io/badge/build-Maven-blue)
 > 一个校园一站式服务平台 + AI 智能助手
 
-### 🚀项目简介
+### 🎓项目简介
 打造校园全场景数字化服务生态，覆盖**校园活动、教务管理、社团运营、宿舍服务、邮件通知、智能助手**等核心场景，集成 **Ollama + Qwen 大模型**，为师生提供智能问答、业务办理、数据查询的一站式解决方案，重构校园服务体验。
 
 ### 🌟技术亮点
@@ -111,11 +111,50 @@ dir:
 
 
 #### 6. 各层交互关系
-1. 前端 → 应用服务层：通过 HTTP 接口提交用户操作（如查询课程、发送 AI 提问）
-2. 应用服务层 → 数据存储层：通过 MyBatis-Plus 操作 MySQL，通过 Redis 客户端读写缓存，通过 ES 客户端执行检索
-3. 应用服务层 → 中间件层：通过 RabbitMQ 发送异步任务消息（如通知、日志记录）
-4. 应用服务层 ↔ AI 能力层：后端调用 Ollama API 发送提问，接收 Qwen 模型返回的回答，再转发给前端
+```mermaid
+flowchart TD
+%% 节点定义（使用语义化ID + 结构化标签）
+    subgraph 前端层
+        frontend["Vue3 + TDesign<br/><small>用户交互界面</small>"]:::frontend
+    end
 
+    subgraph 应用服务层
+        backend["SpringBoot + MyBatis-Plus<br/><small>业务逻辑处理</small>"]:::backend
+    end
+
+    subgraph 数据存储层
+        mysql["MySQL<br/><small>结构化数据</small>"]:::storage
+        redis["Redis<br/><small>缓存/会话</small>"]:::cache
+        es["ElasticSearch<br/><small>全文检索</small>"]:::search
+    end
+
+    subgraph 中间件层
+        mq["RabbitMQ<br/><small>异步消息</small>"]:::middleware
+    end
+
+    subgraph 智能服务层
+        ai["Ollama + Qwen<br/><small>AI能力接口</small>"]:::ai
+    end
+
+%% 交互关系（带方向和类型标注）
+    frontend -- "HTTP请求<br/>(用户操作)" --> backend
+    backend -- "CRUD<br/>(MyBatis-Plus)" --> mysql
+    backend -- "读写操作<br/>(热点数据)" --> redis
+    backend -- "检索请求<br/>(通知/活动)" --> es
+    backend -- "异步投递<br/>(解耦任务)" --> mq
+    backend -- "API调用<br/>(智能问答)" --> ai
+    ai -- "JSON响应<br/>(AI结果)" --> backend
+    backend -- "HTTP响应<br/>(页面渲染)" --> frontend
+
+%% 样式定义（增强视觉区分度）
+    classDef frontend fill:#e6f7ff,stroke:#1890ff,stroke-width:2px
+    classDef backend fill:#fff2e8,stroke:#fa8c16,stroke-width:2px
+    classDef storage fill:#f6ffed,stroke:#52c41a,stroke-width:2px
+    classDef cache fill:#fff0f0,stroke:#f5222d,stroke-width:2px
+    classDef search fill:#f0f2ff,stroke:#40a9ff,stroke-width:2px
+    classDef middleware fill:#f9f0ff,stroke:#722ed1,stroke-width:2px
+    classDef ai fill:#fff7e6,stroke:#faad14,stroke-width:2px
+```
 
 #### 2. 核心技术栈
 | 模块         | 技术栈                          | 作用说明              |  
@@ -300,36 +339,3 @@ services:
 
 networks:
   gupt:
-
-```
-
-#### 2. 部署步骤
-##### （1）后端启动（以 IDEA 为例）
-1. 克隆代码仓库：
-   ```bash  
-   git clone https://github.com/Moonlight168/campus-ai-assistant.git  
-   ```  
-2. 配置 `application.yml`：
-    - 填写 MySQL、Redis、RabbitMQ 连接信息
-    - 配置 Ollama 地址（如 `http://localhost:11434` ，需提前启动 Ollama 并拉取 Qwen 模型：`ollama pull qwen` ）
-3. 启动 SpringBoot 应用：运行 `gupt-management-back-end` 根模块的 `Application` 类
-
-
-##### （2）前端启动
-1. 进入 `gupt-web` 前端目录：
-   ```bash  
-   cd gupt-web  
-   ```  
-2. 安装依赖：
-   ```bash  
-   npm install  
-   ```  
-3. 启动开发环境：
-   ```bash  
-   npm run dev  
-   ```  
-4. 访问前端：浏览器打开 `http://localhost:5173`
-
-### 🔗源码链接
-- 源码地址：[GitHub - 邮院通(后端)](https://github.com/Moonlight168/gupt-management-back-end)
-- 源码地址：[GitHub - 邮院通(前端)](https://github.com/Moonlight168/gupt-font_end)
