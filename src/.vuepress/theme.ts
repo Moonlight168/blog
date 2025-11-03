@@ -101,6 +101,8 @@ export default hopeTheme({
     mark: true,
     plantuml: true,
     spoiler: true,
+    mermaid: true,
+    flowchart: true,
     stylize: [
       {
         matcher: "Recommended",
