@@ -128,7 +128,7 @@ export default hopeTheme({
       filter(page) {
         // page.path 是页面的路由路径（如 /blogs/xxx.html 或 /blogs/xxx/）
         // 匹配以 /blogs/ 开头的路径（排除根目录的 /blogs.html 单页）
-        return page.path.startsWith('/blogs/');
+        return page.path.startsWith('/blogs/')&& page.frontmatter.article != false;
       },
       hotReload: true,
       article: '/blogs/',
