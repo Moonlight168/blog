@@ -9,8 +9,6 @@ tag:
 ---
 
 # Git 核心命令速查表
-掌握这些高频 Git 命令，让版本控制效率翻倍 🚀
-
 
 ## 暂存区操作
 
@@ -62,4 +60,26 @@ git push -f -u origin HEAD:gh-pages
   ```bash
   git branch -m <旧分支名> <新分支名>
   ```
+
+## 取消提交操作
+```bash
+# 取消最后一次提交（保留修改内容，回到暂存区）
+git reset --soft HEAD~1
+
+# 取消最后一次提交（取消暂存，修改保留在工作区）
+git reset --mixed HEAD~1
+
+# 取消最后一次提交（直接丢弃所有修改，慎用！）
+git reset --hard HEAD~1
+
+# 取消最近n次提交（保留修改内容）
+git reset --soft HEAD~n
+
+# 取消指定提交的修改（生成新的反向提交）
+git revert <commit-hash>
+
+# 取消已推送到远程的提交（需强制推送）
+git reset --hard HEAD~1
+git push -f origin <branch-name>
+```
 

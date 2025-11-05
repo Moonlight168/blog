@@ -5,6 +5,7 @@ dir:
   icon: /assets/icon/操作系统.png
   text: 操作系统
   order: 9
+article: false
 ---
 
 <Catalog/>
