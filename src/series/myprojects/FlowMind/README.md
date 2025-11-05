@@ -5,7 +5,7 @@ icon: /assets/icon/介绍.png
 dir:
     text: FlowMind
     icon: /assets/icon/cloud_flow.png
-    order: 1
+    order: 2
 ---
 
 # FlowMind

@@ -5,7 +5,7 @@ icon: /assets/icon/介绍.png
 dir:
   text: 淘票票
   icon: /assets/icon/淘票票icon.png
-  order: 2
+  order: 3
 ---
 # 淘票票（Taopiaopiao）-高并发分布式票务系统
 
