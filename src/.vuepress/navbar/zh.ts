@@ -66,13 +66,20 @@ export const zhNavbar = navbar([
     prefix: "/series/knowledge/",
     children: [
       { text: "面试宝典",icon: "/assets/icon/书本.png", link: "/series/knowledge/index.md" },
-      { text: "招聘攻略",icon: "/assets/icon/招聘.png", link: "/series/knowledge/index.md" },
+      ...(process.env.NODE_ENV === "development"
+          ? [{ text: "寻找Offer",icon: "/assets/icon/招聘.png", link: "/private/hires/README.md" }] // 本地显示
+          : []),
     ],
   },
+  // 私有导航项（仅本地开发时显示）
+  ...(process.env.NODE_ENV === "development"
+      ? [{ text: "投资理财",icon: "/assets/icon/finance.png", link: "/private/finance/README.md" }] // 本地显示
+      : []), // 构建时不显示
   // 关于我
   {
     text: "关于我",
     icon: "/assets/icon/我.png", // 个人信息图标
     link: "/about/", // 对应 /about/README.md
   },
+
 ]);

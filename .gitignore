@@ -5,3 +5,6 @@ node_modules/
 src/.vuepress/dist/
 src/.vuepress/.cache/
 src/.vuepress/.temp/
+
+# 忽略本地文档
+src/private
