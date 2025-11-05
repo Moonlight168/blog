@@ -21,34 +21,12 @@ export const zhSidebar = sidebar({
     ],
     "/blogs/": "structure",
     "/series/knowledge/":"structure",
-/*    "/series/knowledge/": [
-        {
-            text: "Java",
-            icon: "/assets/icon/java.png",
-            prefix: "Java/",
-            children: "structure" as const, // 显式声明类型
-            collapsible: true, // 关键：开启折叠功能
-        },
-        {
-            text: "关系型数据库",
-            prefix: "关系型数据库/",
-            children: "structure" as const, // 显式声明类型
-            collapsible: true, // 关键：开启折叠功能
-        },
-    ],*/
     "/series/myprojects/": "structure",
-/*    [
-        {
-            text: "淘票票",
-            prefix: "淘票票/",
-            children: "structure" as const, // 显式声明类型
-            collapsible: true, // 关键：开启折叠功能
-        },
-        {
-            text: "邮院通",
-            prefix: "邮院通/",
-            children: "structure" as const, // 显式声明类型
-            collapsible: true, // 关键：开启折叠功能
-        },
-    ]*/
+    // 仅在开发环境生效的布局配置
+    ...(process.env.NODE_ENV === "development"
+        ? {
+            "/private/finance/": "structure",
+            "/private/hires/": "structure",
+        }
+        : {}), // 生产环境：空对象，不添加这些配置
 });

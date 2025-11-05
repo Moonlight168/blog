@@ -1,188 +1,193 @@
 ---
 order: 1
 title: 项目介绍
+icon: /assets/icon/介绍.png
 dir:
     text: FlowMind
     icon: /assets/icon/cloud_flow.png
     order: 1
 ---
 
-# 🌐 FlowMind
+# FlowMind
 
 **A Cloud-Native Intelligent Workflow Orchestration Platform Based on LLM and Microservices**
 *(基于云原生与大模型的智能审批工作流编排平台)*
 
 ---
 
-## 🚀 项目简介
+## 🧠项目简介
 
-**FlowMind** 是一个结合 **Camunda 8 (Zeebe)**、**LLM 智能 Agent** 与 **云原生微服务架构** 的智能审批工作流平台。
-系统面向跨部门资源与预算申请场景，实现从“申请→审批→分配→通知”的全流程自动化与智能化。
+**FlowMind** 是一个融合 **Spring Cloud Alibaba 微服务架构**、**Camunda 8 (Zeebe)** 工作流引擎与 **LLM 智能 Agent** 的智能审批编排平台。
+系统面向跨部门预算与资源审批场景，实现从“申请 → 智能初审 → 自动流转 → 通知反馈”的全链路自动化。
 
-核心目标：
+### 核心目标
 
-* 🔹 提升审批效率与准确性（通过 LLM 智能初审与自动路由）
-* 🔹 保证分布式一致性（基于 **Saga 模式** 的补偿事务）
-* 🔹 实现高可用架构（Kubernetes 集群 + Zeebe 集群）
-
----
-
-## 🧠 系统架构
-
-```
-┌──────────────────────────┐
-│        FlowMind UI       │
-│ (Vue / React 前端界面)    │
-└──────────┬───────────────┘
-           │ REST API
-┌──────────▼───────────────┐
-│    Intelligent Agent      │
-│ (FastAPI + LangChain + LLM)│
-└──────────┬───────────────┘
-           │ gRPC / REST
-┌──────────▼───────────────┐
-│   Zeebe Workflow Engine   │
-│ (Camunda 8 Cluster)       │
-└──────────┬───────────────┘
-           │ Jobs Dispatch
-┌──────────▼───────────────┐
-│  Microservices (Workers) │
-│  - Approval Service      │
-│  - Resource Service      │
-│  - Notification Service  │
-└──────────┬───────────────┘
-           │
-┌──────────▼───────────────┐
-│   K8s Cluster & Helm     │
-│   - HA Deployment        │
-│   - Monitoring / Logging │
-└──────────────────────────┘
-```
+* 智能化审批：LLM Agent 自动分析文本并初步判断
+* 分布式一致性：采用 **Saga 模式 + RocketMQ 事务消息**
+* 云原生高可用：基于 **Kubernetes + Helm + Jenkins CI/CD**
+* 全链路可观测：集成 **SkyWalking + Prometheus + Grafana**
 
 ---
 
-## ⚙️ 技术栈
+## 💻系统架构概览
 
-| 模块        | 技术                               | 说明                 |
-| --------- | -------------------------------- | ------------------ |
-| 工作流引擎     | **Camunda 8 (Zeebe)**            | 云原生、分布式 BPMN 工作流引擎 |
-| 智能决策层     | **LangChain + OpenAI API (LLM)** | 智能初审、自动路由、文本分析     |
-| Agent 微服务 | **Python + FastAPI**             | 统一封装 LLM 推理接口      |
-| 应用微服务     | **Spring Boot / Go Micro**       | 审批逻辑与资源调度服务        |
-| 部署架构      | **Kubernetes + Helm**            | 高可用部署、自动扩缩容        |
-| 存储与消息     | PostgreSQL / Redis               | 数据存储与缓存队列          |
+@startuml
+
+actor "User" as U
+
+rectangle "FlowMind UI\n(Vue3 / TDesign)" as UI
+rectangle "API Gateway\n(Spring Cloud Gateway)" as GW
+rectangle "Auth Service\n(Spring Boot + JWT)" as AUTH
+rectangle "Approval Service\n(Spring Boot + MyBatis-Plus)" as APPROVAL
+rectangle "Resource Service\n(Spring Boot)" as RESOURCE
+rectangle "Notification Service\n(Spring Boot + Mail)" as NOTIFY
+rectangle "Zeebe Workflow Engine\n(Camunda 8 Cluster)" as ZEEBE
+rectangle "Intelligent Agent\n(FastAPI + LangChain + OpenAI)" as AGENT
+rectangle "Infrastructure Layer\nNacos / Sentinel / RocketMQ / Redis / PostgreSQL" as INFRA
+rectangle "Kubernetes Cluster\nHelm + Jenkins CI/CD" as K8S
+
+U --> UI
+UI --> GW
+GW --> AUTH
+GW --> APPROVAL
+GW --> RESOURCE
+GW --> NOTIFY
+
+APPROVAL --> ZEEBE
+ZEEBE --> AGENT
+APPROVAL --> INFRA
+RESOURCE --> INFRA
+NOTIFY --> INFRA
+GW --> INFRA
+
+K8S -[hidden]-> GW
+K8S -[hidden]-> INFRA
+@enduml
+
 
 ---
 
-## 🧩 功能特性
+## 🔧技术栈
 
-* 🧠 **LLM 智能审批**：对申请内容进行摘要、分类、风险提示与自动分派。
-* ⚙️ **BPMN 工作流可视化**：基于 Camunda Modeler 设计跨部门流程。
-* 🔁 **Saga 分布式事务补偿**：保障多微服务操作的一致性。
-* ☁️ **高可用微服务架构**：基于 Kubernetes 实现无单点容错。
-* 📊 **可观测性支持**：Prometheus + Grafana + Zeebe Operate。
+| 模块       | 技术选型                                      | 功能说明              |
+| -------- | ----------------------------------------- | ----------------- |
+| 工作流引擎    | Camunda 8 (Zeebe)                         | 云原生分布式 BPMN 工作流引擎 |
+| 微服务框架    | Spring Cloud Alibaba                      | 注册发现、配置中心、熔断限流    |
+| 智能 Agent | Python + FastAPI + LangChain + OpenAI API | 智能审批、语义分析         |
+| 消息通信     | RocketMQ / gRPC                           | 异步可靠通信            |
+| 注册配置     | Nacos                                     | 服务注册与配置动态刷新       |
+| 熔断限流     | Sentinel                                  | 流量控制与服务保护         |
+| 数据存储     | PostgreSQL / Redis                        | 数据与缓存支撑           |
+| 可观测性     | SkyWalking / Prometheus / Grafana         | 链路追踪与监控           |
+| CI/CD    | Jenkins + Docker + Helm                   | 自动化构建与部署          |
 
 ---
 
-## 📦 快速启动
+## 🚀系统特性
 
-### 1️⃣ 环境要求
+* LLM 智能审批与自动分派
+* BPMN 工作流可视化编排
+* Saga 分布式事务补偿机制
+* Kubernetes 高可用部署
+* Jenkins 自动化构建与滚动升级
+* SkyWalking 全链路追踪
 
-* Docker & Docker Compose
-* Node.js 18+
-* Python 3.10+
-* Kubernetes (本地可用 Minikube/K3s)
+---
 
-### 2️⃣ 克隆仓库
+## ⚡快速启动
+
+### 1. 环境要求
+
+| 组件                    | 最低版本   |
+| --------------------- | ------ |
+| Java                  | 21     |
+| Maven                 | 3.9+   |
+| Python                | 3.10+  |
+| Node.js               | 18+    |
+| Docker / Compose      | 最新版    |
+| Kubernetes / Minikube | 1.28+  |
+| Jenkins               | 2.440+ |
+
+### 2. 启动依赖环境
 
 ```bash
-git clone https://github.com/yourname/flowmind.git
-cd flowmind
+docker-compose -f docker/infrastructure-compose.yml up -d
 ```
 
-### 3️⃣ 启动 Zeebe & Operate
+### 3. 启动智能 Agent
 
 ```bash
-docker-compose -f docker/zeebe-compose.yml up -d
-```
-
-### 4️⃣ 启动智能 Agent
-
-```bash
-cd services/agent
+cd agent
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### 5️⃣ 启动工作流微服务
+### 4. 启动微服务集群
 
 ```bash
 cd services/approval
 mvn spring-boot:run
 ```
 
-### 6️⃣ 访问系统
-
-```
-Operate UI: http://localhost:8081
-API Gateway: http://localhost:8000
-```
+或使用 Jenkins Pipeline 自动构建与部署。
 
 ---
 
-## 🧮 系统示例流程（预算申请）
+## 🌐访问地址
 
-1️⃣ 用户提交预算申请表（含长文本描述）
-2️⃣ LLM Agent 自动分析并提取关键字段（部门、金额、风险）
-3️⃣ Camunda BPMN 模型根据智能决策进行审批路由
-4️⃣ 审批通过后触发资源分配微服务
-5️⃣ 任务完成后发送通知邮件或消息
-
----
-
-## 📊 高可用验证场景
-
-| 测试项          | 验证目标               | 结果预期   |
-| ------------ | ------------------ | ------ |
-| 微服务节点故障      | K8s 自动拉起新 Pod      | 流程不中断  |
-| Zeebe 节点故障   | 集群自动重新分配 Partition | 无状态丢失  |
-| 流程异常（资源服务失败） | Saga 补偿逻辑生效        | 状态回滚成功 |
+| 模块                | 地址                                             |
+| ----------------- | ---------------------------------------------- |
+| Operate UI        | [http://localhost:8081](http://localhost:8081) |
+| API Gateway       | [http://localhost:8080](http://localhost:8080) |
+| LLM Agent         | [http://localhost:8001](http://localhost:8001) |
+| Jenkins Dashboard | [http://localhost:8089](http://localhost:8089) |
 
 ---
 
-## 📄 目录结构
+## 📁目录结构
 
 ```
 flowmind/
-├── agent/                # LLM Agent (FastAPI)
-├── bpmn/                 # BPMN 模型文件
-├── services/
-│   ├── approval/         # 审批微服务
-│   ├── resource/         # 资源管理服务
-│   └── notification/     # 通知服务
-├── k8s/                  # K8s YAML / Helm Charts
-├── docker/               # Docker Compose 配置
-├── docs/                 # 技术文档与论文材料
-└── README.md             # 当前文件
+├── agent/                      # Python LLM Agent (FastAPI)
+│   ├── main.py
+│   └── core/
+├── bpmn/                       # BPMN 模型文件
+├── services/                   # Java 微服务模块（Spring Cloud Alibaba）
+│   ├── approval-service/
+│   ├── resource-service/
+│   ├── notification-service/
+│   ├── gateway-service/
+│   └── auth-service/
+├── common/                     # 通用模块（DTO、Feign、Utils）
+├── docker/                     # Docker Compose 配置
+├── k8s/                        # Helm Charts / YAML
+├── jenkins/                    # Jenkinsfile 与 Pipeline 模板
+├── docs/                       # 技术文档
+└── README.md
 ```
 
 ---
 
-## 📚 参考文献
+## 🛡️高可用验证场景
 
-* Camunda 8 Documentation
-* LangChain Docs
-* Kubernetes: Up & Running, O’Reilly
-* Tree of Thoughts (2023), Yao et al.
+| 测试场景       | 验证目标           | 预期结果   |
+| ---------- | -------------- | ------ |
+| 单节点宕机      | K8s 自动重建 Pod   | 服务不中断  |
+| Zeebe 节点故障 | Partition 自动迁移 | 流程不中断  |
+| 微服务异常      | Saga 补偿执行      | 状态回滚成功 |
+| 瞬时高流量      | Sentinel 限流熔断  | 系统稳定运行 |
 
 ---
 
-## 👨‍💻 作者信息
+## 📈后续规划
 
-| 信息      | 内容          |
-| ------- | ----------- |
-| 学生      | [填写姓名]      |
-| 指导教师    | [填写导师姓名]    |
-| 学校 / 专业 | [填写学院与专业]   |
-| 时间      | 2025 年 10 月 |
+* 集成 OpenTelemetry 统一监控
+* 增强 LLM Prompt 模型智能性
+* 引入前端流程可视化看板
+* 优化 Jenkins 蓝绿部署方案
 
+---
+
+## 📜License
+
+Apache License 2.0 © 2025 FlowMind Team
