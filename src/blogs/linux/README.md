@@ -5,6 +5,7 @@ dir:
   icon: /assets/icon/linux.png
   text: "Linux"
   order: 5
+article: false
 ---
 
 <Catalog/>

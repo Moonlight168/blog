@@ -5,6 +5,7 @@ dir:
   icon: /assets/icon/data.png
   text: 数据库
   order: 3
+article: false
 ---
 
 <Catalog/>

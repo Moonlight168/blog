@@ -5,6 +5,7 @@ dir:
   icon: /assets/icon/网络.png
   text: 计算机网络
   order: 1
+article: false
 ---
 
 <Catalog/>
