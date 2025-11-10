@@ -1,7 +1,6 @@
 import { hopeTheme } from "vuepress-theme-hope";
 import { zhNavbar } from "./navbar/index.js";
 import {  zhSidebar } from "./sidebar/index.js";
-import GiteeRepo from "./components/GiteeRepo.vue";
 export default hopeTheme({
   author: {
     name: "GGBOND",
@@ -130,7 +129,6 @@ export default hopeTheme({
         // 匹配以 /blogs/ 开头的路径（排除根目录的 /blogs.html 单页）
         return page.path.startsWith('/blogs/')&& page.frontmatter.article != false;
       },
-      hotReload: true,
       article: '/blogs/',
     },
     components: {

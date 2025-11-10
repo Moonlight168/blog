@@ -10,10 +10,14 @@ export const zhNavbar = navbar([
   // 我的项目（一级导航，可包含子项）
   {
     text: "我的项目",
-    link: "/series/myprojects",
     icon: "/assets/icon/project.png", // 项目相关图标
     prefix: "/series/myprojects", // 项目页面存放路径前缀
     children: [
+      {
+        text: "项目总览",
+        icon: "/assets/icon/myprojects.png",
+        link: "/series/myprojects/",
+      },
       {
         text: "FlowMind",
         icon: "/assets/icon/cloud_flow.png",
@@ -50,6 +54,11 @@ export const zhNavbar = navbar([
         text: "BUG",
         icon: "/assets/icon/bug.png",
         link: "/category/bug/",
+      },
+      {
+        text: "开源项目分享",
+        icon: "/assets/icon/开源.png",
+        link: "/category/开源项目/",
       },
     ],
   },
