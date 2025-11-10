@@ -5,45 +5,59 @@ icon: /assets/icon/myprojects.png
 order: 1
 ---
 
-这里是我在学习过程中独立完成的重点项目，涵盖前后端开发、系统集成。每个项目均配有源码地址与详细说明。
+这里展示我在学习与实战中独立完成的重点项目，涵盖前后端开发与系统集成。每个项目均附源码地址与详细说明。
 
-## 🌐 智能停车管理系统
+---
 
-> 基于 SpringBoot + Vue3 的校园智能停车解决方案，支持实时车位监控、导航指引、通知提醒、性能测试等核心功能。
+### 🧠 FlowMind · 智能流程管理平台
+> 一站式智能流程管理平台，集需求分析、开发规范、UI原型设计于一体，助力团队高效协作。
 
-- 核心技术：SpringBoot、Vue3、Redis、Kafka、OpenCV、Selenium、Docker
-- 关键模块：用户认证、车位识别、预约导航、消息推送、高并发处理
-- 项目特色：实现图像识别 + 消息队列 + 缓存一致性协同
-- 🔗 [查看源码](https://github.com/Moonlight168/gupt-management-back-end)
+**🔧 技术栈：**
+`SpringBoot` · `MyBatis-Plus` · `SpringSecurity` ｜ `Vue3` · `TDesign` · `TailwindCSS` ｜ `MySQL` · `Redis` · `ElasticSearch` · `RabbitMQ`
 
-## 🎓 邮院通（校园一站式服务平台 + AI 智能助手）
+**📌 主要职责：**
+- 实现流程管理、需求分析、UI 原型模块前端页面
+- 基于 `Spring Security + JWT` 完成登录与权限控制
+- 使用 `Redis` 提升数据读取性能
+- 通过 `RabbitMQ` 实现异步任务处理
+- 集成 `ElasticSearch` 实现智能问答与推荐
 
-> 打造校园全场景服务生态，覆盖多业务模块，结合 AI 能力，助力校园高效管理与便捷服务。
+🔗 [查看项目详情](./FlowMind/README.md)
 
-- **技术架构**：
-    - **后端**：SpringBoot、MyBatis-Plus、SpringSecurity
-    - **前端**：Vue3、TDesign、TailwindCSS
-    - **数据存储与中间件**：MySQL、Redis、ElasticSearch、RabbitMQ
-    - **AI 能力**：集成 Ollama 部署 Qwen 模型实现自然语言交互
+---
 
-- **功能模块**：
-    - API 接口服务（gupt-api）
-    - AI 助手服务（gupt-assistant-service）
-    - 权限管理服务（gupt-auth）
-    - 社团管理、课程服务、宿舍服务等多业务模块
+### 🎫 淘票票 · 高并发票务系统
+> 分布式高并发在线购票系统，支持灰度发布、缓存优化与搜索推荐。
 
-- 🔗 [项目详情](/series/myprojects/xiaoyuanfuwupingtai.html)
+**🔧 技术栈：**
+`SpringBoot` · `MyBatis-Plus` · `Vue3` · `Redis` · `ElasticSearch` · `RabbitMQ`
 
+**📌 主要职责：**
+- 实现购票与订单管理前端页面
+- 设计分布式架构（分布式锁 / 消息队列 / ID 生成）
+- 优化性能：Redis 缓存 + 布隆过滤器
+- 实现灰度发布、安全防护与验证码机制
+- 集成搜索推荐系统
 
-## 🛡️ 后端权限管理系统
+🔗 [查看项目详情](./淘票票/README.md)
 
-> 基于 RBAC 的权限控制系统，支持菜单权限、按钮权限、JWT 鉴权、角色分配及接口防刷。
+---
 
-- 核心技术：SpringSecurity、JWT、MyBatis-Plus、Redis、Docker
-- 亮点功能：动态路由、Token 续签、权限控制注解、接口限流
-- 项目定位：企业后台管理系统的基础骨架，可二次开发与集成
-- 🔗 [查看源码](https://github.com/Moonlight168/permission-system)
+### 🎓 邮院通 · 校园一站式服务平台 + AI 助手
+> 集课程、成绩、新闻、宿舍管理于一体的校内服务平台，内置智能问答助手。
 
+**🔧 技术栈：**
+`SpringBoot` · `Vue3` · `MyBatis-Plus` · `Redis` · `ElasticSearch` · `RabbitMQ`
 
+**📌 主要职责：**
+- 前端开发课程查询、新闻展示等核心页面
+- 基于 `JWT` 实现认证与权限控制
+- 使用 `Redis` 提升高频访问数据响应速度
+- 利用 `RabbitMQ` 优化抢课并发性能
+- 集成 `Qwen` 大模型 + `ElasticSearch` 实现 FAQ 智能问答
 
-📌 更多项目与细节可查看我的 [GitHub主页](https://github.com/Moonlight168) 或通过博客左侧分类导航。
+🔗 [查看项目详情](./邮院通/README.md)
+
+---
+
+📌 更多项目与细节请访问我的 [GitHub主页](https://github.com/Moonlight168)，或通过博客左侧分类导航查看。
