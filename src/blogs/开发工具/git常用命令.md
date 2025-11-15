@@ -42,6 +42,21 @@ git push -u origin HEAD:gh-pages
 git push -f -u origin HEAD:gh-pages  
 
 ```
+## 仓库状态查询
+```bash
+# 查看当前仓库状态（包括暂存区和工作区）
+git status  
+
+# 查看提交历史（简洁格式）
+git log --oneline  
+
+# 查看分支状态（包括本地和远程分支）
+git branch -a  
+
+# 查看远程仓库信息
+git remote -v  
+
+```
 
 
 ## 拓展技巧

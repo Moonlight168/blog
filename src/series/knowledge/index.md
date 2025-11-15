@@ -13,23 +13,7 @@ icon: /assets/icon/书本.png
 
 ## 🧠 知识体系概览
 
-### 🐧 Linux 与操作系统
-- Linux 常用命令与实战技巧
-- 操作系统原理（进程线程、内存管理、IO模型等）
-
-### ☕ Java 核心
-- Java 基础语法与进阶特性
-- 集合源码分析与应用场景
-- [多线程与并发编程（线程池、锁机制、JMM等)](/blog/java/multithreading.md)
-- JVM 内部机制（GC、类加载、内存模型）
-- Spring 全家桶（Spring、SpringMVC、SpringBoot）
-- 微服务架构（SpringCloud、Nacos、Gateway、Feign）
-- 项目实战与高并发处理（缓存、消息队列、分布式事务）
-
-### 💻 前端基础
-- HTML / CSS / JavaScript
-- Vue3 + TypeScript 实践经验
-- 前后端协作与接口联调技巧
+<Catalog/>
 
 ---
 
