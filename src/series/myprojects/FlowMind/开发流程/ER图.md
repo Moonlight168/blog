@@ -2,7 +2,7 @@
 order: 4
 title: ER图设计与优化
 category: 开发流程
-icon: /assets/icon/er-diagram.png
+icon: /assets/icon/er.png
 ---
 
 # FlowMind 系统ER图设计与优化
@@ -29,34 +29,33 @@ ER图（Entity-Relationship Diagram，实体-关系图）是数据库设计的�
 
 ## 3. 主键设计说明
 
-### 3.1 为什么使用UUID而不是BIGINT
+### 3.1 分布式ID策略
 
-在本系统中，我们选择使用UUID（36位字符串）作为主键，而不是传统的BIGINT自增主键，主要基于以下考虑：
+考虑到微服务架构需求，本系统采用**分布式ID生成策略**，确保跨服务数据唯一性。
 
-#### 3.1.1 分布式架构支持
-- **无中心化生成**：UUID可以在应用层生成，无需依赖数据库的自增机制，避免单点瓶颈
-- **支持分库分表**：在分布式数据库架构中，UUID可以避免不同分片间的ID冲突
-- **微服务友好**：微服务架构下，不同服务可以独立生成ID，无需协调
+#### 3.1.1 ID生成方案
+- **雪花算法（Snowflake）**：64位长整型，包含时间戳、机器ID、序列号，作为主键ID
+- **业务ID字段**：关键业务表增加业务编号字段，用于用户可见的业务标识
+- **内部ID**：主键`id`使用雪花算法生成的分布式ID，确保全局唯一性
 
-#### 3.1.2 数据安全性
-- **不可预测性**：UUID是随机生成的，难以通过ID猜测数据量和业务规模
-- **防止信息泄露**：自增ID容易暴露系统的业务活跃度，UUID则无法通过ID推断
-- **支持数据脱敏**：在日志和外部接口中，UUID相对更安全
+#### 3.1.2 业务ID设计
+- **申请相关表**：`applications`表增加`application_no`字段，格式：`APP{YYYYMMDD}{6位序列}`
+- **审批相关表**：`approvals`表增加`approval_no`字段，格式：`APV{YYYYMMDD}{6位序列}`
+- **用户可见**：业务ID用于前端展示、查询和业务流转
+- **内部关联**：数据库关联仍使用自增主键`id`
 
-#### 3.1.3 业务灵活性
-- **支持数据迁移**：在不同环境间迁移数据时，无需担心ID冲突
-- **支持离线操作**：客户端可以在离线状态下生成ID，待联网后同步
-- **支持批量导入**：批量导入数据时，无需担心ID重复问题
+### 3.2 主键类型选择
 
-#### 3.1.4 性能考虑
-- **索引性能**：虽然UUID比BIGINT占用更多存储空间（36字节 vs 8字节），但现代数据库对字符串索引优化良好
-- **查询性能**：在适当的索引设计下，UUID的查询性能与BIGINT差异不大
-- **存储成本**：额外的存储空间成本在现代硬件条件下可以接受
+| 特性 | 自增主键 | 分布式ID |
+|------|--------|---------|
+| **唯一性** | 单机唯一 | 全局唯一，分布式友好 |
+| **性能** | 索引效率高，存储空间小 | 索引效率高，存储空间适中 |
+| **可读性** | 较好，易于理解 | 业务ID可读性好 |
+| **扩展性** | 单机扩展困难 | 天然支持分布式 |
 
-#### 3.1.5 适用场景
-- **中等规模系统**：对于FlowMind这种中等规模的业务系统，UUID的性能影响在可接受范围内
-- **B2B业务**：企业级应用对数据一致性和安全性要求更高，UUID的优势更加明显
-- **长期演进**：为系统未来的分布式扩展预留空间，避免后期重构成本
+**最终选择**：
+- 主键`id`：使用雪花算法生成的分布式ID（BIGINT类型），确保跨服务全局唯一性
+- 业务ID：关键业务表增加业务编号字段，用于用户可见的业务标识
 
 ## 4. 核心实体关系图
 
@@ -66,82 +65,86 @@ ER图（Entity-Relationship Diagram，实体-关系图）是数据库设计的�
 erDiagram
     User ||--o{ UserRole : "has"
     User {
-        string id PK "用户ID (UUID)"
-        string username "用户名"
-        string password_hash "密码哈希"
-        string email "邮箱地址"
-        string phone "手机号码"
-        string real_name "真实姓名"
-        string dept_id FK "部门ID"
+        BIGINT id PK "用户ID (分布式ID)"
+        VARCHAR(50) username "用户名"
+        VARCHAR(255) password_hash "密码哈希"
+        VARCHAR(100) email "邮箱地址"
+        VARCHAR(20) phone "手机号码"
+        VARCHAR(50) real_name "真实姓名"
+        BIGINT dept_id FK "部门ID"
         json ext_data_json "扩展数据JSON"
-        boolean is_active "是否激活"
+        ENUM status "状态"
         datetime last_login_at "最后登录时间"
         string created_by "创建人ID"
         string updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
+        boolean is_deleted "是否删除"
     }
     
     Role ||--o{ UserRole : "assigned_to"
     Role {
-        string id PK "角色ID (UUID)"
-        string role_name "角色名称"
-        string role_code "角色编码"
-        string description "角色描述"
+        BIGINT id PK "角色ID (分布式ID)"
+        VARCHAR(50) role_name "角色名称"
+        VARCHAR(50) role_code "角色编码"
+        VARCHAR(200) description "角色描述"
         int role_level "角色等级"
         json ext_data_json "扩展数据JSON"
-        boolean is_active "是否激活"
+        ENUM status "状态"
         string created_by "创建人ID"
         string updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
+        boolean is_deleted "是否删除"
     }
     
     Role ||--o{ RolePermission : "has"
     Permission ||--o{ RolePermission : "assigned_to"
     Permission {
-        string id PK "权限ID (UUID)"
-        string permission_name "权限名称"
-        string permission_code "权限编码"
-        string description "权限描述"
+        BIGINT id PK "权限ID (分布式ID)"
+        VARCHAR(100) permission_name "权限名称"
+        VARCHAR(50) permission_code "权限编码"
+        VARCHAR(200) description "权限描述"
         string resource_type "资源类型"
         string action "操作类型"
         json ext_data_json "扩展数据JSON"
-        boolean is_active "是否激活"
+        ENUM status "状态"
         string created_by "创建人ID"
         string updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
+        boolean is_deleted "是否删除"
     }
     
     Department ||--o{ User : "has"
     Department {
-        string id PK "部门ID (UUID)"
-        string dept_name "部门名称"
-        string dept_code "部门编码"
-        string parent_dept_id FK "上级部门ID"
+        BIGINT id PK "部门ID (分布式ID)"
+        VARCHAR(100) dept_name "部门名称"
+        VARCHAR(20) dept_code "部门编码"
+        BIGINT parent_dept_id FK "上级部门ID"
         int dept_level "部门层级"
-        string description "部门描述"
+        VARCHAR(200) description "部门描述"
         json ext_data_json "扩展数据JSON"
-        boolean is_active "是否激活"
+        ENUM status "状态"
         string created_by "创建人ID"
         string updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
+        boolean is_deleted "是否删除"
     }
     
     UserRole {
-        string id PK "关联ID (UUID)"
-        string user_id FK "用户ID"
-        string role_id FK "角色ID"
+        BIGINT id PK "关联ID (分布式ID)"
+        BIGINT user_id FK "用户ID"
+        BIGINT role_id FK "角色ID"
         string created_by "创建人ID"
         datetime created_at "创建时间"
     }
     
     RolePermission {
-        string id PK "关联ID (UUID)"
-        string role_id FK "角色ID"
-        string permission_id FK "权限ID"
+        BIGINT id PK "关联ID (分布式ID)"
+        BIGINT role_id FK "角色ID"
+        BIGINT permission_id FK "权限ID"
         string created_by "创建人ID"
         datetime created_at "创建时间"
     }
@@ -167,73 +170,74 @@ erDiagram
     Application ||--o{ ApplicationHistory : "has_history"
     
     Application {
-        string id PK "申请ID (UUID)"
-        string user_id FK "申请人ID"
-        string application_type_id FK "申请类型ID"
-        string process_definition_id FK "流程定义ID"
-        string title "申请标题"
+        BIGINT id PK "申请ID (分布式ID)"
+        VARCHAR(20) application_no "申请编号 (APP{YYYYMMDD}{6位序列})"
+        BIGINT user_id FK "申请人ID"
+        BIGINT application_type_id FK "申请类型ID"
+        BIGINT process_definition_id FK "流程定义ID"
+        VARCHAR(200) title "申请标题"
         text content "申请内容"
         decimal amount "申请金额"
-        string status "申请状态"
+        VARCHAR(50) status "申请状态"
         datetime submitted_at "提交时间"
         datetime updated_at "更新时间"
-        string current_node_id FK "当前节点ID"
+        BIGINT current_node_id FK "当前节点ID"
         json ext_data_json "扩展数据JSON"
         boolean is_deleted "是否删除"
         boolean is_cancelled "是否撤销"
-        string cancel_reason "撤销原因"
+        VARCHAR(500) cancel_reason "撤销原因"
         date expected_completion_date "期望完成日期"
-        string priority "优先级"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        VARCHAR(20) priority "优先级"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
     }
     
     ApplicationType {
-        string id PK "申请类型ID (UUID)"
-        string type_name "类型名称"
-        string type_code "类型编码"
-        string description "类型描述"
+        BIGINT id PK "申请类型ID (分布式ID)"
+        VARCHAR(100) type_name "类型名称"
+        VARCHAR(50) type_code "类型编码"
+        VARCHAR(200) description "类型描述"
         json form_config_json "表单配置JSON"
         json workflow_config_json "工作流配置JSON"
         json ext_data_json "扩展数据JSON"
-        boolean is_active "是否激活"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        boolean is_deleted "是否删除"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
     
     ProcessDefinition ||--o{ ProcessNode : "has"
     ProcessDefinition {
-        string id PK "流程定义ID (UUID)"
-        string process_name "流程名称"
-        string process_code "流程编码"
-        string description "流程描述"
+        BIGINT id PK "流程定义ID (分布式ID)"
+        VARCHAR(100) process_name "流程名称"
+        VARCHAR(50) process_code "流程编码"
+        VARCHAR(200) description "流程描述"
         json process_config_json "流程配置JSON"
         int version "版本号"
-        boolean is_active "是否激活"
+        boolean is_deleted "是否删除"
         json ext_data_json "扩展数据JSON"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
     
     ProcessNode {
-        string id PK "节点ID (UUID)"
-        string process_definition_id FK "流程定义ID"
-        string node_name "节点名称"
-        string node_code "节点编码"
-        string node_type "节点类型"
+        BIGINT id PK "节点ID (分布式ID)"
+        BIGINT process_definition_id FK "流程定义ID"
+        VARCHAR(100) node_name "节点名称"
+        VARCHAR(50) node_code "节点编码"
+        VARCHAR(50) node_type "节点类型"
         json node_config_json "节点配置JSON"
-        string next_node_id FK "下一个节点ID"
+        BIGINT next_node_id FK "下一个节点ID"
         int order_num "排序号"
         int timeout_days "超时天数"
         boolean is_skipable "是否可跳过"
         json ext_data_json "扩展数据JSON"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
@@ -241,52 +245,53 @@ erDiagram
     User ||--o{ Approval : "approves"
     ProcessNode ||--o{ Approval : "at_node"
     Approval {
-        string id PK "审批ID (UUID)"
-        string application_id FK "申请ID"
-        string approver_id FK "审批人ID"
-        string node_id FK "流程节点ID"
-        string status "审批状态"
+        BIGINT id PK "审批ID (分布式ID)"
+        VARCHAR(20) approval_no "审批编号 (APV{YYYYMMDD}{6位序列})"
+        BIGINT application_id FK "申请ID"
+        BIGINT approver_id FK "审批人ID"
+        BIGINT node_id FK "流程节点ID"
+        VARCHAR(50) status "审批状态"
         text comment "审批意见"
         datetime approved_at "审批时间"
         datetime due_at "截止时间"
         boolean is_transferred "是否转交"
         decimal intelligent_score "智能评分"
         json ext_data_json "扩展数据JSON"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
     
     Attachment {
-        string id PK "附件ID (UUID)"
-        string application_id FK "申请ID"
-        string file_name "文件名称"
-        string file_path "文件路径"
-        string file_type "文件类型"
+        BIGINT id PK "附件ID (分布式ID)"
+        BIGINT application_id FK "申请ID"
+        VARCHAR(255) file_name "文件名称"
+        VARCHAR(500) file_path "文件路径"
+        VARCHAR(50) file_type "文件类型"
         bigint file_size "文件大小（字节）"
-        string hash_value "文件哈希值"
+        VARCHAR(64) hash_value "文件哈希值"
         json ext_data_json "扩展数据JSON"
-        string uploaded_by FK "上传人ID"
+        BIGINT uploaded_by FK "上传人ID"
         datetime uploaded_at "上传时间"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
     
     ApplicationHistory {
-        string id PK "历史ID (UUID)"
-        string application_id FK "申请ID"
-        string field_name "字段名称"
+        BIGINT id PK "历史ID (分布式ID)"
+        BIGINT application_id FK "申请ID"
+        VARCHAR(50) field_name "字段名称"
         text old_value "旧值"
         text new_value "新值"
-        string action_type "操作类型"
+        VARCHAR(50) action_type "操作类型"
         json ext_data_json "扩展数据JSON"
-        string changed_by FK "变更人ID"
+        BIGINT changed_by FK "变更人ID"
         datetime changed_at "变更时间"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
@@ -312,29 +317,29 @@ erDiagram
     User ||--o{ TransferRecord : "transfers_to"
     
     ApprovalHistory {
-        string id PK "历史ID (UUID)"
-        string approval_id FK "审批ID"
-        string action "操作动作"
-        text details "操作详情"
-        string action_by FK "操作人ID"
+        BIGINT id PK "历史ID (分布式ID)"
+        BIGINT approval_id FK "审批ID"
+        VARCHAR(50) action_type "操作类型"
+        VARCHAR(50) old_status "旧状态"
+        VARCHAR(50) new_status "新状态"
+        text comment "操作说明"
         json ext_data_json "扩展数据JSON"
-        datetime action_time "操作时间"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT operator_id "操作人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
     
     TransferRecord {
-        string id PK "转交记录ID (UUID)"
-        string approval_id FK "审批ID"
-        string from_user_id FK "转出人ID"
-        string to_user_id FK "接收人ID"
-        text transfer_reason "转交原因"
-        datetime transferred_at "转交时间"
+        BIGINT id PK "记录ID (分布式ID)"
+        BIGINT approval_id FK "审批ID"
+        BIGINT from_approver_id "原审批人ID"
+        BIGINT to_approver_id "新审批人ID"
+        text reason "转交原因"
         json ext_data_json "扩展数据JSON"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
@@ -342,44 +347,40 @@ erDiagram
     User ||--o{ Notification : "receives"
     Application ||--o{ Notification : "related_to"
     Notification {
-        string id PK "通知ID (UUID)"
-        string user_id FK "用户ID"
-        string application_id FK "申请ID"
-        string type "通知类型"
-        string title "通知标题"
+        BIGINT id PK "通知ID (分布式ID)"
+        BIGINT user_id FK "用户ID"
+        BIGINT application_id FK "申请ID"
+        VARCHAR(200) title "通知标题"
         text content "通知内容"
+        VARCHAR(50) type "通知类型"
         boolean is_read "是否已读"
-        datetime read_at "阅读时间"
-        string related_id "关联ID"
         json ext_data_json "扩展数据JSON"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
     
     Department ||--o{ Resource : "has"
     Resource {
-        string id PK "资源ID (UUID)"
-        string dept_id FK "部门ID"
-        string resource_type "资源类型"
-        string resource_name "资源名称"
-        int quantity "总数量"
-        int available_quantity "可用数量"
-        string unit "单位"
-        string description "资源描述"
+        BIGINT id PK "资源ID (分布式ID)"
+        BIGINT dept_id FK "部门ID"
+        VARCHAR(100) resource_name "资源名称"
+        VARCHAR(50) resource_type "资源类型"
+        decimal total_amount "总数量"
+        decimal used_amount "已使用数量"
         json ext_data_json "扩展数据JSON"
-        boolean is_active "是否激活"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        boolean is_deleted "是否删除"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
     
     Application ||--|| IntelligentReview : "has_review"
     IntelligentReview {
-        string id PK "初审ID (UUID)"
-        string application_id FK "申请ID"
+        BIGINT id PK "初审ID (分布式ID)"
+        BIGINT application_id FK "申请ID"
         json extracted_info_json "提取信息JSON"
         boolean is_compliant "是否合规"
         text compliance_issues "合规问题"
@@ -388,8 +389,8 @@ erDiagram
         int processing_time_ms "处理时间（毫秒）"
         json ext_data_json "扩展数据JSON"
         datetime reviewed_at "初审时间"
-        string created_by "创建人ID"
-        string updated_by "更新人ID"
+        BIGINT created_by "创建人ID"
+        BIGINT updated_by "更新人ID"
         datetime created_at "创建时间"
         datetime updated_at "更新时间"
     }
@@ -451,13 +452,21 @@ erDiagram
 CREATE INDEX idx_applications_user_status ON applications(user_id, status);
 CREATE INDEX idx_applications_type_status ON applications(application_type_id, status);
 CREATE INDEX idx_applications_submitted_status ON applications(submitted_at, status);
+CREATE INDEX idx_applications_application_no ON applications(application_no);
 
 -- 审批任务查询优化  
 CREATE INDEX idx_approvals_approver_status ON approvals(approver_id, status);
 CREATE INDEX idx_approvals_due_status ON approvals(due_at, status);
+CREATE INDEX idx_approvals_approval_no ON approvals(approval_no);
 
 -- 通知查询优化
 CREATE INDEX idx_notifications_user_read ON notifications(user_id, is_read);
+
+-- 逻辑删除查询优化
+CREATE INDEX idx_users_is_deleted ON users(is_deleted);
+CREATE INDEX idx_roles_is_deleted ON roles(is_deleted);
+CREATE INDEX idx_permissions_is_deleted ON permissions(is_deleted);
+CREATE INDEX idx_departments_is_deleted ON departments(is_deleted);
 ```
 
 #### 5.2.2 全文搜索索引
@@ -534,9 +543,11 @@ ALTER TABLE approvals ADD FULLTEXT ft_approvals_search (comment);
 
 ### 7.3 多租户支持
 虽然当前设计为单租户系统，但通过以下设计为未来的多租户扩展预留了空间：
-- 所有表使用UUID主键，避免不同租户间的ID冲突
-- ext_data_json字段可以存储租户特定的配置信息
-- 审计字段可以追踪租户内的操作
+- **tenant_id字段**：所有核心表可以添加tenant_id字段实现多租户数据隔离
+- **业务ID前缀**：application_no和approval_no字段支持租户前缀标识（如"TENANT01_APP20241201000001"）
+- **JSON扩展字段**：ext_data_json字段可以存储租户特定的配置信息和扩展属性
+- **审计字段**：created_by、updated_by等审计字段支持租户内的操作追踪
+- **分布式ID适配**：自增BIGINT主键设计天然支持分布式部署，便于多租户架构扩展
 
 ## 8. 安全性设计
 
