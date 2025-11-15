@@ -8,3 +8,4 @@ src/.vuepress/.temp/
 
 # 忽略本地文档
 src/private
+src/trash

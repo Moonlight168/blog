@@ -132,7 +132,7 @@ export default hopeTheme({
       article: '/blogs/',
     },
     components: {
-      components: ["Badge", "VPCard"],
+      components: ["Badge", "VPCard","PDF",],
     },
 
     icon: {

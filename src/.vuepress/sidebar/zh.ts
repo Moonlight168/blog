@@ -30,6 +30,9 @@ export const zhSidebar = sidebar({
         ? {
             "/private/finance/": "structure",
             "/private/hires/": "structure",
+            "/trash/": "structure",
         }
         : {}), // 生产环境：空对象，不添加这些配置
+     // 排除不想显示的目录（无论在什么环境都不显示）
+    //"/blogs/基本概念/UML建模/结构图/": [],
 });
