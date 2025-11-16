@@ -58,6 +58,7 @@ docker ps -a                    # 查看所有容器
 docker run -d -p 8080:80 nginx  # 后台运行 nginx 容器并映射端口
 docker stop <容器ID或名称>      # 停止容器
 docker rm <容器ID或名称>        # 删除容器
+docker rm -f $(docker ps -aq) # 删除所有容器
 ```
 
 ### 3. 构建自定义镜像

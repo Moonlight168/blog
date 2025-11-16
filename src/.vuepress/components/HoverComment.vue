@@ -2,11 +2,7 @@
   <span class="hover-comment-marker"
         @mouseenter="startHover"
         @mouseleave="stopHover">
-    <!-- 点击文字或 [?] 切换显示 -->
-    <span class="clickable-area">
-      <span @click.stop="toggleBox" v-html="text"></span>
-      <sup @click.stop="toggleBox">[?]</sup>
-    </span>
+
 
     <!-- 使用 transition 包裹 Tooltip -->
     <transition name="fade">
@@ -15,6 +11,13 @@
         <span v-html="htmlComment"></span>
       </span>
     </transition>
+
+    <!-- 点击文字或 [?] 切换显示 -->
+    <span class="clickable-area">
+      <span @click.stop="toggleBox" v-html="text"></span>
+      <sup @click.stop="toggleBox">[?]</sup>
+    </span>
+
   </span>
 </template>
 

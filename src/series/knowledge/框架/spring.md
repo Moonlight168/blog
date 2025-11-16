@@ -516,3 +516,140 @@ Bean 生命周期 = **实例化 → 属性赋值 → 初始化前处理 → 初�
 3. 查看 `META-INF/spring` 下的配置文件是否正确声明了配置类
 4. 使用 Actuator 的 `conditions` 端点查看自动配置报告
 
+## bootstrap.yml 和 application.yml 的区别
+
+**回答：**
+
+### 一、基本概念
+
+* `bootstrap.yml`：Spring Cloud 中的配置文件，用于应用程序的**引导阶段**（bootstrap context）
+* `application.yml`：Spring Boot 的标准配置文件，用于应用程序的**运行阶段**（application context）
+
+### 二、加载顺序与优先级
+
+1. **加载顺序**
+   * `bootstrap.yml` 先加载（引导上下文）
+   * `application.yml` 后加载（应用上下文）
+
+2. **优先级**
+   * `bootstrap.yml` 中的配置优先级更高
+   * `application.yml` 中的配置可以覆盖 `bootstrap.yml` 中的同名配置
+
+### 三、主要用途
+
+#### bootstrap.yml 主要用于：
+
+* **服务注册与发现**：配置 Eureka、Consul 等注册中心
+* **配置中心连接**：连接 Spring Cloud Config Server
+* **加密/解密设置**：配置密钥和加密属性
+* **应用上下文父级设置**：作为父上下文的配置
+
+```yaml
+# bootstrap.yml 示例
+spring:
+  application:
+    name: user-service
+  cloud:
+    config:
+      uri: http://config-server:8888
+      fail-fast: true
+    consul:
+      host: localhost
+      port: 8500
+      discovery:
+        service-name: ${spring.application.name}
+```
+
+#### application.yml 主要用于：
+
+* **常规应用配置**：服务器端口、数据库连接等
+* **业务相关配置**：业务参数、功能开关等
+* **日志配置**：日志级别、输出格式等
+* **特定环境配置**：开发、测试、生产环境的差异化配置
+
+```yaml
+# application.yml 示例
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/user_db
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+logging:
+  level:
+    com.example: DEBUG
+    org.springframework: INFO
+```
+
+### 四、适用场景
+
+#### 使用 bootstrap.yml 的场景：
+
+1. **微服务架构**：需要连接配置中心或服务注册中心
+2. **分布式系统**：需要统一配置管理
+3. **多环境部署**：需要动态获取环境特定配置
+4. **加密配置**：需要解密敏感配置信息
+
+#### 仅使用 application.yml 的场景：
+
+1. **单体应用**：不需要外部配置中心
+2. **简单应用**：配置需求不复杂
+3. **本地开发**：不需要动态配置更新
+
+### 五、Spring Cloud 与 Spring Boot 的关系
+
+* **Spring Boot 应用**：通常只需要 `application.yml`
+* **Spring Cloud 应用**：通常需要 `bootstrap.yml` + `application.yml`
+
+### 六、配置优先级示例
+
+假设有以下配置：
+
+```yaml
+# bootstrap.yml
+spring:
+  application:
+    name: order-service
+  cloud:
+    config:
+      uri: http://config-server:8888
+
+# application.yml
+spring:
+  application:
+    name: order-service-local
+  datasource:
+    url: jdbc:mysql://localhost:3306/orders
+```
+
+* 最终应用名称为 `order-service-local`（application.yml 覆盖了 bootstrap.yml）
+* Config Server 连接地址为 `http://config-server:8888`（保留 bootstrap.yml 配置）
+* 数据库连接为 `jdbc:mysql://localhost:3306/orders`（来自 application.yml）
+
+### 七、最佳实践
+
+1. **分离关注点**：
+   * `bootstrap.yml`：基础设施配置（服务发现、配置中心）
+   * `application.yml`：业务相关配置
+
+2. **环境区分**：
+   * 使用 `bootstrap-{profile}.yml` 和 `application-{profile}.yml` 区分环境
+
+3. **敏感信息**：
+   * 将加密配置放在 `bootstrap.yml`，利用其优先级更高的特性
+
+4. **本地开发**：
+   * 开发环境可以只使用 `application.yml`，简化配置
+
+👉 **总结**：
+`bootstrap.yml` 用于引导阶段，优先级更高，主要用于微服务基础设施配置；`application.yml` 用于应用运行阶段，主要用于业务配置。在微服务架构中两者通常配合使用，在单体应用中通常只需要 `application.yml`。
+
