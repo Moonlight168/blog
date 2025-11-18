@@ -1,6 +1,8 @@
 ---
 title: "Windows常用命令"
 date: 2025-11-16
+icon: /assets/icon/windows.png
+order: 3
 ---
 
 ## 获取进程ID

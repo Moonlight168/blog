@@ -6,6 +6,7 @@ category: 开发工具
 tag:
 - Git
 - 版本控制
+order: 5
 ---
 
 # Git 核心命令速查表
@@ -21,8 +22,6 @@ git reset
 git rm --cached <文件>
 
 ```
-
-
 
 ## 仓库跟踪管理
 ```bash

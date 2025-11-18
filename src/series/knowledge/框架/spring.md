@@ -194,7 +194,7 @@ public class LogAspect {
 
 #### 二、实现原理
 
-Spring AOP 的核心原理是[**动态代理（Proxy）**](../Java/java.html#java中的代理模式)，在运行时为目标对象生成代理对象，将通知逻辑织入目标方法的前后。
+Spring AOP 的核心原理是[**动态代理（Proxy）**](../Java/Java基础面试题/代理.html#_2-1-jdk动态代理)，在运行时为目标对象生成代理对象，将通知逻辑织入目标方法的前后。
 
 #### 四、关键组件说明
 

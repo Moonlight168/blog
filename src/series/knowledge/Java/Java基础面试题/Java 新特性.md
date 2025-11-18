@@ -293,3 +293,32 @@ CompletableFuture实现了`Future`和`CompletionStage`两个接口：
        Thread.startVirtualThread(() -> System.out.println("当前用户：" + USER.get()));
    });
    ```
+
+## 为什么 `Class.newInstance()` 被废弃（deprecated）？
+
+因为它有两个严重问题：
+
+1. **只能调用 public 无参构造器**
+   如果类没有 public 的无参构造器，就直接报错，根本无法用。
+
+2. **异常不透明**
+   所有构造器异常都被包装成 `InstantiationException` 或 `IllegalAccessException`，无法看到真实错误原因，不利于调试。
+
+因此官方认为它“不安全、不可控、功能不足”，把它废弃掉了。
+
+### 从什么时候开始废弃？
+
+自 **Java 9**（JDK 9）起，`Class.newInstance()` 被标注为 **deprecated**。
+
+推荐使用：
+
+```java
+// ✔ 支持任意构造器（包括 private、有参构造）
+// ✔ 异常透明，可看到真实错误原因
+clazz.getDeclaredConstructor().newInstance();
+
+Constructor<?> c = clazz.getDeclaredConstructor(String.class, int.class);
+c.setAccessible(true); // 支持 private 构造器
+Object obj = c.newInstance("Tom", 18);
+
+```
