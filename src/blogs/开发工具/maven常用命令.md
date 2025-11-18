@@ -1,7 +1,7 @@
 ---
 title: "Maven 常用命令详解"
 icon: /assets/icon/maven.png
-order: 15
+order: 2
 ---
 
 删除 target 目录及其内容，清理之前的构建结果。

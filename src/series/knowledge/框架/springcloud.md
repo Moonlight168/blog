@@ -115,8 +115,17 @@ Spring Boot Admin是一个用于管理和监控Spring Boot应用的开源项目�
 * 告警去重：避免重复告警
 * 告警升级：持续未处理的告警进行升级处理
 
+## 在微服务中，为什么业务配置（如数据库、服务地址）通常放在配置中心，而配置中心的连接信息（如 Nacos 地址）却放在本地的 bootstrap.yml 中？”
 
+你必须先能连上“配置中心”，才能从配置中心读取业务配置。
+所以连接配置中心的最小启动配置bootstrap.yml必须放本地。
 
+## 为什么 Nacos 配置表的 context 字段用 LONGTEXT 而不是 JSON？
 
+Nacos 的配置内容格式多样（YAML、Properties、XML、JSON），如果使用 JSON 字段会触发数据库的 JSON 校验，限制格式类型。
+
+同时 Nacos 要兼容多种数据库（MySQL、MariaDB、PostgreSQL），而各数据库的 JSON 类型实现不一致，兼容性差。
+
+LONGTEXT 是所有数据库都支持的纯文本字段，无校验、兼容性最好、写入性能更高，因此官方选择 LONGTEXT。
 
 

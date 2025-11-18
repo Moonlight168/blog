@@ -4,6 +4,7 @@ date: 2025-05-22
 categories: ["开发工具"]
 tags: ["IDEA"]  # 这会被自动填充为对应的标签
 icon: /assets/icon/intellijidea.png
+order: 5
 ---
 
 **ctrl+f12:** 查看该类的所有方法

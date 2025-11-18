@@ -134,7 +134,7 @@ my-docs/
 
 ## 七、调试建议与常见问题
 
-- 如果 MCP 报错 `chrome-devtools-mcp does not support Node vX.Y.Z`：请切换到 Node >= 20.19.0（或项目指定的 engines）。  详情见使用NVM管理，[NVM保姆级安装教程](nvm保姆级安装教程)。
+- 如果 MCP 报错 `chrome-devtools-mcp does not support Node vX.Y.Z`：请切换到 Node >= 20.19.0（或项目指定的 engines）。  详情见使用NVM管理，[NVM保姆级安装教程](nvm保姆级安装教程.md)。
 - 如果被网站反爬（例如 Google 出现验证页），请使用已登录或有合适 profile 的 Chrome（或选择另一搜索引擎测试）。
 
 ---
