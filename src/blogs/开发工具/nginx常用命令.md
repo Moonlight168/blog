@@ -2,12 +2,13 @@
 title: Nginx 的常用命令
 date: 2025-06-09
 categories: ["开发工具"]
-tags: ["Docker"]
+order: 6
+icon: /assets/icon/nginx.png
 ---
 
 ## Nginx 常用命令
 
-### 1. 查看 Nginx 是否安装成功
+### 1. 查看 Nginx 版本
 
 ```bash
 nginx -v

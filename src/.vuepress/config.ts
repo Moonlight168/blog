@@ -10,6 +10,7 @@ export default defineUserConfig({
   base: "/",
   lang: "zh-CN",
   theme: theme,
+  port: 8888,
   plugins: [
     registerComponentsPlugin({
       componentsDir: componentsDir

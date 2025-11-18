@@ -1,151 +1,161 @@
 ---
-title: Docker的使用
-date: 2025-06-09
+title: Docker常用命令
+date: 2025-06-15
 categories: ["开发工具"]
 tags: ["Docker"]
 icon: /assets/icon/docker.png
+order: 6
 ---
 
-# Docker的使用
+# Docker 核心命令速查表
 
-Docker 是一种轻量级容器技术，能够将应用及其依赖打包在一起，在任何支持 Docker 的环境中快速运行，极大地简化了部署流程。
-
-## 一、Docker 基础概念
-
-- **镜像（Image）**：Docker 镜像是容器的模板，可以理解为一个完整的操作系统快照。
-- **容器（Container）**：镜像运行起来就是容器，是镜像的一个运行实例。
-- **仓库（Repository）**：用来存储镜像的地方，分为公共仓库（如 Docker Hub）和私有仓库。
-- **Dockerfile**：定义如何构建镜像的脚本。
-
-## 二、安装 Docker（以 CentOS 为例）
-
-```bash
-# 卸载旧版本（如已存在）
-sudo yum remove docker docker-client docker-common docker-latest
-
-# 安装依赖
-sudo yum install -y yum-utils device-mapper-persistent-data lvm2
-
-# 设置 Docker 仓库
-sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-
-# 安装 Docker
-sudo yum install -y docker-ce
-
-# 启动并设置开机启动
-sudo systemctl start docker
-sudo systemctl enable docker
-
-# 验证
-docker version
-
-```
-
-## 三、常用命令
-
-### 1. 镜像操作
-
+## 镜像操作
 ```bash
 docker images                    # 查看本地镜像
 docker pull nginx                # 拉取镜像
 docker rmi nginx                 # 删除镜像
+docker rmi -f $(docker images -q) # 删除所有镜像
+
+# 查看镜像版本
+docker search nginx              # 搜索Docker Hub上的镜像
+docker pull nginx:1.21           # 指定版本拉取镜像
+docker pull nginx:latest         # 拉取最新版本
+docker pull nginx:alpine         # 拉取轻量级镜像
+
 ```
 
-### 2. 容器操作
-
+## 容器操作
 ```bash
 docker ps -a                    # 查看所有容器
+docker ps                       # 查看运行中的容器
 docker run -d -p 8080:80 nginx  # 后台运行 nginx 容器并映射端口
+docker run -it --rm ubuntu bash # 交互式运行容器
 docker stop <容器ID或名称>      # 停止容器
+docker start <容器ID或名称>     # 启动容器
+docker restart <容器ID或名称>   # 重启容器
 docker rm <容器ID或名称>        # 删除容器
-docker rm -f $(docker ps -aq) # 删除所有容器
+docker rm -f $(docker ps -aq)   # 删除所有容器
 ```
 
-### 3. 构建自定义镜像
-
-新建一个 `Dockerfile`：
-
-```dockerfile
-FROM openjdk:8
-COPY app.jar /app.jar
-ENTRYPOINT ["java", "-jar", "/app.jar"]
-```
-
-构建并运行：
-
+## 容器管理
 ```bash
+docker exec -it <容器ID或名称> /bin/bash  # 进入容器内部
+docker exec -it <容器ID或名称> sh         # 进入容器（sh）
+docker logs <容器ID或名称>               # 查看容器日志
+docker logs -f <容器ID或名称>            # 实时查看日志
+docker top <容器ID或名称>                # 查看容器进程
+docker inspect <容器ID或名称>            # 查看容器详细信息
+```
+
+## 镜像构建
+```bash
+# 构建自定义镜像
 docker build -t myapp .
-docker run -d -p 8080:8080 myapp
+
+# 构建时指定 Dockerfile
+docker build -f Dockerfile.custom -t myapp .
+
+# 查看构建历史
+docker history <镜像ID或名称>
 ```
 
-## 四、常用技巧
-
-### 1. 进入容器内部
-
+## 数据管理
 ```bash
-docker exec -it <容器ID或名称> /bin/bash
+# 查看卷
+docker volume ls
+docker volume create myvolume
+
+# 复制文件到容器
+docker cp 本地路径 容器ID:容器路径
+
+# 复制文件从容器
+docker cp 容器ID:容器路径 本地路径
 ```
 
-### 2. 查看日志
-
+## 清理命令
 ```bash
-docker logs <容器ID或名称>
-```
-
-### 3. 清理无用资源
-
-```bash
+# 清理无用资源
 docker system prune -a
+
+# 清理未使用的镜像
+docker image prune -a
+
+# 清理未使用的容器
+docker container prune
+
+# 清理未使用的卷
+docker volume prune
+
+# 清理网络
+docker network prune
 ```
 
-## 五、Docker Compose 简介
-
-Docker Compose 用于**一次性启动多个容器服务**，常用于微服务部署。
-
-## MySQL
-
-```yaml
-mysql:
-  image: mysql:latest
-  container_name: universitymanagementsystem-mysql
-  environment:
-    MYSQL_ROOT_PASSWORD: 123
-    MYSQL_DATABASE: university_db
-    MYSQL_USER: root
-    MYSQL_PASSWORD: 123
-  ports:
-    - "3306:3306"
-  volumes:
-    - /UniversityManagementSystem/mysql/conf:/etc/mysql/conf.d:rw
-    - /UniversityManagementSystem/mysql/data:/var/lib/mysql:rw
-  networks:
-    - gupt
-```
-
-* **作用**: 系统核心数据库。
-* **端口**: `3306` MySQL 服务。
-* **环境变量**: 初始化数据库和用户。
-* **挂载**:
-
-    * `conf`: 配置文件。
-    * `data`: 数据持久化。
-
-## 网络配置
-
-```yaml
-networks:
-  gupt:
-```
-
-* 定义了一个用户自建网络 `gupt`，所有容器都加入到同一个网络，可以通过服务名互相访问（例如 `http://mysql:3306`）。
-
-# 🚀 启动
-
+## Docker Compose
 ```bash
+# 启动服务
 docker-compose up -d
+
+# 停止服务
+docker-compose down
+
+# 查看服务状态
+docker-compose ps
+
+# 查看服务日志
+docker-compose logs
+
+# 重启服务
+docker-compose restart
+
+# 进入服务容器
+docker-compose exec <服务名> bash
 ```
 
-* `-d` 后台运行。
-* 启动时会拉取镜像、创建网络、挂载目录并依次运行各容器。
+## 常用技巧
+
+### 端口映射
+```bash
+# 基本格式：-p 宿主机端口:容器端口
+docker run -d -p 8080:80 nginx
+
+# 映射多个端口
+docker run -d -p 8080:80 -p 8443:443 nginx
+
+# 只指定容器端口（随机分配宿主机端口）
+docker run -d -p 80 nginx
+```
+
+### 环境变量
+```bash
+# 设置环境变量
+docker run -d -e KEY=value -e ANOTHER_KEY=value2 nginx
+
+# 从文件读取环境变量
+docker run -d --env-file ./env.list nginx
+```
+
+### 数据卷挂载
+```bash
+# 挂载本地目录
+docker run -d -v /本地路径:/容器路径 nginx
+
+# 挂载命名卷
+docker run -d -v myvolume:/容器路径 nginx
+
+# 只读挂载
+docker run -d -v /本地路径:/容器路径:ro nginx
+```
+
+### 网络设置
+```bash
+# 创建自定义网络
+docker network create mynetwork
+
+# 容器加入网络
+docker network connect mynetwork 容器名
+
+# 查看网络详情
+docker network inspect mynetwork
+```
 
 
