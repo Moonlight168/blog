@@ -27,7 +27,7 @@ order: 3
     * 常用组件：Kafka、RabbitMQ、RocketMQ
     * 特点：解耦、削峰填谷，适合异步处理场景
 
-##  微服务四大件都有哪些？
+## ⭐微服务四大件都有哪些？
 
 **回答：**
 1. **服务注册与发现**
@@ -128,4 +128,31 @@ Nacos 的配置内容格式多样（YAML、Properties、XML、JSON），如果�
 
 LONGTEXT 是所有数据库都支持的纯文本字段，无校验、兼容性最好、写入性能更高，因此官方选择 LONGTEXT。
 
+## `debug: true` 为什么不能放在 bootstrap.yml 中？必须放在 application.yml（或 application-xxx.yml）中才能生效？
+
+**回答：**
+
+`debug: true` **必须放在本地的 application.yml 中才有效**，有以下重要原因：
+
+### 1. **时机问题**
+* **debug需要在应用启动早期就生效**，用于捕获启动过程中的问题
+* 而Nacos远程配置获取需要时间，**启动时还没加载到远程配置**
+* 放在远程application.yml中的debug配置无法在启动初期生效
+
+### 2. **配置加载顺序**
+1. **bootstrap.yml** → 连接配置中心
+2. **本地application.yml** → 立即生效，设置启动参数
+3. **远程application.yml** → 后期加载（此时debug已错过生效时机）
+
+### 3. **核心原因**
+```yaml
+# ✅ 正确：本地的 application.yml 立即生效
+debug: true
+logging:
+  level:
+    root: DEBUG
+
+# ❌ 错误：远程的 application.yml 生效太晚
+# （Nacos中的application.yml配置，debug已错过生效时机）
+```
 
