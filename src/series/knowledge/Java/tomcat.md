@@ -4,90 +4,131 @@ date: 2025-05-28
 icon: /assets/icon/tomcat.png
 order: 5
 ---
-## Tomcat 是什么？
+## Tomcat 是什么？作用是什么？
 
-**回答：**
-Tomcat 是一个由 Apache 提供的开源 Servlet 容器，支持 JSP 和 Servlet 规范，用于运行 Java Web 应用，是轻量级的 Web 服务器。
+```component HoverComment 
+text: "* **Tomcat 是 Java 的 Servlet 容器**，负责运行 JSP、Servlet、Spring MVC 等 Web 应用。" 
+comment: | 
+  #### **Servlet 定义介绍**
+  - **核心概念**：Servlet 是运行在 Web 服务器或应用服务器上的 Java 小程序
+  - **功能定位**：专门处理 HTTP 请求，返回响应数据
+  - **运行依赖**：必须部署在 Servlet 容器（如 Tomcat）中才能运行
+  - **开发模式**：继承 HttpServlet 类，重写 doGet/doPost 等方法
+  - **请求流程**：接收请求 → 调用 service() → 执行业务逻辑 → 返回响应
+```
+* **实现了 Servlet 规范、JSP 规范**，是 Java Web 的默认运行容器。
+* 常用于中小型业务场景，轻量、稳定、开源。
 
-## Tomcat 的主要组件有哪些？
 
-**回答：**
+## Tomcat 架构核心组件有哪些？
 
-#### 1. **Catalina（Servlet 容器核心）**
-- 实现了 Servlet 规范，负责接收请求、加载 Servlet、调用对应的 `service()` 方法处理请求。
-- 是 Tomcat 的核心组件，负责整个请求生命周期的管理。
+* **Connector（连接器）**：负责网络通信，接收请求并返回响应。
+* **Container（容器）**：负责处理请求，运行 Servlet（Engine → Host → Context → Wrapper）。
+* **Executor（线程池）**：管理 Tomcat 的线程资源。
+* **ClassLoader**：支持应用隔离加载。
+* **Lifecycle**：统一生命周期管理机制。
 
-#### 2. **Coyote（连接器）**
-- 用于处理 HTTP、AJP 协议的连接请求。
-- 是 Tomcat 与客户端通信的底层组件，监听端口接收请求并交给 Catalina 处理。
 
-#### 3. **Jasper（JSP 引擎）**
-- 负责将 JSP 文件编译为 Servlet。
-- JSP 初次访问时会由 Jasper 编译生成对应的 Servlet 类文件，后续由 Catalina 执行。
+## Tomcat 是如何处理一次请求的？
 
-#### 4. **Cluster（集群组件）**
-- 提供会话复制和负载均衡的支持，用于在多台 Tomcat 之间实现集群部署。
+* **Connector 接收 Socket 请求**（默认使用 NIO）。
+* **解析 HTTP 请求**并封装成 `HttpRequest`。
+* 将请求交给 **Engine → Host → Context → Wrapper** 精准定位目标 Servlet。
+* **Servlet.service() 执行业务逻辑**。
+* 返回 Response，通过 Connector 写回浏览器。
 
-#### 5. **Realm（安全组件）**
-- 提供用户认证与权限管理。
-- 支持多种方式（如 JDBC、内存、JNDI）验证用户身份。
 
-#### 6. **Valves（阀门）**
-- 类似于 Servlet 过滤器，可以插入到请求处理管道中，进行日志记录、权限校验等操作。
-- 通常配置在 `server.xml` 或 `context.xml` 中。
+## Tomcat 使用哪种线程模型？
 
-#### 7. **Service 与 Connector**
-- `Service` 是 Tomcat 中的一个服务单元，包含一个 `Engine` 和多个 `Connector`。
-- `Connector` 负责接收客户端请求。
-- `Engine` 负责调度请求到具体的 `Host` 和 `Context`。
+```component HoverComment 
+text: "**NIO（默认）**：基于 Selector，支持高并发" 
+comment: |
+  #### **NIO (New I/O) 定义**
+  - **核心概念**：New I/O，新版输入输出模型，Java 1.4 引入
+  - **设计目标**：解决传统BIO的线程阻塞和资源消耗问题
+  - **Selector 机制**：单线程管理多个Channel，通过事件驱动处理连接
+  - **非阻塞**：读写操作不会阻塞线程，提高系统资源利用率
+  - **适用场景**：高并发网络服务，如Web服务器、聊天服务器
+  - **关键优势**：减少线程创建，降低上下文切换开销
+```
 
-#### 8. **Host 与 Context**
-- `Host` 表示一个虚拟主机（如一个域名）。
-- `Context` 表示一个 Web 应用（即一个 `webapp`）。
+```component HoverComment 
+text: "**BIO**：传统阻塞式，性能差" 
+comment: |
+  #### **BIO (Blocking I/O) 定义**
+  - **核心概念**：Blocking I/O，传统阻塞式输入输出模型
+  - **线程模型**：每个连接对应一个独立的处理线程
+  - **阻塞特性**：读取和写入操作会阻塞当前线程直到完成
+  - **实现原理**：基于InputStream和OutputStream的同步I/O
+  - **性能瓶颈**：高并发时线程数量过多导致资源消耗大
+  - **适用场景**：低连接数、对性能要求不高的简单应用
+```
 
-## Tomcat 请求处理流程？
+```component HoverComment 
+text: "**APR**：基于本地库，高性能、接近 Nginx，但部署成本高" 
+comment: |
+  #### **APR (Apache Portable Runtime) 定义**
+  - **核心概念**：Apache Portable Runtime，提供可移植的C语言库
+  - **本地优化**：使用本地系统调用，避免Java层性能损耗
+  - **网络优化**：优化TCP/IP栈，提供高效的网络I/O性能
+  - **功能特性**：原生支持SSL、压缩、sendfile等高级功能
+  - **性能表现**：接近原生C程序的性能水平，优于Java NIO
+  - **部署要求**：需要安装APR本地库，不同平台需要不同版本
+  - **技术定位**：高性能Web服务器的关键组件
+```
 
-#### **1. 客户端发送请求**
-- 客户端（如浏览器）通过 HTTP 协议访问 Web 应用（例如：`http://localhost:8080/app/index.jsp`）。
+现代生产通常使用 **NIO/NIO2**。
 
-#### **2. Connector 接收请求（Coyote）**
-- `Connector`（通常是 HTTP/1.1 或 AJP 连接器）监听指定端口（如 8080）。
-- 使用 `Coyote` 组件将原始 Socket 请求包装成 `Request` 和 `Response` 对象。
+## Tomcat 的常见配置项有哪些？
 
-#### **3. 请求交给 Engine（Catalina）处理**
-- `Service` 中的 `Connector` 将请求传递给 `Engine`。
-- `Engine` 是 Servlet 容器的核心，会根据请求的主机名查找对应的 `Host`。
+* **port**：监听端口
+* **protocol**：协议（`org.apache.coyote.http11.Http11NioProtocol` 最常用）
+* **maxConnections**：最大连接数
+* **maxThreads**：最大工作线程数（默认 200）
+* **acceptCount**：拒绝前的等待队列长度
+* **connectionTimeout**：连接超时
 
-#### **4. 匹配虚拟主机（Host）**
-- Tomcat 根据请求中的主机名（如 `localhost`）匹配 `Host`。
-- 每个 `Host` 可能部署多个 Web 应用（Context）。
 
-#### **5. 匹配 Web 应用（Context）**
-- `Host` 根据 URL 中的项目路径（如 `/app`）选择对应的 `Context`。
-- `Context` 是对单个 Web 应用的封装，包含该应用的配置和资源。
+## 为什么 Spring Boot 内嵌 Tomcat？
 
-#### **6. 匹配 Servlet（Wrapper）**
-- `Context` 会根据请求路径进一步匹配到具体的 `Servlet`（由 `Wrapper` 封装）。
-- 如果是 JSP 页面，则由 `Jasper` 引擎先将 JSP 编译为 Servlet，再处理请求。
+* **免安装、免部署，开箱即用**
+* **可通过 Maven/Gradle 管理版本**
+* **更好的自动化运维：jar 一条命令即可运行**
+* **更容易容器化（Docker）**
 
-#### **7. 执行 Servlet 逻辑**
-- `Wrapper` 调用 Servlet 的 `service()` 方法处理请求。
-- 期间可经过过滤器链（FilterChain）和拦截器。
 
-#### **8. 返回响应**
-- Servlet 将处理结果写入 `HttpServletResponse`。
-- `Response` 对象经由 `Connector` 写回客户端 Socket。
+## Tomcat 如何隔离不同 Web 应用的类？
 
-#### 总结关键点：
+* 使用 **一套分级 ClassLoader**：
 
-| 阶段         | 组件           | 说明                                      |
-|--------------|----------------|-------------------------------------------|
-| 接收请求     | Connector      | 网络通信，使用 Coyote 封装协议请求        |
-| 请求分发     | Engine → Host  | 按虚拟主机和应用路径定位到具体应用        |
-| Servlet 匹配 | Context → Wrapper | 根据 URL 找到 Servlet 或 JSP                |
-| 请求处理     | Servlet        | 调用 `service()` 方法处理业务逻辑         |
-| 响应返回     | Connector      | 将响应通过 Socket 发送给客户端             |
+    * BootstrapClassLoader（JDK 类）
+    * CommonClassLoader（共享类）
+    * WebAppClassLoader（应用私有类）
+* **不同应用之间 classpath 隔离**，相互不影响。
 
+
+## Tomcat 和 Nginx 的区别？
+
+* **Tomcat：应用服务器**
+
+    * 能执行 Servlet / Java 代码
+    * 属于动态应用容器
+
+* **Nginx：高性能反向代理服务器**
+
+    * 负载均衡、静态文件、SSL终端
+    * 不执行 Java 代码
+
+大部分架构使用 **Nginx → Tomcat**。
+
+## 如何提升 Tomcat 性能？
+
+* 将 I/O 协议改为 **NIO / NIO2**。
+* 调整线程池：**maxThreads、minSpareThreads、acceptCount**。
+* 配合 **Nginx 做反向代理与静态资源处理**。
+* 配置 **Gzip 压缩** 减少数据传输量。
+* 减少单实例部署的 Web 应用数量。
+* 禁用不必要的 JSP/Session 功能。
 
 ## Tomcat 默认端口是多少？怎么修改？
 
@@ -122,13 +163,3 @@ Tomcat 是一个由 Apache 提供的开源 Servlet 容器，支持 JSP 和 Servl
 
 **回答：**
 Tomcat 本身线程安全，但开发者需保证自己写的 Servlet 是线程安全的（避免共享可变状态）。
-
-## Tomcat 性能优化方式？
-
-**回答：**
-
-* 设置合适的线程池参数（`maxThreads`）。
-* 启用 GZIP 压缩（`compression="on"`）。
-* 使用连接池优化数据库访问。
-* 关闭自动部署功能减少资源消耗。
-* 配置缓存、禁用开发模式。

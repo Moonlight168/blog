@@ -2,8 +2,6 @@
   <span class="hover-comment-marker"
         @mouseenter="startHover"
         @mouseleave="stopHover">
-
-
     <!-- 使用 transition 包裹 Tooltip -->
     <transition name="fade">
       <span v-if="show" class="hover-comment-box" @mousedown.stop @click.stop>
