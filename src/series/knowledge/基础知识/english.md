@@ -3,6 +3,7 @@ title: 日常英语
 date: 2025-06-04
 icon: /assets/icon/english.png
 order: 5
+index: false
 ---
 
 ## 一、打招呼与寒暄

@@ -4,7 +4,7 @@ order: 9
 ---
 # object
 
-## Object类有什么方法？
+## ⭐Object类有什么方法？
 
 Object类是所有Java类的根类，所有类都直接或间接继承自Object。Object类提供了以下核心方法：
 
