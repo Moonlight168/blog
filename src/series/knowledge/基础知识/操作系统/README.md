@@ -2,7 +2,7 @@
 title: 操作系统
 dir:
     order: 1
-    con: /assets/icon/操作系统.png
+    icon: /assets/icon/操作系统.png
 ---
 
 # 操作系统
