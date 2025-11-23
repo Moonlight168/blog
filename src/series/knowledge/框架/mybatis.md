@@ -34,12 +34,12 @@ order: 4
 
 ## MyBatis 是如何进行分页的？
 
-**回答：**
-MyBatis 本身不支持分页语法，但可以通过以下两种方式实现分页：
-
-* **手动分页：** 在 SQL 语句中直接使用数据库的分页语法（如 MySQL 的 `LIMIT offset, size`）进行分页。
-* **使用分页插件：** 常用插件是 **PageHelper**，只需在查询前调用 `PageHelper.startPage(pageNum, pageSize)` 即可自动生成分页SQL并封装分页结果。
-
+- **MyBatis 本身不支持分页**语法，但可以通过以下三种方式实现分页：
+    1. **手动分页**
+      **原生SQL分页：** 在 SQL 语句中直接使用数据库的分页语法（如 MySQL 的 `LIMIT offset, size`）进行分页。
+    2. **PageHelper 插件（第三方）**
+    3. **MyBatis-Plus 内置分页**
+      - [PageHelper 与 MyBatis-Plus 分页](/blogs/数据库/pagehelper与mybatis-plus分页.html)
 
 ## MyBatis 字段名与数据库列名不一致时的映射方式总结
 
@@ -100,7 +100,6 @@ MyBatis 本身不支持分页语法，但可以通过以下两种方式实现分
 
 ## MyBatis 的缓存机制？
 
-**回答：**
 MyBatis 提供两级缓存机制：
 
 * **一级缓存（本地缓存）：**

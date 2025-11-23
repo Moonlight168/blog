@@ -9,7 +9,9 @@ tags: ["Flowable", "MyBatis-Plus", "Spring Boot"]
 
 ## 1️⃣ 问题现象
 
-Spring Cloud Alibaba 微服务项目中集成 Flowable 工作流引擎，使用 dynamic-datasource 动态数据源配置 MySQL 数据库，启动项目时直接报错：
+在ruoyi-cloud 项目中集成 Flowable 工作流引擎时，集成的是另一个作者的项目
+https://gitee.com/bdn007/ruoyi-cloud-module-flowable
+启动项目时出现错误：
 
 ```log
 ---
