@@ -31,15 +31,19 @@ git ls-files
 # 清除 Git 对指定目录的跟踪（仅本地跟踪，不删除文件）
 git rm -r --cached <目录>  
 ```
-
+## 首次拉去时出现 `fatal: refusing to merge unrelated histories`
+```bash
+# 拉取远程 main 并允许合并无关联历史
+git pull origin main --allow-unrelated-histories
+```
 
 ## 远程仓库推送
 ```bash
 # 推送当前本地分支到远程 `gh-pages` 分支并追踪
 git push -u origin HEAD:gh-pages  
 # 强制推送当前本地分支到远程 `gh-pages` 分支并追踪
+# git push -u <远程仓库别名> <本地分支名>:<远程分支名>
 git push -f -u origin HEAD:gh-pages  
-
 ```
 ## 仓库状态查询
 ```bash
@@ -65,6 +69,11 @@ git remote -v
   ```
 - 结合 `git status` 定期检查仓库状态，避免冗余文件被跟踪。
 
+- 设置全局用户邮箱：
+  ```bash
+    git config user.email "Moonlight168@users.noreply.github.com"
+  ```
+
 ## 分支管理
 - 修改当前分支名：
   ```bash
@@ -74,6 +83,15 @@ git remote -v
   ```bash
   git branch -m <旧分支名> <新分支名>
   ```
+
+## 修改提交
+```bash
+  # 修改最后一次提交的邮箱（替换为你的匿名邮箱）
+  git commit --amend --author="Moonlight168@users.noreply.github.com"
+  # 修改最后一次提交的内容
+  git commit --amend -m "新的提交信息
+```
+
 
 ## 取消提交操作
 ```bash
