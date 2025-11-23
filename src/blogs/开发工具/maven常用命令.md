@@ -57,6 +57,9 @@ mvn dependency:copy-dependencies
 详细显示特定依赖的冲突情况，帮助定位和解决依赖冲突。
 ```bash
 mvn dependency:tree -Dverbose -Dincludes=groupId:artifactId
+
+# 查询某依赖
+mvn dependency:tree | grep -i jsqlparser -n
 ```
 
 查看插件帮助。
