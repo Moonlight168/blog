@@ -1,7 +1,6 @@
 import {hopeTheme} from "vuepress-theme-hope";
 import {zhNavbar} from "./navbar/index.js";
 import {zhSidebar} from "./sidebar/index.js";
-import {searchPlugin} from "@vuepress/plugin-search"; // 导入官方插件
 
 export default hopeTheme({
     author: {
@@ -143,5 +142,17 @@ export default hopeTheme({
 
         catalog: true,
 
+        slimsearch: {
+            // 搜索框占位符（可自定义）
+            locales: {
+                "/": {
+                    placeholder: "搜索文章/笔记...",
+
+                },
+            },
+            indexContent: true, // 开启全文搜索（slimsearch 核心特性）
+            hotReload: true, // 开发模式热重载索引（避免缓存）
+            hotKeys: [{key: "k", ctrl: true}, {key: "/", ctrl: true}], // 保留你的热键
+        }
     }
 })
