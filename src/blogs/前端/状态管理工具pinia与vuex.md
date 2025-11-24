@@ -1,10 +1,7 @@
 ---
 title: Pinia与Vuex：Vue状态管理工具对比
 date: 2025-11-24
-tags:
-  - Vue
-  - Pinia
-  - Vuex
+tags: [Vue]
 categories:
   - 前端技术
 ---
