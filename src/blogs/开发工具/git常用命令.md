@@ -31,6 +31,7 @@ git ls-files
 # 清除 Git 对指定目录的跟踪（仅本地跟踪，不删除文件）
 git rm -r --cached <目录>  
 ```
+
 ## 首次拉去时出现 `fatal: refusing to merge unrelated histories`
 ```bash
 # 拉取远程 main 并允许合并无关联历史
@@ -45,13 +46,20 @@ git push -u origin HEAD:gh-pages
 # git push -u <远程仓库别名> <本地分支名>:<远程分支名>
 git push -f -u origin HEAD:gh-pages  
 ```
+
 ## 仓库状态查询
 ```bash
 # 查看当前仓库状态（包括暂存区和工作区）
 git status  
 
-# 查看提交历史（简洁格式）
+# 查看本地提交历史（简洁格式）
 git log --oneline  
+
+# 查看远程提交历史
+# 1. 简洁显示：一行一个提交（哈希前7位 + 作者 + 提交信息）
+git log origin/main --oneline
+# 2. 显示分支合并关系（图形化展示，清晰看到分支走向）
+git log origin/main --oneline --graph
 
 # 查看分支状态（包括本地和远程分支）
 git branch -a  
@@ -60,7 +68,6 @@ git branch -a
 git remote -v  
 
 ```
-
 
 ## 拓展技巧
 - 若需批量清除所有已忽略文件的跟踪，可执行：
@@ -91,7 +98,6 @@ git remote -v
   # 修改最后一次提交的内容
   git commit --amend -m "新的提交信息
 ```
-
 
 ## 取消提交操作
 ```bash

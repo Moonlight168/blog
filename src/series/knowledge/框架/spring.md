@@ -643,3 +643,42 @@ Bean 生命周期 = **实例化 → 属性赋值 → 初始化前处理 → 初�
 * **Spring Cloud 应用**：通常需要 `bootstrap.yml` + `application.yml`
 
 
+## spring bean 的作用域有哪些？一般项目中用什么？
+
+Spring Bean 支持 6 种作用域：
+
+| 作用域 | 描述 | 适用环境 |
+|--------|------|----------|
+| **singleton** | 容器中只存在一个实例（默认） | 所有环境 |
+| **prototype** | 每次请求创建新实例 | 所有环境 |
+| **request** | 每个HTTP请求一个实例 | Web环境 |
+| **session** | 每个HTTP会话一个实例 | Web环境 |
+| **application** | ServletContext生命周期内一个实例 | Web环境 |
+| **websocket** | 每个WebSocket会话一个实例 | WebSocket环境 |
+
+**常用作用域**
+
+- **singleton**：90%以上场景使用，适用于无状态服务类、工具类
+- **prototype**：适用于有状态对象，如购物车、命令对象
+- **request/session**：Web应用中存储请求/会话相关数据
+
+**注意事项**
+
+⚠️ **singleton依赖prototype的问题**：
+- singleton Bean初始化时，其依赖的prototype Bean只创建一次
+- 解决方案：使用`@Lookup`方法或`ObjectProvider`获取新实例
+
+```java
+@Component
+public class SingletonService {
+    @Autowired
+    private ObjectProvider<PrototypeBean> prototypeBeanProvider;
+    
+    public void doSomething() {
+        // 每次调用获取新实例
+        PrototypeBean bean = prototypeBeanProvider.getObject();
+        bean.process();
+    }
+}
+```
+
