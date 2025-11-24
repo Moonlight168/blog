@@ -1,6 +1,7 @@
 ---
 title: "Maven 常用命令详解"
 icon: /assets/icon/maven.png
+date: 2025-11-10
 order: 2
 ---
 
