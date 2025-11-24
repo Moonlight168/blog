@@ -28,3 +28,20 @@ JavaScript 是一种动态类型语言，写起来比较灵活，但是也容易
 再一个是写法上的变化，Vue3 提出了组合式 API，也就是 `setup()` 这种写法，更加灵活，方便逻辑复用，而 Vue2 是用 `data`、`methods`、`computed` 这些分散的写法。
 还有就是 Vue3 对 TypeScript 支持更好，更适合企业级开发。
 另外，一些技术细节比如支持多个根节点、体积更小等等，都是 Vue3 的优势。
+
+## 你是如何实现页面不存在自动跳转404页面的？
+
+可以在路由配置中添加一个通配符路由，当访问不存在的路由时，会自动跳转到 404 页面。
+```javascript
+// 路由配置
+const router = new VueRouter({
+  routes: [
+        {
+        // 捕获所有未匹配到的路径，(.*) 表示任意字符，* 表示零次或多次，最终重定向到 404 页面
+        path: "/:pathMatch(.*)*",
+        component: () => import('@/views/error/404'),
+        hidden: true
+    },
+  ]
+});
+```
