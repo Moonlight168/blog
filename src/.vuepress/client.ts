@@ -9,6 +9,7 @@ import {useRoute} from "vue-router";
 export default defineClientConfig({
     enhance({app}) {
         app.component('GiteeRepo', GiteeRepo)
+
     },
     setup: () => {
         setupTransparentNavbar({type: "homepage", threshold: 50});
