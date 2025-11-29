@@ -361,6 +361,80 @@ Spring 使用 **三级缓存** 解决构造器循环依赖（仅限单例Bean & 
 
 > 构造器注入无法提前暴露对象，无法参与三级缓存，不支持构造器循环依赖
 
+## **Spring 循环依赖如何解决？**
+
+### **三级缓存详解**
+
+1. **singletonObjects**（一级缓存）
+   - 存储 **完全初始化好的单例 Bean**
+   - 直接返回给调用者，无需任何处理
+
+2. **earlySingletonObjects**（二级缓存）
+   - 存储 **早期暴露的半成品 Bean**
+   - Bean 已实例化，但未填充属性和执行初始化方法
+   - 用于解决循环依赖时的直接引用
+
+3. **singletonFactories**（三级缓存）
+   - 存储 **Bean 工厂对象**（`ObjectFactory`）
+   - 用于生成早期代理对象或原始对象
+   - 核心方法：`getObject()` 可返回早期对象
+
+### **循环依赖解决流程**
+
+以 A → B → A 为例：
+
+1. **创建 A**：调用 `getBean(A)`
+   - 检查三级缓存，均无 A
+   - 实例化 A（调用构造器）
+   - 将 A 包装为 `ObjectFactory` 放入 `singletonFactories`
+
+2. **A 依赖 B**：填充 A 的属性时发现依赖 B
+   - 调用 `getBean(B)`
+
+3. **创建 B**：
+   - 检查三级缓存，均无 B
+   - 实例化 B（调用构造器）
+   - 将 B 包装为 `ObjectFactory` 放入 `singletonFactories`
+
+4. **B 依赖 A**：填充 B 的属性时发现依赖 A
+   - 调用 `getBean(A)`
+   - 检查 `singletonObjects`：无
+   - 检查 `earlySingletonObjects`：无
+   - 检查 `singletonFactories`：有 A 的 `ObjectFactory`
+   - 调用 `getObject()` 获取 A 的早期对象
+   - 将 A 从 `singletonFactories` 移至 `earlySingletonObjects`
+   - 将 A 注入 B
+
+5. **B 初始化完成**：
+   - B 填充属性完成
+   - B 执行初始化方法
+   - 将 B 从 `singletonFactories` 移至 `singletonObjects`
+   - 返回 B 给 A
+
+6. **A 初始化完成**：
+   - A 填充属性完成（注入了 B）
+   - A 执行初始化方法
+   - 将 A 从 `earlySingletonObjects` 移至 `singletonObjects`
+   - 返回 A 给调用者
+
+### **为什么需要三级缓存？**
+
+- **一级缓存**：存储完全初始化的 Bean，直接返回
+- **二级缓存**：存储早期对象，避免重复创建
+- **三级缓存**：处理 AOP 代理场景，确保循环依赖时返回的是代理对象
+
+### **不支持构造器循环依赖的原因**
+
+- 构造器注入时，Bean 实例化和依赖注入是同一过程
+- 无法在构造器调用前提前暴露对象
+- 三级缓存机制无法介入构造器调用过程
+
+### **原型 Bean 不支持循环依赖的原因**
+
+- 原型 Bean 每次请求都会创建新实例
+- 无法通过缓存机制复用对象
+- 会导致无限递归创建，最终栈溢出
+
 ## **Spring 注入 Bean 的方式**
 
 1. **构造器注入（Constructor Injection）**

@@ -1,3 +1,7 @@
+# 忽略IDE 文件
+.idea/
+.vscode/
+.tare/
 # 忽略依赖包
 node_modules/
 
