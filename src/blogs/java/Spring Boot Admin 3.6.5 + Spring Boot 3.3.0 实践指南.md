@@ -275,7 +275,7 @@ public class AdminConfig {
 * **元数据**：group、version 等
 * **安全登录**：Admin Server 需要输入账号密码
 
-✅ 使用自定义 `JacksonCustomEnhance`，解决了 InstanceId 序列化为 JSON 错误问题。
+使用自定义 `JacksonCustomEnhance`，解决了 InstanceId 序列化为 JSON 错误问题。
 
 
 ## 八、总结
