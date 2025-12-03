@@ -127,3 +127,20 @@ MyBatis 提供两级缓存机制：
   * 更新操作会清空相关缓存。
   * 二级缓存中的对象必须实现 `Serializable` 接口。
   * 与 Spring 集成时，推荐使用第三方缓存（如 EhCache、Redis）配合二级缓存使用。
+
+## MP中的selectOne()方法和selectList()方法的区别？
+
+**回答：**
+
+* **返回结果：**
+    * `selectOne()`：返回单个实体对象，查询结果必须为1条或0条记录。
+    * `selectList()`：返回List集合，查询结果可以是0条、1条或多条记录。
+
+* **异常处理：**
+    * `selectOne()`：当查询结果超过1条时抛出`TooManyResultsException`异常。
+    * `selectList()`：不会抛出异常，返回所有匹配的记录。
+
+* **使用场景：**
+    * `selectOne()`：用于确定唯一结果的查询，如根据主键查询。
+    * `selectList()`：用于可能返回多条记录的查询，如条件查询、列表查询。
+
