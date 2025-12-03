@@ -1,6 +1,7 @@
 ---
 order: 8
 title: 领域词汇表
+index: false
 ---
 
 # FlowMind 系统领域词汇表

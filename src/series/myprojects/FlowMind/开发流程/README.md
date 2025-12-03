@@ -1,6 +1,6 @@
 ---
 index: false
-title: 投资理财
+title: 开发流程
 dir:
     text: 开发流程
     icon: /assets/icon/流程.png

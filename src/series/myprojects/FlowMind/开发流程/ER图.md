@@ -1,8 +1,9 @@
 ---
 order: 4
-title: ER图设计与优化
+title: ER图
 category: 开发流程
 icon: /assets/icon/er.png
+index: false
 ---
 
 # FlowMind 系统ER图设计与优化

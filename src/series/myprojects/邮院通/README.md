@@ -339,3 +339,8 @@ services:
 
 networks:
   gupt:
+```
+
+### 🔗项目链接
+- [GitHub](https://github.com/Moonlight168/gupt-management)
+- [Gitee](https://gitee.com/wish168/gupt-management)

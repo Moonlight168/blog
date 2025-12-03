@@ -1,12 +1,13 @@
 ---
 index: false
 order: 1
-title: 需求分析
+title: UI
 icon: /assets/icon/分析.png
 dir:
-    text: 需求分析
+    text: UI
     icon: /assets/icon/分析.png
     order: 3
+    index: false
 ---
 
 <Catalog/>

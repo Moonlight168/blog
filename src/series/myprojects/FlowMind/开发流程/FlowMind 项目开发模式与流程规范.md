@@ -2,6 +2,7 @@
 title: "FlowMind 项目管理规范"
 icon: /assets/icon/测试.png
 order: 2
+index: false
 ---
 ## 一、文档目的
 
