@@ -10,16 +10,17 @@ order: 1
 ---
 
 ### 🧠 FlowMind · 智能流程管理平台
-> 基于RuoYi-Cloud的企业级工作流管理系统，新增审批中心和草稿箱功能，为企业提供更完善的流程管理解决方案。
+> 基于RuoYi-Cloud集成Flowable的工作流管理系统，新增审批中心、用户审批页面和草稿箱功能，为企业提供更完善的流程管理解决方案。
 
 **🔧 技术栈：**
-`Spring Boot 3` · `Spring Cloud Alibaba` · `Flowable` ｜ `Vue3` · `Element Plus` · `Vite` ｜ `MySQL` · `Redis` · `Nacos` · `Sentinel` · `Seata`
+`Spring Boot 3` · `Spring Cloud Alibaba` · `Flowable` · `MyBatis-Plus` ｜ `Vue3` · `Element Plus` · `Vite` ｜ `MySQL` · `Redis` · `Nacos` · `Sentinel` · `Seata`
 
 **📌 主要职责：**
 - 基于RuoYi-Cloud框架进行扩展开发，采用前后端分离架构
 - 集成Flowable工作流引擎，实现流程定义、部署与执行
 - 开发审批中心功能，支持待办任务、已办任务、待签任务、我的流程等全方位流程管理
 - 设计草稿箱模块，支持流程草稿的保存、编辑和管理
+- 实现用户审批页面，提供直观的流程审批操作界面，支持批量审批和审批意见填写
 - 实现基于微服务架构的企业级应用，包含网关、认证、系统、工作流等模块
 - 使用Nacos作为注册中心和配置中心，Redis作为权限认证存储
 
