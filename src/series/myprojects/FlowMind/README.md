@@ -78,6 +78,14 @@ FlowMind是基于RuoYi-Cloud的企业级工作流管理系统，在保留RuoYi-C
     * 草稿删除：支持删除不需要的草稿
     * 草稿转正：支持将草稿直接转换为正式流程申请
 
+20. **AI审批智能体**：
+    * 智能审批决策：基于本地微调模型（Phi-3 Mini）自动进行审批决策
+    * 支持批准/拒绝/建议人工处理三种决策类型
+    * 数据隐私保障：本地部署模型，数据不出境
+    * 可扩展规则引擎：支持从MySQL数据库加载审批规则
+    * 与工作流深度集成：直接嵌入Flowable工作流引擎
+    * 技术栈：Python + LangChain + Ollama + 微调Phi-3 Mini
+
 ---
 
 ## 📁项目结构
@@ -122,10 +130,51 @@ flowmind/
 
 测试账号：admin/123456
 
+## 🖼️项目预览
+
+### 登录页面
+![登录页面](../imges/FlowMind/README/登陆.png)
+
+### 工作台
+![工作台](../imges/FlowMind/README/工作台.png)
+
+### 审批中心
+#### 待办事项
+![审批中心待办事项](../imges/FlowMind/README/审批中心待办事项.png)
+
+#### 我的流程
+![我的流程](../imges/FlowMind/README/我的流程.png) 
+
+### 流程管理
+#### 流程分类
+![流程分类](../imges/FlowMind/README/流程分类.png)
+
+#### 流程设计
+![流程设计](../imges/FlowMind/README/流程设计.png)
+
+#### 流程部署
+![流程部署](../imges/FlowMind/README/流程部署.png)
+
+#### 流程发起
+![流程发起](../imges/FlowMind/README/流程发起.png) 
+
+#### 表单编辑
+![表单编辑](../imges/FlowMind/README/表单编辑.png)
+
+### 草稿箱
+![草稿箱](../imges/FlowMind/README/草稿箱.png)
+
+### 个人信息
+![个人信息](../imges/FlowMind/README/个人信息.png)
+
 ## 📄项目仓库
 
 * Gitee：[flowmind](https://gitee.com/wish168/flowmind)
 * GitHub：[flowmind](https://github.com/Moonlight168/flowmind)
+
+## 📚相关教程
+
+- [完整教程：基于Python的审批智能体实现及接入FlowMind系统](../../../../blogs/开发工具/实践出真知/完整教程：基于Python的单一功能审批智能体实现及接入Spring Cloud Alibaba.md)
 
 ## 🛡️版权信息
 
