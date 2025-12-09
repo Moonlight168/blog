@@ -82,8 +82,19 @@ export const zhNavbar = navbar([
   },
   // 私有导航项（仅本地开发时显示）
   ...(process.env.NODE_ENV === "development"
-      ? [{ text: "投资理财",icon: "/assets/icon/finance.png", link: "/private/finance/README.md" }] // 本地显示
+      ? [
+          { text: "投资理财", icon: "/assets/icon/finance.png", link: "/private/finance/README.md" }, // 本地显示
+          { 
+            text: "人工智能", 
+            icon: "/assets/icon/ai.png",  
+            prefix: "/private/ai/",
+            children: [
+              { text: "AI发展历史", link: "/private/ai/AI发展历史.md" }
+            ]
+          }
+        ] // 本地显示
       : []), // 构建时不显示
+      
   // 关于我
   {
     text: "关于我",
