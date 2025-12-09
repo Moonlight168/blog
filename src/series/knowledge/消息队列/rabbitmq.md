@@ -5,6 +5,30 @@ icon: /assets/icon/rabbitmq.png
 order: 1
 ---
 
+## RabbitMQ是什么，在系统架构中有什么作用？
+
+RabbitMQ是基于AMQP协议的开源消息中间件，在系统架构中主要发挥以下作用：
+
+### 1. 系统解耦
+- 生产者与消费者无需直接交互，降低系统耦合度
+- 各服务可独立开发、部署和扩展
+
+### 2. 异步通信
+- 将同步操作转为异步处理，提高系统响应速度
+- 非核心任务（如日志、通知）可异步处理，提升用户体验
+
+### 3. 削峰填谷
+- 高峰期将请求暂存队列，平滑处理突发流量
+- 保护下游系统免受过载冲击，提高系统稳定性
+
+### 4. 可靠性保障
+- 持久化机制确保消息不丢失
+- 支持消息确认、重试和死信队列，保证消息可靠投递
+
+### 5. 分布式协调
+- 实现发布/订阅模式，支持一对多通信
+- 可用于分布式事务、事件驱动架构等场景
+
 ## RabbitMQ 中有哪些常见的交换器（Exchange）类型，它们有什么区别？
 
 **回答:** 常见的交换器类型有 Direct、Fanout、Topic 和 Headers。
@@ -14,27 +38,33 @@ order: 1
 - **Topic**：消息会根据 Routing Key 和 Binding Key 的模式匹配规则发送到队列。Binding Key 可以使用通配符，比如 *.log 表示匹配所有以 .log 结尾的 Routing Key，适用于需要按规则分发消息的场景。
 - **Headers**：不依赖于 Routing Key 与 Binding Key 的匹配规则，而是根据发送的消息内容中的 headers 属性进行匹配。在实际应用中较少使用。
 
-### RabbitMQ是什么，在系统架构中有什么作用？
-### RabbitMQ有哪些核心组件，它们分别起什么作用？
-### 简述RabbitMQ的工作流程。
-### RabbitMQ中有哪些常见的交换器类型，各自适用什么场景？
-### 如何确保RabbitMQ消息的可靠性，防止消息丢失？
-### RabbitMQ的消息确认机制有哪些，它们是如何工作的？
-### 什么是RabbitMQ的持久化，如何实现消息、队列和交换器的持久化？
-### 在RabbitMQ中，如何处理消息的顺序性问题？
-### RabbitMQ集群模式有哪些，它们各自的特点是什么？
-### 如何监控和管理RabbitMQ服务器的性能和状态？
-### RabbitMQ如何与Spring Boot集成，集成过程中有哪些关键步骤？ 
+## RabbitMQ怎么保证消息不丢失？
 
-### RabbitMQ 的性能优化手段有哪些，分别从网络、存储、配置等方面阐述？
-### RabbitMQ 中如何避免队列消息堆积，若出现堆积应如何排查和解决？
-### 简述 RabbitMQ 的鉴权机制，如何进行用户认证和权限管理？
-### 在高并发场景下，RabbitMQ 的性能瓶颈可能出现在哪些方面，如何应对？
-### RabbitMQ 的消息 TTL（Time - To - Live）有几种设置方式，分别在什么场景下使用？
-### 死信队列（Dead Letter Queue）在 RabbitMQ 中是如何工作的，有哪些应用场景？
-### RabbitMQ 与其他消息队列（如 Kafka、RocketMQ）相比，有哪些优势和劣势？
-### 如何在 RabbitMQ 中实现延迟队列，有哪些方法和注意事项？
-### RabbitMQ 的事务机制和发送方确认机制有什么区别，各自的使用场景是什么？
-### 当 RabbitMQ 集群中的某个节点出现故障时，整个集群的可用性如何保障，数据会丢失吗？
-### 如何在 RabbitMQ 中进行消息的优先级处理，实现原理是什么？
-### RabbitMQ 的拓扑结构设计对系统的扩展性和可靠性有什么影响，如何设计合理的拓扑结构？
+RabbitMQ通过三个层面保障消息不丢失：
+
+### 1. 生产者端
+- **消息确认机制**：开启confirm模式，等待Broker确认
+- **消息持久化**：设置deliveryMode=2，确保消息持久化到磁盘
+
+### 2. 服务器端
+- **队列持久化**：声明队列时设置durable=true
+- **交换器持久化**：声明交换器时设置durable=true
+- **集群部署**：使用镜像队列实现高可用
+
+### 3. 消费者端
+- **手动确认**：关闭autoAck，处理完成后手动ACK
+- **死信队列**：处理无法消费的消息
+
+**核心代码：**
+```java
+channel.confirmSelect();  // 开启发送确认模式，确保消息到达Broker
+channel.basicPublish(exchange, routingKey, MessageProperties.PERSISTENT_TEXT_PLAIN, message);
+// 发送持久化消息：PERSISTENT_TEXT_PLAIN设置deliveryMode=2，确保消息持久化到磁盘
+
+// 消费者
+boolean autoAck = false;  // 关闭自动确认，改为手动确认
+channel.basicConsume(queue, autoAck, consumer);  // 消费消息，但不自动确认
+channel.basicAck(deliveryTag, false);  // 手动确认消息处理完成
+```
+**关键点：**生产者确认+持久化+消费者手动ACK，三者缺一不可
+

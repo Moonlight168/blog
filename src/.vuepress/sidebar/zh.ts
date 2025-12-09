@@ -30,6 +30,7 @@ export const zhSidebar = sidebar({
         ? {
             "/private/finance/": "structure",
             "/private/hires/": "structure",
+            "/private/ai/": "structure",
             "/trash/": "structure",
         }
         : {}), // 生产环境：空对象，不添加这些配置
