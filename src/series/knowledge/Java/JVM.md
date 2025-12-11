@@ -97,3 +97,38 @@ JVM频繁FullGC会导致应用停顿，影响性能。解决策略：
 - 使用MAT、JProfiler分析内存泄漏
 - 监控内存使用趋势，设置告警
 - 跟踪对象生命周期，找出内存占用大的对象
+
+## 应用占用内存持续增长，但是堆内存、元空间都没变化，可能是什么原因?
+
+**可能原因**
+1. **本地内存泄漏**：直接内存、JNI（Java Native Interface）调用、第三方库分配的Native内存
+2. **线程数量过多**：每个线程栈内存默认1MB，不在堆中
+3. **资源泄漏**：未关闭的文件流、网络连接、数据库连接
+4. **操作系统资源**：共享内存、系统缓存、内存映射文件
+5. **JVM本身占用**：JIT编译缓存、GC数据结构、类加载器
+
+**诊断方法**
+```bash
+# 查看Native内存使用
+jcmd <pid> VM.native_memory detail
+
+# 查看进程内存分布
+pmap -x <pid>
+
+# 查看线程数量
+jstack <pid> | grep "java.lang.Thread.State" | wc -l
+
+# 查看文件句柄数量
+lsof -p <pid> | wc -l
+
+# 开启NMT监控
+java -XX:NativeMemoryTracking=detail -jar app.jar
+jcmd <pid> VM.native_memory summary
+```
+
+**解决方案**
+1. **限制直接内存**：`-XX:MaxDirectMemorySize=2G`，及时释放ByteBuffer
+2. **优化线程管理**：合理配置线程池，避免频繁创建销毁线程
+3. **资源释放**：使用try-with-resources，确保所有连接正确关闭
+4. **监控工具**：集成Prometheus+Grafana监控，设置内存告警
+5. **升级JVM**：使用新版本或ZGC/Shenandoah垃圾收集器
