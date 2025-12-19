@@ -325,6 +325,23 @@ EXPLAIN SELECT * FROM users WHERE name = '张三' ORDER BY created_at;
 | `rows` | 扫描行数 | 越小越好 |
 | `Extra` | 额外信息 | 避免Using filesort |
 
+**type连接类型详解（按性能从高到低排序）：**
+
+| type类型 | 含义说明 | 示例场景 |
+|---------|---------|---------|
+| **const** | 主键或唯一索引等值查询，最多返回1条记录 | `WHERE id = 1`（id是主键） |
+| **eq_ref** | 联表查询中，被驱动表使用主键或唯一索引等值匹配 | `JOIN users ON orders.user_id = users.id` |
+| **ref** | 非唯一索引等值查询，可能返回多条记录 | `WHERE name = '张三'`（name有普通索引） |
+| **range** | 索引范围查询（>、<、BETWEEN、IN等） | `WHERE age > 18 AND age < 60` |
+| **index** | 全索引扫描，遍历整个索引树 | `SELECT id FROM users`（id有索引） |
+| **all** | 全表扫描，遍历所有数据行 | `SELECT * FROM users WHERE name = '张三'`（name无索引） |
+
+**type类型优化建议：**
+- 尽量让查询达到`ref`级别或以上
+- 避免`all`（全表扫描）和`index`（全索引扫描）
+- `const`和`eq_ref`是最理想的连接类型
+- `range`类型在范围查询时是可以接受的
+
 ### 5.2 索引失效的情况
 
 #### 使用函数导致索引失效
@@ -391,7 +408,61 @@ SELECT * FROM users WHERE status = 'active';
 -- 分别利用各自的索引，然后合并结果
 ```
 
+#### 违反最左前缀原则
 
+**原因分析：**
+联合索引遵循最左前缀原则，即只有当查询条件包含索引的最左列时，才能使用该索引。如果跳过最左列直接使用后面的列，索引将无法生效。
+
+```sql
+-- 假设创建了联合索引：CREATE INDEX idx_name_age ON users(name, age);
+
+-- 索引失效：跳过最左列name
+SELECT * FROM users WHERE age = 18;
+-- 直接使用age列，无法利用联合索引idx_name_age
+
+-- 索引生效：包含最左列name
+SELECT * FROM users WHERE name = '张三' AND age = 18;
+-- 包含联合索引的最左列，可以正常使用索引
+```
+
+#### 否定条件导致索引失效
+
+**原因分析：**
+使用否定条件（如!=、<>、NOT IN）时，MySQL优化器可能无法高效利用索引，因为这些条件通常需要检查大量不满足条件的记录，导致全表扫描。
+
+```sql
+-- 索引失效：使用NOT IN
+SELECT * FROM users WHERE status NOT IN ('active', 'pending');
+-- 需要扫描大部分或全部记录来排除指定值
+
+-- 索引失效：使用!=或<>
+SELECT * FROM users WHERE status != 'inactive';
+-- 否定条件可能导致全表扫描
+
+-- 优化建议：尽量使用正向条件
+SELECT * FROM users WHERE status IN ('active', 'pending');
+-- 正向条件可以更高效地利用索引
+```
+
+#### IS NULL/IS NOT NULL查询
+
+**原因分析：**
+当查询条件包含IS NULL或IS NOT NULL时，MySQL可能无法有效利用索引，尤其是当列中NULL值较多时。
+
+```sql
+-- 索引失效：IS NOT NULL
+SELECT * FROM users WHERE email IS NOT NULL;
+-- 可能导致全表扫描，尤其是email列NULL值较多时
+
+-- 索引失效：IS NULL
+SELECT * FROM users WHERE email IS NULL;
+-- 同样可能无法有效利用索引
+
+-- 优化建议：使用默认值替代NULL
+-- 例如将email的默认值设为空字符串''，然后查询
+SELECT * FROM users WHERE email != '';
+-- 可以更高效地利用索引
+```
 
 #### 运算表达式导致索引失效
 
@@ -408,9 +479,99 @@ SELECT * FROM users WHERE age = 20;
 -- 直接比较列值，可以利用索引
 ```
 
-## 7. 不同存储引擎的索引特点
+## 5. 聚簇索引与非聚簇索引
 
-### 7.1 InnoDB存储引擎
+### 5.1 核心概念对比
+
+| 特性 | 聚簇索引 | 非聚簇索引 |
+|------|----------|------------|
+| **存储方式** | 索引与数据物理存储在一起 | 索引与数据分离存储 |
+| **数据顺序** | 数据按索引顺序物理排列 | 数据物理顺序与索引无关 |
+| **索引指针** | 叶子节点直接存储数据行 | 叶子节点存储数据行地址或主键 |
+| **数量限制** | 每张表只能有1个 | 每张表可以有多个 |
+| **典型应用** | InnoDB主键索引 | MyISAM所有索引、InnoDB二级索引 |
+
+### 5.2 聚簇索引（Clustered Index）
+
+**工作原理：**
+- 索引与数据物理存储在一起
+- 数据行按照索引顺序物理排列
+- 叶子节点直接包含完整数据行
+- 没有额外的回表操作（除非使用二级索引）
+
+**InnoDB中的聚簇索引：**
+```sql
+-- InnoDB自动使用主键作为聚簇索引
+CREATE TABLE users (
+    id INT PRIMARY KEY,  -- 聚簇索引，决定数据物理顺序
+    name VARCHAR(50),
+    email VARCHAR(100)
+) ENGINE=InnoDB;
+```
+
+**聚簇索引优势：**
+- 按主键范围查询非常高效
+- 主键排序和范围扫描性能优异
+- 避免了额外的I/O操作
+
+### 5.3 非聚簇索引（Non-Clustered Index）
+
+**工作原理：**
+- 索引与数据分开存储
+- 叶子节点存储指向数据行的指针或主键值
+- 查询时可能需要回表操作
+
+**非聚簇索引类型：**
+1. **MyISAM所有索引**：叶子节点存储数据物理地址
+2. **InnoDB二级索引**：叶子节点存储主键值
+
+```sql
+-- InnoDB二级索引（非聚簇）
+CREATE INDEX idx_name ON users(name);
+-- 叶子节点存储：name值 + 主键id
+```
+
+**非聚簇索引特点：**
+- 索引维护成本较低
+- 支持多列索引
+- InnoDB二级索引需要通过主键回表
+
+### 5.4 索引范围搜索详解
+
+**什么是范围搜索？**
+范围搜索是指使用比较操作符（>、<、>=、<=、BETWEEN、IN）进行的查询，如：
+```sql
+-- 数值范围
+SELECT * FROM users WHERE age > 18 AND age < 60;
+
+-- 日期范围  
+SELECT * FROM orders WHERE created_at BETWEEN '2023-01-01' AND '2023-12-31';
+
+-- IN范围
+SELECT * FROM users WHERE status IN ('active', 'pending');
+```
+
+**范围搜索工作原理：**
+1. **B+Tree索引有序性**：索引按key值有序排列，范围搜索可以利用这一特性
+2. **范围定位**：快速定位起始点和结束点
+3. **区间扫描**：扫描范围内的所有叶子节点
+4. **回表操作**：如果是二级索引，需要回表获取完整数据
+
+**范围搜索优化技巧：**
+- ✅ **使用聚簇索引**：避免回表
+- ✅ **覆盖索引**：包含查询所需所有列，避免回表
+- ✅ **最左前缀**：复合索引中把范围列放在最后
+- ❌ **避免在范围列后使用其他索引列**：范围列后的索引列无法使用
+- ❌ **避免大量数据扫描**：范围过大可能导致全表扫描
+
+**范围搜索中的索引失效情况：**
+- 范围列后有其他索引列
+- 范围过大导致MySQL认为全表扫描更高效
+- 使用了函数或类型转换
+
+## 6. 不同存储引擎的索引特点
+
+### 6.1 InnoDB存储引擎
 
 ```sql
 -- InnoDB支持B+Tree和自适应哈希索引
@@ -424,12 +585,12 @@ SET GLOBAL innodb_adaptive_hash_index = OFF;
 ```
 
 **InnoDB索引特点：**
-- **聚簇索引**：主键决定数据的物理存储顺序
-- **二级索引**：非主键索引存储主键值作为指针
-- **自动优化**：自适应哈希索引提升查询速度
-- **事务安全**：支持ACID特性
+- 默认使用**聚簇索引**
+- 支持事务和外键
+- 二级索引存储主键值
+- 自动优化：自适应哈希索引
 
-### 7.2 MyISAM存储引擎
+### 6.2 MyISAM存储引擎
 
 ```sql
 -- MyISAM只支持B+Tree索引
@@ -441,7 +602,8 @@ CREATE TABLE users_myisam (
 ```
 
 **MyISAM索引特点：**
-- 📍 **非聚簇索引**：索引和数据分离存储
-- **查询速度**：某些情况下比InnoDB快
-- **不支持事务**：没有事务安全特性
-- **不支持外键**：无法保证参照完整性
+- 所有索引都是**非聚簇索引**
+- 索引和数据分离存储
+- 不支持事务和外键
+- 查询速度在某些场景下较快
+
