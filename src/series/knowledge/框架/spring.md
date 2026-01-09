@@ -633,8 +633,6 @@ Bean 生命周期 = **实例化 → 属性赋值 → 初始化前处理 → 初�
 
 ### Spring Boot 自动配置和组件扫描有什么区别？
 
-**答案要点：**
-
 * 组件扫描用于业务组件注册，自动配置用于框架集成和默认配置
 * 组件扫描无条件注册，自动配置通过条件化注解决定是否加载
 * 实现机制不同：`@ComponentScan` vs `@EnableAutoConfiguration`
@@ -642,8 +640,6 @@ Bean 生命周期 = **实例化 → 属性赋值 → 初始化前处理 → 初�
 
 
 ### 什么场景下应该使用自动配置而不是简单的 @Component？
-
-**答案要点：**
 
 * 第三方库集成（如 Redis、MQ 客户端）
 * 功能模块可选（通过配置启用/禁用）
@@ -653,15 +649,11 @@ Bean 生命周期 = **实例化 → 属性赋值 → 初始化前处理 → 初�
 
 ###  @ConditionalOnMissingBean 有什么作用？
 
-**答案要点：**
-
 * 避免重复注册 Bean
 * 如果用户已定义相同类型的 Bean，则跳过默认 Bean
 * 提供默认实现的同时，保留用户自定义空间
 
 ###  Spring Boot 2.4 为什么引入 AutoConfiguration.imports 替代 spring.factories？
-
-**答案要点：**
 
 * 简化语法：每行一个配置类，无需 Key-Value
 * 可维护性更好，支持模块化管理
@@ -670,8 +662,6 @@ Bean 生命周期 = **实例化 → 属性赋值 → 初始化前处理 → 初�
 
 
 ###  如何排查某个自动配置类是否生效？
-
-**答案要点：**
 
 1. 启动时查看日志 `--debug`，Spring Boot 会打印条件评估报告
 2. 使用 `@ConditionalOn...` 注解逐一排查条件是否满足
@@ -783,3 +773,13 @@ public class SingletonService {
 
 > 📖 **详细说明**：[@Transactional注解四种机制详解](/blogs/框架/spring/transactional-annotation.md) - 包含完整示例、并发问题解析和最佳实践
 
+## Spring中的ApplicationContext 原理是什么，它与BeanFactory区别？
+
+ApplicationContext 的原理是：**以 BeanFactory 为核心，通过统一的 refresh() 启动流程，完成 BeanDefinition 的加载与注册，在此基础上通过各种 PostProcessor 机制扩展容器能力，最终在启动阶段完成单例 Bean 的实例化、依赖注入和生命周期管理。**
+
+相比之下，**BeanFactory 只负责最基础的 Bean 创建和依赖注入，而 ApplicationContext 在这个流程之上引入了事件机制、AOP、资源加载等应用级能力，并默认在启动时完成单例 Bean 初始化。**
+
+## 实际应用中你怎么使用 ApplicationContext ？
+在实际项目中我主要通过注解方式使用 ApplicationContext，由容器在启动时统一管理 Bean。
+**其中一个典型用法就是 AOP**，比如通过 `@Aspect` +` @Around` 实现日志、鉴权和事务控制。
+**Spring 会在 ApplicationContext 启动过程中，通过 BeanPostProcessor 对目标 Bean 进行代理增强**，我只需要声明切面即可，不需要手动干预对象创建辑。
