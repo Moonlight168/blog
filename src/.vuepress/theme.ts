@@ -102,6 +102,7 @@ export default hopeTheme({
         spoiler: true,
         mermaid: true,
         flowchart: true,
+        math: true,
         stylize: [
             {
                 matcher: "Recommended",
