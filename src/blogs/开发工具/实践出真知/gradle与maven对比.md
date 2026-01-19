@@ -1,6 +1,5 @@
 ---
 title: "Gradle与Maven：构建工具的对比与选择"
-icon: /assets/icon/gradle.png
 date: 2025-12-17
 ---
 

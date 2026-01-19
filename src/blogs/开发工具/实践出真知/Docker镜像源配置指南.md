@@ -12,16 +12,22 @@ Docker 默认从 Docker Hub 拉取镜像，在中国大陆地区访问 Docker Hu
 
 ### 2. 常用 Docker 镜像源
 
-#### 2.1 官方中国区镜像源
-```bash
-https://registry.docker-cn.com
-```
+#### 2.1 镜像源现状说明
 
-#### 2.2 第三方镜像源
-- **网易云镜像源**：`https://hub-mirror.c.163.com`
-- **中国科学技术大学镜像源**：`https://docker.mirrors.ustc.edu.cn`
-- **Docker 官方中国区镜像源**：`https://registry.docker-cn.com`
-- **阿里云镜像源**：需要注册阿里云账号获取个人专属地址
+| 镜像源 | 状态 | 说明 |
+|--------|------|------|
+| `https://registry.docker-cn.com` | 已停用 | Docker 官方中国区镜像源，2020年正式下线，访问失效 |
+| `https://hub-mirror.c.163.com` | 可用，但稳定性一般 | 网易云镜像源，偶尔会出现速度慢、部分镜像拉取失败的情况 |
+| `https://docker.mirrors.ustc.edu.cn` | 可用，稳定性较好 | 中科大镜像源，维护良好，访问速度和稳定性都不错 |
+
+#### 2.2 推荐镜像源
+
+以下是目前国内更稳定的 Docker 镜像源推荐（按优先级排序）：
+
+- **DaoCloud**：`https://docker.m.daocloud.io`（目前最稳最快之一）
+- **中国科学技术大学**：`https://docker.mirrors.ustc.edu.cn`（非常可靠）
+- **阿里云公共镜像**：`https://registry.cn-hangzhou.aliyuncs.com`（无需登录，公共使用）
+- **百度云**：`https://mirror.baidubce.com`（备用选择）
 
 ### 3. 配置方法
 
@@ -35,9 +41,10 @@ sudo mkdir -p /etc/docker
 sudo tee /etc/docker/daemon.json <<-'EOF'
 {
   "registry-mirrors": [
-    "https://registry.docker-cn.com",
-    "https://hub-mirror.c.163.com",
-    "https://docker.mirrors.ustc.edu.cn"
+    "https://docker.m.daocloud.io",
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://registry.cn-hangzhou.aliyuncs.com",
+    "https://mirror.baidubce.com"
   ]
 }
 EOF
@@ -101,14 +108,27 @@ docker pull --platform linux/amd64 镜像名:标签
 ```json
 {
   "registry-mirrors": [
-    "https://registry.docker-cn.com",
-    "https://hub-mirror.c.163.com",
-    "https://docker.mirrors.ustc.edu.cn"
+    "https://docker.m.daocloud.io",           // DaoCloud - 目前最稳最快之一
+    "https://docker.mirrors.ustc.edu.cn",     // 中科大 - 非常可靠
+    "https://registry.cn-hangzhou.aliyuncs.com", // 阿里云公共（无需登录，但稍慢）
+    "https://mirror.baidubce.com"             // 百度 - 备胎
   ],
   "insecure-registries": ["私有仓库地址"],
   "debug": false,
   "experimental": false
 }
 ```
+
+**阿里云专属镜像源配置示例**：
+```json
+{
+  "registry-mirrors": [
+    "https://xxxxxxx.mirror.aliyuncs.com"   // 替换为你的阿里云专属镜像源
+  ]
+}
+```
+
+> 提示：阿里云专属镜像源需要注册阿里云账号获取，访问地址：https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors
+> 阿里云公共镜像源无需登录，可直接使用：`https://registry.cn-hangzhou.aliyuncs.com`
 
 通过以上配置，可以显著提升 Docker 镜像拉取速度，改善开发体验。
