@@ -1,7 +1,7 @@
 ---
 title: 使用 Git 拉取远程仓库并与本地文件对比合并
-date: 2025-06-09
-categories: ["开发工具"]
+date: 2026-01-29
+categories: ["实践出真知"]
 tags: ["Git"]
 ---
 
