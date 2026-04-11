@@ -1,12 +1,11 @@
 ---
 title: Mybatis
+date: 2026-03-23
 icon: /assets/icon/mybatis.png
 order: 4
 ---
 
 ## Hibernate 和 MyBatis 有什么区别？
-
-**回答：**
 
 * **SQL编写：**
 
@@ -43,60 +42,59 @@ order: 4
 
 ## MyBatis 字段名与数据库列名不一致时的映射方式总结
 
-#### 1. 原生 MyBatis 的处理方式：
+1. **原生 MyBatis 的处理方式：**
 
-* **方式一：使用 SQL 别名**
+   - 方式一：使用 SQL 别名
 
-  ```sql
-  SELECT user_name AS userName FROM user
-  ```
+     ```sql
+     SELECT user_name AS userName FROM user
+     ```
 
-* **方式二：使用 `@Results` 注解**
+   - 方式二：使用 `@Results` 注解
 
-  ```java
-  @Select("SELECT user_id, user_name FROM user")
-  @Results({
-      @Result(property = "userId", column = "user_id"),
-      @Result(property = "userName", column = "user_name")
-  })
-  List<User> getAllUsers();
-  ```
+     ```java
+     @Select("SELECT user_id, user_name FROM user")
+     @Results({
+         @Result(property = "userId", column = "user_id"),
+         @Result(property = "userName", column = "user_name")
+     })
+     List<User> getAllUsers();
+     ```
 
-* **方式三：使用 `<resultMap>` 映射**
+   - 方式三：使用 `<resultMap>` 映射
 
-  ```xml
-  <resultMap id="userMap" type="User">
-    <result property="userId" column="user_id"/>
-    <result property="userName" column="user_name"/>
-  </resultMap>
-  ```
+     ```xml
+     <resultMap id="userMap" type="User">
+       <result property="userId" column="user_id"/>
+       <result property="userName" column="user_name"/>
+     </resultMap>
+     ```
 
-* **方式四：配置驼峰命名自动映射**
+   - 方式四：配置驼峰命名自动映射
 
-  ```yaml
-  mybatis:
-    configuration:
-      map-underscore-to-camel-case: true
-  ```
+     ```yaml
+     mybatis:
+       configuration:
+         map-underscore-to-camel-case: true
+     ```
 
-  实体字段使用驼峰命名，如 `userName`，可自动映射 `user_name`。
+     实体字段使用驼峰命名，如 `userName`，可自动映射 `user_name`。
 
+2. **MyBatis-Plus 的处理方式：**
 
-#### 2. MyBatis-Plus 的处理方式（**MyBatis-Plus 专有**）：
+   - 使用 `@TableName` 指定表名
 
-* **使用 `@TableName` 指定表名**
+     ```java
+     @TableName("user")
+     public class User { ... }
+     ```
 
-  ```java
-  @TableName("user")
-  public class User { ... }
-  ```
+   - 使用 `@TableField` 指定字段映射
 
-* **使用 `@TableField` 指定字段映射**
-
-  ```java
-  @TableField("user_name")
-  private String userName;
-  ```
+     ```java
+     @TableField("user_name")
+     private String userName;
+     ```
 
 ## MyBatis 的缓存机制？
 
@@ -129,8 +127,6 @@ MyBatis 提供两级缓存机制：
   * 与 Spring 集成时，推荐使用第三方缓存（如 EhCache、Redis）配合二级缓存使用。
 
 ## MP中的selectOne()方法和selectList()方法的区别？
-
-**回答：**
 
 * **返回结果：**
     * `selectOne()`：返回单个实体对象，查询结果必须为1条或0条记录。

@@ -1,6 +1,6 @@
 ---
 title: RabbitMQ
-date: 2025-05-21
+date: 2026-03-26
 icon: /assets/icon/rabbitmq.png
 order: 1
 ---
@@ -121,40 +121,93 @@ channel.basicPublish("order_exchange", orderId, properties, message);
 
 ## 如何解决重复消息问题？
 
-### 1. 问题原因
-- 生产者重试机制导致重复发送
-- 消费者确认失败导致消息重投
-- 消息队列故障恢复时重放未确认消息
+消息重复消费的主要原因：生产者重试、消费者确认失败、消息队列故障恢复。
 
-### 2. 解决方案
+### 解决方案
 
-#### 生产者端
-- **幂等设计**：确保消息重复发送不影响结果
-- **唯一消息ID**：为每条消息生成全局唯一ID
-- **确认机制**：使用publisher confirm确保消息可靠投递
+1. **生产者端**
+   - 为每条消息生成全局唯一ID
+   - 使用publisher confirm确保消息可靠投递
 
-#### 消费者端
-- **幂等处理**：核心解决方案，确保重复消费不产生副作用
-  - 数据库唯一约束
-  - Redis原子操作
-  - 业务状态校验
-- **消息去重表**：
-  ```sql
-  CREATE TABLE message_dup (
-      msg_id VARCHAR(64) PRIMARY KEY,
-      status TINYINT DEFAULT 0,
-      create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
-  ```
-- **本地缓存**：使用Guava Cache或Redis临时存储已处理的消息ID
-- **合理确认机制**：确保处理完成后再发送ack
+2. **消费者端（核心方案：幂等处理）**
+   - 数据库唯一约束（消息ID做主键）
+   - Redis原子操作（SETNX去重）
+   - 业务状态校验（如订单状态判断）
 
-#### 消息队列端
-- 避免手动确认时的超时设置过短
-- 合理配置消息重试策略
+3. **消息去重表示例**
+   ```sql
+   CREATE TABLE message_dup (
+       msg_id VARCHAR(64) PRIMARY KEY,
+       status TINYINT DEFAULT 0,
+       create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+   );
+   ```
 
-### 3. 最佳实践
-- **核心业务必须实现幂等**
-- **消息ID必须全局唯一**
-- **优先使用事务或生产者确认**
-- **定期清理消息去重表**
+**最佳实践**：核心业务必须实现幂等，消息ID必须全局唯一，定期清理消息去重表。
+
+## RabbitMQ 延迟队列如何实现？
+
+两种主流方案：
+
+### 1. TTL + 死信队列
+
+消息设置TTL过期后进入死信队列，消费者监听死信队列实现延迟消费。
+
+```java
+// 延迟队列绑定死信交换器
+Map<String, Object> args = new HashMap<>();
+args.put("x-dead-letter-exchange", "dlx.exchange");
+args.put("x-dead-letter-routing-key", "dlx.key");
+channel.queueDeclare("delay_queue", true, false, false, args);
+
+// 发送延迟消息（60秒后过期）
+AMQP.BasicProperties props = new AMQP.BasicProperties.Builder()
+    .expiration("60000").build();
+channel.basicPublish("", "delay_queue", props, message.getBytes());
+```
+
+**缺点**：队列先进先出，第一条消息TTL最长会阻塞后续消息。
+
+### 2. 延迟队列插件（推荐）
+
+安装插件：`rabbitmq-plugins enable rabbitmq_delayed_message_exchange`
+
+```java
+// 声明延迟交换器
+Map<String, Object> args = new HashMap<>();
+args.put("x-delayed-type", "direct");
+channel.exchangeDeclare("delayed_exchange", "x-delayed-message", true, false, args);
+
+// 发送延迟消息（60秒后投递）
+AMQP.BasicProperties props = new AMQP.BasicProperties.Builder()
+    .headers(Collections.singletonMap("x-delay", 60000)).build();
+channel.basicPublish("delayed_exchange", "routing_key", props, message.getBytes());
+```
+
+**优点**：消息级别延迟，不会阻塞；支持动态调整延迟时间。
+
+**应用场景**：订单超时取消、定时提醒、延迟重试。
+
+## RabbitMQ 死信队列是什么？
+
+消息变为死信的四种情况：
+1. 消息被拒绝（`basic.reject`/`basic.nack`，且 `requeue=false`）
+2. 消息过期（TTL过期未被消费）
+3. 队列满（达到最大长度，新消息被丢弃）
+
+### 配置方式
+
+```java
+// 业务队列绑定死信交换器
+Map<String, Object> args = new HashMap<>();
+args.put("x-dead-letter-exchange", "dlx.exchange");
+args.put("x-dead-letter-routing-key", "dlx.key");
+channel.queueDeclare("business_queue", true, false, false, args);
+```
+
+### 应用场景
+- 失败消息处理：无法消费的消息进入死信队列，人工介入或重试
+- 延迟队列实现：配合TTL实现延迟消费
+- 消息兜底：防止消息丢失，保证消息可追溯
+
+**监控建议**：监控死信队列长度，超过阈值告警；定期分析死信原因优化消费逻辑。
