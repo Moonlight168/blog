@@ -67,31 +67,36 @@ const htmlComment = computed(() => marked.parse(props.comment));
 .hover-comment-marker {
   cursor: pointer;
   position: relative;
+  display: inline-flex;
+  vertical-align: baseline;
 }
 
 .hover-comment-box {
   position: absolute;
-  display: inline-block;
+  display: block;
   background-color: #fff;
   padding: 12px 16px;
   border-radius: 8px;
   border: 1px solid #ddd;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 
-  top: 130%;
+  top: 100%;
   left: 0;
+  margin-top: 8px;
   z-index: 30;
 
-  /* 设置最大宽度，不超过视口宽度的60%或750像素 */
+  min-width: 200px;
+  width: auto;
   max-width: min(60vw, 750px);
   max-height: min(60vh, 500px);
-  width: auto;
 
   resize: both;
   overflow: auto;
 
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 16px;
+  line-height: 1.6;
+  word-spacing: normal;
+  letter-spacing: normal;
 }
 
 .close-btn {
@@ -144,7 +149,12 @@ const htmlComment = computed(() => marked.parse(props.comment));
 }
 .clickable-area {
   cursor: pointer;
-  display: flex;
-  align-items: center;
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.clickable-area sup {
+  vertical-align: baseline;
+  margin-left: 4px;
 }
 </style>
