@@ -1,6 +1,5 @@
 ---
-title: 前端相关
-icon: /assets/icon/前端.png
+title: 基础知识
 date: 2025-10-24
 updated: 2025-10-26
 categories: ["前端开发"]
@@ -16,7 +15,6 @@ categories: ["前端开发"]
 ## JS 和 TS 的区别？
 
 JavaScript 是动态类型语言，写起来灵活但容易出错，变量类型写错了编译阶段发现不了。TypeScript 是 JavaScript 的超集，加了静态类型和类型检查机制，能在写代码时就发现潜在错误。简单来说，TS 更安全、规范，适合大型项目开发，最终会编译成 JS 执行。
-
 
 ## Vue2 和 Vue3 有什么区别？
 
@@ -37,6 +35,7 @@ Vue3 是 Vue2 的升级版，主要变化：
   component: () => import('@/views/error/404')
 }
 ```
+
 ## CDN是什么？
 
 CDN（Content Delivery Network，内容分发网络）是一种分布式网络服务，通过在全球部署节点服务器，将静态资源缓存到离用户最近的节点上。
@@ -78,6 +77,7 @@ fn();  // 2
 **常见场景**：
 
 1. **防抖**：闭包记住 `timer`，实现延迟清除
+
 ```javascript
 function debounce(fn, delay) {
   let timer = null;
@@ -89,6 +89,7 @@ function debounce(fn, delay) {
 ```
 
 2. **数据私有化**：外部访问不到内部变量
+
 ```javascript
 function createStore() {
   let username = '';  // 私有变量
@@ -116,7 +117,6 @@ console.log(3);  // 输出：1 → 3 → 2
 
 微任务优先级更高，队列空了先清微任务，再执行下一个宏任务。
 
-
 ## 虚拟 DOM 是什么？
 
 用 JS 对象模拟真实 DOM 树。更新时对比新旧虚拟 DOM，只操作真实 DOM 的变化部分，提升渲染性能。Vue 和 React 都用这个。
@@ -129,7 +129,8 @@ console.log(3);  // 输出：1 → 3 → 2
 4. **5xx**：500 服务器错误，502 网关错误，503 服务不可用
 
 ## 为什么前端请求后端会存在跨域问题？
-浏览器的<HoverComment text="同源策略" comment="协议、域名、端口三者完全相同才算同源，防止恶意网站窃取数据。" />保护用户安全。比如你登录了银行 `bank.com`，恶意网站 `hack.com` 如果能直接请求银行接口，就能以你的身份转账。
+
+浏览器的保护用户安全。比如你登录了银行 `bank.com`，恶意网站 `hack.com` 如果能直接请求银行接口，就能以你的身份转账。
 
 实际开发中常见：前端 `localhost:8080` 请求后端 `localhost:3000`，端口不同，被浏览器拦截。服务端其实正常响应了，是浏览器自己拦的。
 
@@ -167,12 +168,13 @@ const add = (a, b) => a + b;
 攻击者在网页注入恶意脚本，用户访问时执行。
 
 防范：
+
 1. 输入过滤特殊字符
 2. 输出用 `textContent` 代替 `innerHTML`
 3. CSP 响应头
 4. HttpOnly Cookie
 
-## <HoverComment text="ES6" comment="ECMAScript 6.0，是 JavaScript 的语言标准版本。ES6 在 2015 年发布，所以也叫 ECMAScript 2015。之后的版本按年份命名，如 ES7(2016)、ES8(2017) 等。" /> 新特性有哪些？
+##  新特性有哪些？
 
 1. let/const 块级作用域
 2. 箭头函数（无 this）

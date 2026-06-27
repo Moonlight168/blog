@@ -6,5 +6,4 @@ dir:
   icon: /assets/icon/前端.png
   order: 9
 ---
-
 <Catalog/>

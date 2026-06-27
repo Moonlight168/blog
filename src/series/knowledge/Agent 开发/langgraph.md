@@ -1,8 +1,6 @@
 ---
 title: LangGraph 面试题
-icon: graph
 ---
-
 # LangGraph 面试题
 
 ## LangGraph 是什么？
@@ -10,6 +8,7 @@ icon: graph
 LangGraph 是 LangChain 团队推出的基于图的状态管理库，用于构建有状态、多参与者的 LLM 应用。
 
 核心特点：
+
 1. **循环支持** - 支持循环和分支的工作流
 2. **状态管理** - 明确定义和传递状态
 3. **持久化** - 支持检查点和时间旅行
@@ -17,11 +16,11 @@ LangGraph 是 LangChain 团队推出的基于图的状态管理库，用于构�
 
 ## LangGraph 与 LangChain 的关系？
 
-| LangChain | LangGraph |
-|-----------|-----------|
-| 组件库 | 编排引擎 |
+| LangChain  | LangGraph  |
+| ---------- | ---------- |
+| 组件库     | 编排引擎   |
 | 线性 Chain | 循环图结构 |
-| 简单流程 | 复杂状态机 |
+| 简单流程   | 复杂状态机 |
 
 LangGraph 是 LangChain 的补充，专注于复杂工作流编排。
 
@@ -38,6 +37,7 @@ LangGraph 是 LangChain 的补充，专注于复杂工作流编排。
 StateGraph 是 LangGraph 的核心类，定义状态流转图。
 
 基本结构：
+
 ```python
 from langgraph.graph import StateGraph
 
@@ -55,6 +55,7 @@ graph.set_entry_point("agent")
 Node 是执行具体逻辑的函数单元。
 
 特点：
+
 1. 接收当前状态作为输入
 2. 返回状态更新（字典）
 3. 可以是 LLM 调用、工具执行、条件判断等
@@ -91,6 +92,7 @@ graph.add_conditional_edges(
 Checkpointing 是状态持久化机制。
 
 作用：
+
 1. **断点续跑** - 中断后继续执行
 2. **时间旅行** - 回看历史状态
 3. **调试** - 查看中间状态
@@ -104,6 +106,7 @@ Checkpointing 是状态持久化机制。
 4. 从检查点恢复执行
 
 典型场景：
+
 - 内容审核
 - 敏感操作确认
 - 质量检查
@@ -113,6 +116,7 @@ Checkpointing 是状态持久化机制。
 支持。这是 LangGraph 相比 LangChain Chain 的主要优势。
 
 循环实现：
+
 ```python
 graph.add_edge("review", "agent")  # 返回上一步
 graph.add_conditional_edges(
@@ -130,6 +134,7 @@ graph.add_conditional_edges(
 入口点是图执行的起始节点。
 
 设置方式：
+
 ```python
 graph.set_entry_point("node_name")
 ```

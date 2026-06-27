@@ -129,6 +129,14 @@ export default hopeTheme({
             filter(page) {
                 // page.path 是页面的路由路径（如 /blogs/xxx.html 或 /blogs/xxx/）
                 // 匹配以 /blogs/ 开头的路径（排除根目录的 /blogs.html 单页）
+                // 「习题」目录下的内容不出现在成长轨迹 / 分类 / 标签 / 星标 等博客聚合页中，但侧边栏不受 filter 影响仍会正常显示
+                // 同时匹配 URL 编码（%E4%B9%A0%E9%A2%98）和原始中文，避免部分版本下 page.path 编码不一致
+                if (
+                    page.path.includes('/blogs/习题/') ||
+                    page.path.includes('/blogs/%E4%B9%A0%E9%A2%98/')
+                ) {
+                    return false;
+                }
                 return page.path.startsWith('/blogs/') && page.frontmatter.article != false;
             },
             article: '/blogs/',

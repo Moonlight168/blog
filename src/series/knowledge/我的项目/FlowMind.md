@@ -1,7 +1,7 @@
 ---
 series: 我的项目
 title: FlowMind 智能审批工作流
-icon: /assets/icon/工作流.png
+icon: /assets/icon/cloud_flow.png
 order: 1
 categories: ["我的项目"]
 date: 2026-03-22
