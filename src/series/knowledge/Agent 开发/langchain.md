@@ -1,8 +1,6 @@
 ---
 title: LangChain 面试题
-icon: chain
 ---
-
 # LangChain 面试题
 
 ## LangChain 是什么？
@@ -10,6 +8,7 @@ icon: chain
 LangChain 是一个用于开发由语言模型驱动的应用程序的框架，提供模块化组件和工具链。
 
 核心能力：
+
 1. **Model I/O** - 统一的 LLM 接口和 Prompt 管理
 2. **Retrieval** - RAG 检索增强生成支持
 3. **Agents** - 工具调用和任务规划
@@ -30,6 +29,7 @@ LangChain 是一个用于开发由语言模型驱动的应用程序的框架，�
 Chain 是多个组件的顺序组合，用于实现复杂任务。
 
 基本使用：
+
 ```python
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
@@ -47,6 +47,7 @@ result = chain.run(topic="机器学习")
 Agent 是使用 LLM 来决定执行顺序的工具调用系统。
 
 核心要素：
+
 1. **Agent** - 决策引擎，决定下一步做什么
 2. **Tools** - 可执行的函数（搜索、计算器等）
 3. **Executor** - 执行 Agent 决策并返回结果
@@ -56,6 +57,7 @@ Agent 是使用 LLM 来决定执行顺序的工具调用系统。
 Function Calling 让 LLM 能够调用外部函数获取实时信息。
 
 工作流程：
+
 1. 定义函数描述（名称、参数、功能）
 2. LLM 根据上下文决定是否调用及参数
 3. 执行函数并返回结果给 LLM
@@ -85,6 +87,7 @@ RAG（检索增强生成）流程：
 TextSplitter 将长文本切分成小片段，便于向量和检索。
 
 常用策略：
+
 1. **RecursiveCharacterTextSplitter** - 递归字符分割
 2. **CharacterTextSplitter** - 简单字符分割
 3. **TokenTextSplitter** - 按 Token 数量分割
@@ -116,6 +119,7 @@ def search(query: str) -> str:
 ```
 
 关键点：
+
 1. 使用 `@tool` 装饰器
 2. 提供清晰的函数描述
 3. 定义明确的参数类型
@@ -125,6 +129,7 @@ def search(query: str) -> str:
 Callback 用于追踪和监控 LLM 应用执行。
 
 应用场景：
+
 1. **日志记录** - 记录 Prompt 和响应
 2. **性能监控** - 统计 Token 使用和时间
 3. **调试** - 查看中间执行步骤

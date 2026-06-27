@@ -24,9 +24,9 @@ export const zhNavbar = navbar([
         link: "FlowMind/",
       },
       {
-        text: "淘票票",
-        icon: "/assets/icon/淘票票icon.png",
-        link: "淘票票/",
+        text: "OISG",
+        icon: "/imges/OISG/OISG.png",
+        link: "OISG/",
       },
       {
         text: "邮院通",
