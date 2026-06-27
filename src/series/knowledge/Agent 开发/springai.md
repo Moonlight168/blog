@@ -1,8 +1,6 @@
 ---
 title: Spring AI 面试题
-icon: java
 ---
-
 # Spring AI 面试题
 
 ## Spring AI 是什么？
@@ -10,6 +8,7 @@ icon: java
 Spring AI 是 Spring 家族的 AI 应用开发框架，为 Java 开发者提供与 LLM 交互的标准化 API。
 
 核心特点：
+
 1. **统一 API** - 抽象不同 LLM 提供商
 2. **Spring 集成** - 与 Spring Boot 无缝集成
 3. **RAG 支持** - 完整的检索增强生成方案
@@ -52,17 +51,18 @@ public String search(String query) {
 RAG 是通过检索外部知识库来增强 LLM 回答质量的技术。
 
 流程：
-1. 文档加载 → 2. 文本分块 → 3. 向量化
-4. 存储到向量数据库
-5. 用户提问时检索相关片段
-6. LLM 基于检索内容生成回答
 
+1. 文档加载 → 2. 文本分块 → 3. 向量化
+2. 存储到向量数据库
+3. 用户提问时检索相关片段
+4. LLM 基于检索内容生成回答
 
 ## TextSplitter 的作用是什么？
 
 TextSplitter 将长文档切分成小片段，便于向量和检索。
 
 常用实现：
+
 1. **TokenTextSplitter** - 按 Token 数分割
 2. **RecursiveTextSplitter** - 递归分割
 3. **DelimiterTextSplitter** - 按分隔符分割
