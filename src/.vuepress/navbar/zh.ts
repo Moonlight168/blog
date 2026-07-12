@@ -76,7 +76,9 @@ export const zhNavbar = navbar([
     children: [
       { text: "面试宝典",icon: "/assets/icon/书本.png", link: "/series/knowledge/index.md" },
       ...(process.env.NODE_ENV === "development"
-          ? [{ text: "寻找Offer",icon: "/assets/icon/招聘.png", link: "/private/hires/README.md" }] // 本地显示
+          ? [
+              { text: "寻找 Offer", icon: "/assets/icon/招聘.png", link: "/private/hires/" },
+            ]
           : []),
     ],
   },

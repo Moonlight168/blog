@@ -46,7 +46,7 @@
 
 #### 环境要求
 
-- Node.js >= 20.19.0
+- Node.js >= 20.19.0（推荐 22+ 或 24+ 启用内置 `node:sqlite`）
 
 #### 运行步骤
 
@@ -54,11 +54,64 @@
  __init__.py# 安装依赖
 npm install
 
+# 初始化 SQLite 数据库（首次或重建时执行）
+npm run db:init
+
 # 启动开发服务器
 npm run docs:dev
 ```
 
 访问 http://localhost:8888 查看效果
+
+## 💼 Offer 投递管理子系统
+
+本站内置一个个人校招岗位管理仪表盘，访问 `/private/hires/` 即可使用。
+
+### 数据存储
+
+- 位置：`data/applications.db`（SQLite，git 忽略）
+- 表结构：`data/schema.sql`
+- 统一读写 API：`data/jobs-store.mjs`
+
+### 数据库操作
+
+```bash
+# 建库（首次或重建,会自动备份旧库到 .bak.*）
+npm run db:init
+```
+
+### 岗位拉取（mmx-cli + mmx text chat）
+
+```bash
+# 完整流程：搜索企业类型 → AI 提炼候选企业 → 搜招聘页 → AI 提炼岗位 → 入库
+npm run fetch:jobs
+
+# 只跑到"候选企业"阶段,查看 AI 找到了哪些公司（不搜岗位、不写库）
+npm run fetch:jobs -- --phase company
+
+# 只预览,不写库（搜索 + 提炼,完整跑但不入库）
+npm run fetch:jobs -- --dry-run
+
+# 限制处理数量（开发调试用,例如只处理前 50 条搜索结果）
+npm run fetch:jobs -- --limit 50
+
+# 组合使用:只跑候选企业 + 预览
+npm run fetch:jobs -- --phase company -- --dry-run
+```
+
+### 定时任务（Windows）
+
+```powershell
+# 以管理员身份运行 PowerShell,注册凌晨 04:00 自动拉取
+cd F:\MyBlogSite\vuepress-theme-hope\my-docs
+.\scripts\setup-task-scheduler.ps1
+
+# 查看任务
+Get-ScheduledTask -TaskName "OfferJobsFetch"
+
+# 删除任务
+Unregister-ScheduledTask -TaskName "OfferJobsFetch" -Confirm:$false
+```
 
 ## 🤝 贡献指南
 
