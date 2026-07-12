@@ -15,3 +15,9 @@ src/.vuepress/.temp/
 # 忽略本地文档
 src/private
 src/trash
+
+# 忽略运行时日志（按天滚动）
+data/logs/
+
+.superpowers/
+docs/

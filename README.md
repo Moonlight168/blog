@@ -46,13 +46,16 @@
 
 #### 环境要求
 
-- Node.js >= 20.19.0
+- Node.js >= 20.19.0（推荐 22+ 或 24+ 启用内置 `node:sqlite`）
 
 #### 运行步骤
 
 ```bash
  __init__.py# 安装依赖
 npm install
+
+# 初始化 SQLite 数据库（首次或重建时执行）
+npm run db:init
 
 # 启动开发服务器
 npm run docs:dev

@@ -122,3 +122,60 @@ table tbody tr:hover {
   height: auto; /* 禁止高度强制拉伸（保证比例） */
   object-fit: contain; /* 可选：确保图表完整显示，不裁剪 */
 }
+
+/* === Offer 入口页：五大方向卡片 === */
+.offer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+.offer-grid > ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: contents;
+}
+.offer-grid > ul > li {
+  border: 1px solid var(--vp-c-divider, #e5e7eb);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--vp-c-bg-soft, #fafafa);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.offer-grid > ul > li:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.offer-grid h3 {
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+  font-size: 1.05rem !important;
+}
+.offer-grid p {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--vp-c-text-muted, #666);
+}
+
+/* === 隔离全局 table 样式：避免破坏 naive-ui n-data-table === */
+.n-data-table table {
+  width: auto;
+  max-width: none;
+  table-layout: auto;
+  display: table;
+  max-height: none;
+  overflow: visible;
+}
+.n-data-table table thead {
+  position: static;
+}
+.n-data-table table th,
+.n-data-table table td {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--vp-c-divider, #e5e7eb);
+}

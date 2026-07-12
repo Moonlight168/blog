@@ -30,6 +30,7 @@ export const zhSidebar = sidebar({
         ? {
             "/private/finance/": "structure",
             "/private/hires/": "structure",
+            "/private/实习笔记/": "structure",
             "/private/ai/": "structure",
             "/trash/": "structure",
         }
