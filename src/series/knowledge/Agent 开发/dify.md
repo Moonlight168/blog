@@ -1,5 +1,5 @@
 ---
-title: Dify 面试题
+title: Dify
 ---
 # Dify 面试题
 
