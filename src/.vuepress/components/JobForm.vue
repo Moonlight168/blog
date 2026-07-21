@@ -58,19 +58,46 @@
         <n-input v-model:value="form.next_action" placeholder="如:7/20 笔试、等 HR 联系" maxlength="100" />
       </n-form-item>
 
+      <n-form-item label="进度链接" v-if="form.applied >= 1">
+        <n-input v-model:value="form.progress_url" placeholder="投递后填写（如笔试链接/HR 邮箱/招聘进度页），点击表格里的「已投递」直接打开" maxlength="200" />
+      </n-form-item>
+
       <n-form-item label="备注">
         <n-input
           v-model:value="form.notes"
           type="textarea"
           :rows="3"
-          placeholder="匹配度 / 投递方式 / 关注点"
-          maxlength="200"
+          placeholder="匹配度 / 投递方式 / 关注点 / JD 摘要"
+          maxlength="500"
           show-count
         />
       </n-form-item>
 
+      <n-form-item label="投递批次">
+        <n-select v-model:value="form.batch" :options="batchOptions" clearable />
+      </n-form-item>
+
       <n-form-item label="已投递" path="applied">
         <n-select v-model:value="form.applied" :options="appliedOptions" />
+      </n-form-item>
+
+      <n-form-item label="环节" v-if="form.applied !== 0">
+        <n-space style="width:100%" :wrap-item="false">
+          <n-select
+            v-model:value="form.round"
+            :options="roundOptions"
+            placeholder="第几轮"
+            style="flex:1;min-width:0"
+            clearable
+          />
+          <n-select
+            v-model:value="form.result"
+            :options="resultOptions"
+            placeholder="本轮结果"
+            style="flex:1;min-width:0"
+            clearable
+          />
+        </n-space>
       </n-form-item>
 
       <n-form-item label="信息来源">
@@ -132,7 +159,44 @@ const appliedOptions = [
   { label: '已笔试', value: 2 },
   { label: '已面试', value: 3 },
   { label: '已 offer', value: 4 },
-  { label: '已拒', value: 5 },
+  { label: '已结束', value: 5 },
+]
+const batchOptions = [
+  { label: '— 不选', value: null },
+  { label: '实习', value: '实习' },
+  { label: '27届秋招提前批', value: '27届秋招提前批' },
+  { label: '27届秋招', value: '27届秋招' },
+  { label: '27届春招', value: '27届春招' },
+  { label: '未开始', value: '未开始' },
+]
+
+// result 枚举:NULL=进行中,正数=过,负数=挂/拒
+const resultOptions = [
+  { label: '— 进行中（不选）', value: null },
+  { label: '✓ 简历过', value: 1 },
+  { label: '✓ 笔试过', value: 2 },
+  { label: '✓ 一面过', value: 3 },
+  { label: '✓ 二面过', value: 4 },
+  { label: '✓ 终面过', value: 5 },
+  { label: '✓ HR 面过', value: 6 },
+  { label: '✗ 简历挂', value: -1 },
+  { label: '✗ 笔试挂', value: -2 },
+  { label: '✗ 一面挂', value: -3 },
+  { label: '✗ 二面挂', value: -4 },
+  { label: '✗ 终面挂', value: -5 },
+  { label: '✗ HR 面挂', value: -6 },
+  { label: '↩ 主动撤回', value: -7 },
+  { label: '↩ 我拒 offer', value: -8 },
+  { label: '↩ offer 撤回', value: -9 },
+  { label: '? 其他', value: 99 },
+]
+const roundOptions = [
+  { label: '— 不限（不选）', value: null },
+  { label: '一面', value: 1 },
+  { label: '二面', value: 2 },
+  { label: '三面', value: 3 },
+  { label: '终面', value: 4 },
+  { label: 'HR 面', value: 5 },
 ]
 const sourceOptions = [
   { label: '手动', value: 'manual' },
@@ -158,10 +222,14 @@ const form = reactive({
   link: '',
   notes: '',
   applied: 0,
+  round: null,
+  result: null,
+  batch: null,
   source: 'manual',
   verified: 0,
   salary_range: '',
   next_action: '',
+  progress_url: '',
 })
 
 const rules = {
@@ -185,10 +253,14 @@ watch(
         form.link = props.job.link || ''
         form.notes = props.job.notes || ''
         form.applied = Number(props.job.applied ?? 0)
+        form.round = props.job.round == null ? null : Number(props.job.round)
+        form.result = props.job.result == null ? null : Number(props.job.result)
+        form.batch = props.job.batch == null || props.job.batch === '' ? null : props.job.batch
         form.source = props.job.source || 'manual'
         form.verified = Number(props.job.verified ?? 0)
         form.salary_range = props.job.salary_range || ''
         form.next_action = props.job.next_action || ''
+        form.progress_url = props.job.progress_url || ''
       } else {
         form.category = '中小厂'
         form.city = '广州市'
@@ -199,10 +271,14 @@ watch(
         form.link = ''
         form.notes = ''
         form.applied = 0
+        form.round = null
+        form.result = null
+        form.batch = null
         form.source = 'manual'
         form.verified = 0
         form.salary_range = ''
         form.next_action = ''
+        form.progress_url = ''
       }
     }
   },
@@ -231,10 +307,14 @@ const onSubmit = async () => {
     link: form.link.trim() || null,
     notes: form.notes.trim(),
     applied: Number(form.applied),
+    round: form.round == null || form.round === '' ? null : Number(form.round),
+    result: form.result == null || form.result === '' ? null : Number(form.result),
+    batch: form.batch == null || form.batch === '' ? null : form.batch,
     source: form.source,
     verified: Number(form.verified),
     salary_range: form.salary_range.trim(),
     next_action: form.next_action.trim(),
+    progress_url: form.progress_url.trim(),
   })
 }
 </script>

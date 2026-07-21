@@ -1,0 +1,48 @@
+{
+  "_comment": "jobs-cli.mjs insert 用的岗位 JSON 模板。所有字段都列出,枚举值见 _options 注释;不传的字段 CLI 会用默认值兜底,但显式写更清晰。新增岗位时复制此文件改 _comment 和具体字段。",
+
+  "category": "小而美企业",
+  "_category_options": ["公务员", "国企", "事业单位", "中小厂", "小而美企业"],
+
+  "city": "深圳市",
+  "_city_options": ["广州市", "深圳市", "佛山市", "清远市", "跨地市"],
+
+  "company": "正浩 EcoFlow",
+  "_company_note": "公司全称,≤120 字符",
+
+  "position": "后端工程师",
+  "_position_note": "岗位全称,≤120 字符",
+
+  "deadline": null,
+  "_deadline_note": "YYYY-MM-DD 或 null;无截止日期填 null",
+
+  "education": "本科及以上",
+  "_education_options": ["不限", "专科", "本科", "本科及以上", "硕士", "博士"],
+
+  "weekend": "周末双休",
+  "_weekend_options": ["周末双休", "单休", "大小周"],
+  "_weekend_note": "未知就填 '周末双休'(默认);确实未知可填 null",
+
+  "link": "https://jobs.ecoflow.com/602892/position/list?keywords=&category=&location=&project=7660773517268699430&type=&job_hot_flag=&current=1&limit=10&functionCategory=&tag=",
+  "_link_note": "投递链接,≤500 字符",
+
+  "salary_range": "面议",
+  "_salary_range_note": "如 '15-20k×13';JD 没说薪资的统一填 '面议'",
+
+  "next_action": "尽快投递(链接已备)",
+  "_next_action_note": "下一步动作,≤200 字符;如 '7/20 笔试'、'等 HR 联系'",
+
+  "notes": "能源/矿产/环保/农林牧渔研发线。JD:1) 后端研发(需求沟通/功能设计/开发);2) 高并发架构设计/线上维护/性能调优;3) 与产品/测试/运营密切沟通。任职:2027届本科+ 自动化/计算机/软工等相关专业;Java 后台开发基本能力;数据结构与算法基础。",
+  "_notes_note": "JD 摘要 / 匹配度 / 投递方式,≤500 字符",
+
+  "applied": 0,
+  "_applied_options": {"0": "待投递", "1": "已投递", "2": "已笔试", "3": "已面试", "4": "已 offer", "5": "已拒"},
+
+  "source": "manual",
+  "_source_options": {"manual": "手动录入", "fetch": "AI 抓取"},
+
+  "verified": 0,
+  "_verified_options": {"0": "待验证", "1": "已验证", "2": "失效"},
+
+  "_id_note": "id 不传会自动生成 'job-manual-<公司slug>-<岗位slug>-<timestamp>';想自己指定才填"
+}
