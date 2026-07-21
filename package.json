@@ -13,8 +13,10 @@
     "docs:dev": "vuepress-vite dev src",
     "docs:update-package": "npx vp-update",
     "db:init": "node data/init-db.mjs",
+    "jobs:cli": "node scripts/jobs-cli.mjs",
     "fetch:jobs": "node src/private/hires/offer/fetch.mjs",
-    "verify:jobs": "node src/private/hires/offer/verify-jobs.mjs"
+    "verify:jobs": "node src/private/hires/offer/verify-jobs.mjs",
+    "enrich:jobs": "node src/private/hires/offer/enrich-jobs.mjs"
   },
   "devDependencies": {
     "@vuepress/bundler-vite": "2.0.0-rc.26",

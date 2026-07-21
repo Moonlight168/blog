@@ -1,6 +1,6 @@
 -- ============================================================
 --  Offer 投递管理系统 — SQLite 表结构
---  日期: 2026-07-11
+--  日期: 2026-07-19 (新增 result/round + batch 投递批次字段)
 --  说明: 纯结构，无数据；执行 init-db.mjs 创建空库
 -- ============================================================
 
@@ -24,10 +24,13 @@ CREATE TABLE IF NOT EXISTS jobs (
   weekend         TEXT,                            -- 周末双休 / 单休 / 大小周 / NULL (未知)
   link            TEXT,
   notes           TEXT DEFAULT '',
-  applied         INTEGER NOT NULL DEFAULT 0,     -- 0=待投递 1=已投递 2=已笔试 3=已面试 4=已 offer 5=已拒
+  applied         INTEGER NOT NULL DEFAULT 0,     -- 0=待投递 1=已投递 2=已笔试 3=已面试 4=已 offer 5=已结束
+  round           INTEGER,                          -- 当前第几轮: 1=一面 2=二面 3=三面 4=终面 5=HR 面; NULL=非面试环节或未开始
+  result          INTEGER,                          -- 本轮结果: NULL=进行中; 正数=过(1简历过 2笔试过 ...); 负数=挂/拒(-1主动撤回 -2我拒offer -99其他挂因)
+  batch           TEXT,                              -- 投递批次: 实习 / 27届秋招提前批 / 27届秋招 / 27届春招 / 未开始(招聘未启动); NULL=未分类
   is_placeholder  INTEGER NOT NULL DEFAULT 0,     -- 1 = 占位条目（_待补充）
   source          TEXT NOT NULL DEFAULT 'manual', -- manual / fetch / placeholder
-  verified        INTEGER NOT NULL DEFAULT 0,     -- 0=待验证 1=已验证 2=失效
+  verified        INTEGER NOT NULL DEFAULT 1,     -- 0=待验证 1=已验证 2=失效
   salary_range    TEXT DEFAULT '',                -- 薪资范围,如 "15-20k×13" 或 "面议"
   next_action     TEXT DEFAULT '',                -- 下一步动作,如 "7/20 笔试"、"等 HR 联系"
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
@@ -44,6 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_category       ON jobs(category);
 CREATE INDEX IF NOT EXISTS idx_jobs_city           ON jobs(city);
 CREATE INDEX IF NOT EXISTS idx_jobs_deadline      ON jobs(deadline);
 CREATE INDEX IF NOT EXISTS idx_jobs_applied       ON jobs(applied);
+CREATE INDEX IF NOT EXISTS idx_jobs_result        ON jobs(result);
 CREATE INDEX IF NOT EXISTS idx_jobs_placeholder   ON jobs(is_placeholder);
 CREATE INDEX IF NOT EXISTS idx_jobs_source        ON jobs(source);
 CREATE INDEX IF NOT EXISTS idx_jobs_updated_at    ON jobs(updated_at);
@@ -81,6 +85,30 @@ CREATE TABLE IF NOT EXISTS search_cache (
 CREATE INDEX IF NOT EXISTS idx_search_cache_last_seen ON search_cache(last_seen);
 
 -- ------------------------------------------------------------
+--  打卡：固定作息模板
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS checkin_template (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  time_range  TEXT NOT NULL,                      -- "20:00-20:30"
+  title       TEXT NOT NULL,
+  sort_order  INTEGER NOT NULL DEFAULT 0
+);
+
+-- ------------------------------------------------------------
+--  打卡：每天每段完成记录（slot_id 为 NULL = 当日临时任务）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS checkin_log (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  date     TEXT NOT NULL,                          -- YYYY-MM-DD
+  slot_id  INTEGER,                                -- 关联 checkin_template.id；NULL = 临时任务
+  title    TEXT,                                   -- 临时任务标题
+  done     INTEGER NOT NULL DEFAULT 0              -- 0/1
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkin_log_date ON checkin_log(date);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_checkin_slot ON checkin_log(date, slot_id) WHERE slot_id IS NOT NULL;
+
+-- ------------------------------------------------------------
 --  元信息表（记录 schema 版本、最后执行时间等）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS meta (
@@ -89,5 +117,5 @@ CREATE TABLE IF NOT EXISTS meta (
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '2');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '4');
 INSERT OR IGNORE INTO meta(key, value) VALUES ('created_at', datetime('now'));

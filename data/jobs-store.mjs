@@ -56,7 +56,7 @@ export function init(dbPath) {
   // 老库迁移：jobs 表加 verified 列（如果没有）
   const cols = _db.prepare("PRAGMA table_info(jobs)").all().map(c => c.name)
   if (!cols.includes('verified')) {
-    _db.exec("ALTER TABLE jobs ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
+    _db.exec("ALTER TABLE jobs ADD COLUMN verified INTEGER NOT NULL DEFAULT 1")
   }
   if (!cols.includes('salary_range')) {
     _db.exec("ALTER TABLE jobs ADD COLUMN salary_range TEXT DEFAULT ''")
@@ -64,8 +64,24 @@ export function init(dbPath) {
   if (!cols.includes('next_action')) {
     _db.exec("ALTER TABLE jobs ADD COLUMN next_action TEXT DEFAULT ''")
   }
+  if (!cols.includes('progress_url')) {
+    _db.exec("ALTER TABLE jobs ADD COLUMN progress_url TEXT DEFAULT ''")
+  }
+  if (!cols.includes('applied_at')) {
+    _db.exec("ALTER TABLE jobs ADD COLUMN applied_at TEXT DEFAULT ''")
+  }
+  if (!cols.includes('round')) {
+    _db.exec("ALTER TABLE jobs ADD COLUMN round INTEGER")
+  }
+  if (!cols.includes('result')) {
+    _db.exec("ALTER TABLE jobs ADD COLUMN result INTEGER")
+  }
+  if (!cols.includes('batch')) {
+    _db.exec("ALTER TABLE jobs ADD COLUMN batch TEXT DEFAULT NULL")
+  }
   // 老库迁移：idx_jobs_verified 索引
   _db.exec("CREATE INDEX IF NOT EXISTS idx_jobs_verified ON jobs(verified)")
+  _db.exec("CREATE INDEX IF NOT EXISTS idx_jobs_result ON jobs(result)")
 
   return _db
 }
@@ -80,6 +96,7 @@ export function close() {
 
 // ===== 字段清洗 =====
 const ALLOWED_WEEKEND = ['周末双休', '单休', '大小周']
+const ALLOWED_BATCH = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']
 
 function sanitize(raw) {
   if (!raw || typeof raw !== 'object') return null
@@ -87,11 +104,20 @@ function sanitize(raw) {
   const weekend = ALLOWED_WEEKEND.includes(w) ? w : null
   // applied: 0/1/2/3/4/5
   const applied = [0,1,2,3,4,5].includes(Number(raw.applied)) ? Number(raw.applied) : 0
+  // round: 1=一面 2=二面 3=三面 4=终面 5=HR 面;其他值(NULL/undefined/NaN/越界)→null
+  const _round = raw.round == null ? null : Number(raw.round)
+  const round = [1,2,3,4,5].includes(_round) ? _round : null
+  // result: NULL=进行中;正数=过(1简历过 2笔试过 ...);负数=挂(-1主动撤回 -2我拒offer -99其他)
+  const _result = raw.result == null ? null : Number(raw.result)
+  const result = _result != null && Number.isInteger(_result) && _result >= -99 && _result <= 99 ? _result : null
+  // batch: 实习/27届秋招提前批/27届秋招/27届春招;其他/null/空字符串→null
+  const _batch = raw.batch == null || raw.batch === '' ? null : String(raw.batch).trim()
+  const batch = ALLOWED_BATCH.includes(_batch) ? _batch : null
   // source: manual / fetch / placeholder
   const src = String(raw.source ?? 'manual')
   const source = ['manual', 'fetch', 'placeholder'].includes(src) ? src : 'manual'
   // verified: 0/1/2
-  const verified = [0,1,2].includes(Number(raw.verified)) ? Number(raw.verified) : 0
+  const verified = [0,1,2].includes(Number(raw.verified)) ? Number(raw.verified) : 1
   const j = {
     id:        String(raw.id        ?? '').slice(0, 64),
     category:  String(raw.category  ?? '').slice(0, 32),
@@ -104,10 +130,15 @@ function sanitize(raw) {
     link:      raw.link ? String(raw.link).slice(0, 500) : null,
     notes:     String(raw.notes     ?? '').slice(0, 500),
     applied,
+    round,
+    result,
+    batch,
     source,
     verified,
     salary_range: String(raw.salary_range ?? '').slice(0, 80),
     next_action:  String(raw.next_action  ?? '').slice(0, 200),
+    progress_url:  String(raw.progress_url  ?? '').slice(0, 500),
+    applied_at:    String(raw.applied_at    ?? '').slice(0, 25),
   }
   if (!j.id || !j.category || !j.city || !j.company || !j.position) return null
   return j
@@ -192,6 +223,9 @@ export const jobs = {
     return rows.map(r => ({
       ...r,
       applied: Number(r.applied),
+      round: r.round == null ? null : Number(r.round),
+      result: r.result == null ? null : Number(r.result),
+      batch: r.batch == null || r.batch === '' ? null : r.batch,
       is_placeholder: !!r.is_placeholder,
       verified: Number(r.verified),
     }))
@@ -201,7 +235,7 @@ export const jobs = {
     const db = init()
     const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id)
     if (!row) return null
-    return { ...row, applied: !!row.applied, is_placeholder: !!row.is_placeholder }
+    return { ...row, applied: !!row.applied, is_placeholder: !!row.is_placeholder, round: row.round == null ? null : Number(row.round), result: row.result == null ? null : Number(row.result), batch: row.batch == null || row.batch === '' ? null : row.batch }
   },
 
   /**
@@ -213,14 +247,16 @@ export const jobs = {
     if (!j) return null
     const db = init()
     const stmt = db.prepare(`
-      INSERT INTO jobs (id, category, city, company, position, deadline, education, weekend, link, notes, applied, source, verified, salary_range, next_action, updated_at)
-      VALUES (@id, @category, @city, @company, @position, @deadline, @education, @weekend, @link, @notes, @applied, @source, @verified, @salary_range, @next_action, datetime('now'))
+      INSERT INTO jobs (id, category, city, company, position, deadline, education, weekend, link, notes, applied, round, result, batch, source, verified, salary_range, next_action, progress_url, applied_at, updated_at)
+      VALUES (@id, @category, @city, @company, @position, @deadline, @education, @weekend, @link, @notes, @applied, @round, @result, @batch, @source, @verified, @salary_range, @next_action, @progress_url, @applied_at, datetime('now'))
       ON CONFLICT(id) DO UPDATE SET
         category=excluded.category, city=excluded.city, company=excluded.company,
         position=excluded.position, deadline=excluded.deadline, education=excluded.education,
         weekend=excluded.weekend, link=excluded.link, notes=excluded.notes,
-        applied=excluded.applied, source=excluded.source, verified=excluded.verified,
+        applied=excluded.applied, round=excluded.round, result=excluded.result, batch=excluded.batch,
+        source=excluded.source, verified=excluded.verified,
         salary_range=excluded.salary_range, next_action=excluded.next_action,
+        progress_url=excluded.progress_url, applied_at=excluded.applied_at,
         updated_at=datetime('now')
     `)
     const result = stmt.run(j)
@@ -260,12 +296,13 @@ export const jobs = {
 
         const id = raw.id || `job-fetch-${Date.now()}-${added}`
         db.prepare(`
-          INSERT INTO jobs (id, category, city, company, position, deadline, education, weekend, link, notes, applied, source, verified, salary_range, next_action, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, datetime('now'))
+          INSERT INTO jobs (id, category, city, company, position, deadline, education, weekend, link, notes, applied, round, result, batch, source, verified, salary_range, next_action, progress_url, applied_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, '', datetime('now'))
         `).run(
           id, j.category, j.city, j.company, j.position, j.deadline,
-          j.education || '本科及以上', j.weekend, j.link, j.notes, source, j.verified ?? 0,
-          j.salary_range || '', j.next_action || ''
+          j.education || '本科及以上', j.weekend, j.link, j.notes, j.round, j.result, j.batch,
+          source, j.verified ?? 0,
+          j.salary_range || '', j.next_action || '', j.progress_url || ''
         )
         added++
       }
@@ -326,11 +363,12 @@ export const jobs = {
         COUNT(*) AS total,
         SUM(CASE WHEN is_placeholder = 0 THEN 1 ELSE 0 END) AS real_count,
         SUM(CASE WHEN is_placeholder = 1 THEN 1 ELSE 0 END) AS placeholder_count,
-        SUM(CASE WHEN applied = 1 THEN 1 ELSE 0 END) AS applied_count,
+        SUM(CASE WHEN applied >= 1 AND applied <= 5 THEN 1 ELSE 0 END) AS applied_count,
         SUM(CASE WHEN is_placeholder = 0 AND applied = 0 THEN 1 ELSE 0 END) AS pending_count,
         SUM(CASE WHEN is_placeholder = 0 AND applied = 0 AND deadline IS NOT NULL
                  AND julianday(deadline) - julianday('now') BETWEEN 0 AND 7
-                 THEN 1 ELSE 0 END) AS urgent_count
+                 THEN 1 ELSE 0 END) AS urgent_count,
+        SUM(CASE WHEN result IS NOT NULL AND result < 0 THEN 1 ELSE 0 END) AS rejected_count
       FROM jobs
     `).get()
   },

@@ -4,6 +4,7 @@ import theme from "./theme.js";
 import { getDirname, path } from 'vuepress/utils'
 import { registerComponentsPlugin } from "@vuepress/plugin-register-components";
 import { jobs, fetchLog } from '../../data/jobs-store.mjs';
+import { checkin } from '../../data/checkin-store.mjs';
 
 const __dirname = import.meta.dirname || getDirname(import.meta.url)
 const componentsDir = path.resolve(__dirname, 'components');
@@ -52,11 +53,19 @@ async function handleApi(req, res) {
   }
 
   // ---------- /jobs/delete ----------
+  // 支持 { id } 或 { ids: [] }；批量时循环单条 delete，沿用现有行为
   if (pathname === '/jobs/delete' && method === 'POST') {
     try {
-      const { id } = await readBody(req)
-      if (!id) return json(res, 400, { success: false, error: 'id 必填' })
-      return json(res, 200, { success: jobs.delete(id) })
+      const body = await readBody(req)
+      const ids = Array.isArray(body.ids)
+        ? body.ids.filter(v => v !== null && v !== undefined)
+        : (body.id !== undefined && body.id !== null ? [body.id] : [])
+      if (ids.length === 0) return json(res, 400, { success: false, error: 'id / ids 必填' })
+      let deleted = 0
+      for (const id of ids) {
+        if (jobs.delete(id)) deleted++
+      }
+      return json(res, 200, { success: true, deleted, total: ids.length })
     } catch (e) {
       return json(res, 500, { success: false, error: e.message })
     }
@@ -145,6 +154,106 @@ async function handleApi(req, res) {
   if (pathname === '/fetch-log' && method === 'GET') {
     try {
       return json(res, 200, { success: true, data: fetchLog.recent(20) })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  // ---------- /companies — 扫描 src/private/hires/offer/**/*.md,返回 [{ name, route }] ----------
+  if (pathname === '/companies' && method === 'GET') {
+    try {
+      const { readdirSync, statSync, readFileSync } = await import('node:fs')
+      const { join, relative, sep } = await import('node:path')
+      const OFFER_DIR = join(process.cwd(), 'src/private/hires/offer')
+      const items = []
+      const walk = (dir) => {
+        for (const f of readdirSync(dir)) {
+          const p = join(dir, f)
+          if (statSync(p).isDirectory()) walk(p)
+          else if (f.endsWith('.md')) {
+            const rel = relative(OFFER_DIR, p).split(sep).join('/').replace(/\.md$/, '')
+            const name = f.replace(/\.md$/, '').trim()
+            items.push({ name, route: '/private/hires/offer/' + rel })
+          }
+        }
+      }
+      try { walk(OFFER_DIR) } catch (e) { /* dir not exist */ }
+      return json(res, 200, { success: true, data: items })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  // ---------- 打卡 /checkin ----------
+  if (pathname === '/checkin' && method === 'GET') {
+    try {
+      const date = u.searchParams.get('date')
+      return json(res, 200, { success: true, ...checkin.getDay(date) })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  if (pathname === '/checkin/toggle' && method === 'POST') {
+    try {
+      const { date, slotId, logId } = await readBody(req)
+      checkin.toggle({ date, slotId, logId })
+      return json(res, 200, { success: true })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  if (pathname === '/checkin/slot-title' && method === 'POST') {
+    try {
+      const { date, slotId, title } = await readBody(req)
+      checkin.setSlotTitle({ date, slotId, title })
+      return json(res, 200, { success: true })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  if (pathname === '/checkin/heatmap' && method === 'GET') {
+    try {
+      const from = u.searchParams.get('from')
+      const to = u.searchParams.get('to')
+      return json(res, 200, { success: true, data: checkin.heatmap(from, to) })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  if (pathname === '/checkin/template' && method === 'GET') {
+    try {
+      return json(res, 200, { success: true, data: checkin.getTemplate() })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  if (pathname === '/checkin/template' && method === 'POST') {
+    try {
+      const { rows } = await readBody(req)
+      return json(res, 200, { success: true, data: checkin.setTemplate(rows) })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  if (pathname === '/checkin/task' && method === 'POST') {
+    try {
+      const { date, title } = await readBody(req)
+      return json(res, 200, { success: true, ...checkin.addTask({ date, title }) })
+    } catch (e) {
+      return json(res, 500, { success: false, error: e.message })
+    }
+  }
+
+  if (pathname === '/checkin/task/delete' && method === 'POST') {
+    try {
+      const { logId } = await readBody(req)
+      return json(res, 200, { success: checkin.deleteTask(logId) })
     } catch (e) {
       return json(res, 500, { success: false, error: e.message })
     }

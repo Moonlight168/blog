@@ -250,6 +250,8 @@ Spring 的依赖注入（DI）通过 IoC 容器 + 反射机制，在运行时动
    - 无法通过缓存机制复用对象
    - 会导致无限递归创建，最终栈溢出
 
+→ [回答历史](../../../series/答题历史/框架/spring-答题记录.md#spring-循环依赖怎么解决)
+
 ## Spring 注入 Bean 的方式
 
 1. **构造器注入（推荐）**：适合必需依赖，保证对象创建时依赖完整
@@ -444,6 +446,15 @@ Spring Bean 支持 6 种作用域：
 
 @Transactional注解通过四种机制控制事务行为：
 
+### `@Transactional` 失效的常见原因？
+
+1. **类内部调用**——不经过 AOP 代理。
+2. **非 public 方法**——Spring 默认只代理 public。
+3. **异常被吞**——try-catch 没往外抛；默认只回滚 RuntimeException。
+4. **数据库引擎不支持**——如 MyISAM。
+
+→ [回答历史](../../../series/答题历史/框架/spring-答题记录.md#transactional-失效的常见原因)
+
 1. **传播机制（Propagation）**
 
    控制事务方法之间的调用关系
@@ -482,3 +493,13 @@ ApplicationContext 的原理是：**以 BeanFactory 为核心，通过统一的 
 在实际项目中我主要通过注解方式使用 ApplicationContext，由容器在启动时统一管理 Bean。
 **其中一个典型用法就是 AOP**，比如通过 `@Aspect` + `@Around` 实现日志、鉴权和事务控制。
 **Spring 会在 ApplicationContext 启动过程中，通过 BeanPostProcessor 对目标 Bean 进行代理增强**，我只需要声明切面即可，不需要手动干预对象创建逻辑。
+
+## JWT 认证流程？token 里能放敏感信息吗？
+
+1. 登录 → 后端校验 → 生成 JWT（Header + Payload + Signature）→ 返回前端
+2. 前端每次请求带 `Authorization: Bearer <token>`
+3. 过滤器拦截 → 验签 → 解析用户信息 → 放入 SecurityContext
+
+**不能放敏感信息**——JWT 是 Base64 编码不是加密，任何人解码可见 payload。另外需要配合：短 TTL + refresh token、生产换掉默认密钥。
+
+→ [回答历史](../../../series/答题历史/框架/spring-答题记录.md#jwt-认证流程token-里能放敏感信息吗)

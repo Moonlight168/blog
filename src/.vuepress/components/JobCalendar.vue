@@ -2,34 +2,98 @@
   <n-config-provider :theme="null" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
       <div class="offer-dashboard">
-        <!-- 统计卡片 -->
+        <!-- 统计卡片：4 张全部随筛选条件变化；占比以全部岗位为分母；hover 显示百分比 -->
         <n-grid x-gap="12" y-gap="12" cols="1 s:2 m:4" responsive="screen" class="stats-row">
           <n-gi>
             <n-card hoverable embedded>
-              <n-statistic label="总岗位" :value="stats.real_count">
-                <template #prefix><n-icon><Stack /></n-icon></template>
-              </n-statistic>
+              <div class="stat-card">
+                <div class="stat-card-head">
+                  <n-icon :size="16" class="stat-card-icon"><Stack /></n-icon>
+                  <span class="stat-card-label">总岗位</span>
+                </div>
+                <n-tooltip :show="hover.real" trigger="manual" placement="right">
+                  <template #trigger>
+                    <div
+                      class="stat-ring"
+                      :style="ringStyle(filteredStats.real, stats.real_count, 'normal')"
+                      @mouseenter="hover.real = true"
+                      @mouseleave="hover.real = false"
+                    >
+                      <span class="stat-value">{{ filteredStats.real }}</span>
+                    </div>
+                  </template>
+                  {{ formatRatio(filteredStats.real, stats.real_count) }}
+                </n-tooltip>
+              </div>
             </n-card>
           </n-gi>
           <n-gi>
             <n-card hoverable embedded>
-              <n-statistic label="已投递" :value="stats.applied_count">
-                <template #prefix><n-icon><Check /></n-icon></template>
-              </n-statistic>
+              <div class="stat-card">
+                <div class="stat-card-head">
+                  <n-icon :size="16" class="stat-card-icon"><Check /></n-icon>
+                  <span class="stat-card-label">已投递</span>
+                </div>
+                <n-tooltip :show="hover.applied" trigger="manual" placement="right">
+                  <template #trigger>
+                    <div
+                      class="stat-ring"
+                      :style="ringStyle(filteredStats.applied, stats.real_count, 'normal')"
+                      @mouseenter="hover.applied = true"
+                      @mouseleave="hover.applied = false"
+                    >
+                      <span class="stat-value">{{ filteredStats.applied }}</span>
+                    </div>
+                  </template>
+                  {{ formatRatio(filteredStats.applied, stats.real_count) }}
+                </n-tooltip>
+              </div>
             </n-card>
           </n-gi>
           <n-gi>
             <n-card hoverable embedded>
-              <n-statistic label="待投递" :value="stats.pending_count">
-                <template #prefix><n-icon><Clock /></n-icon></template>
-              </n-statistic>
+              <div class="stat-card">
+                <div class="stat-card-head">
+                  <n-icon :size="16" class="stat-card-icon"><Clock /></n-icon>
+                  <span class="stat-card-label">待投递</span>
+                </div>
+                <n-tooltip :show="hover.pending" trigger="manual" placement="right">
+                  <template #trigger>
+                    <div
+                      class="stat-ring"
+                      :style="ringStyle(filteredStats.pending, stats.real_count, 'normal')"
+                      @mouseenter="hover.pending = true"
+                      @mouseleave="hover.pending = false"
+                    >
+                      <span class="stat-value">{{ filteredStats.pending }}</span>
+                    </div>
+                  </template>
+                  {{ formatRatio(filteredStats.pending, stats.real_count) }}
+                </n-tooltip>
+              </div>
             </n-card>
           </n-gi>
           <n-gi>
             <n-card hoverable embedded class="urgent-card">
-              <n-statistic label="7天内截止" :value="stats.urgent_count">
-                <template #prefix><n-icon><AlertTriangle /></n-icon></template>
-              </n-statistic>
+              <div class="stat-card">
+                <div class="stat-card-head">
+                  <n-icon :size="16" class="stat-card-icon"><AlertTriangle /></n-icon>
+                  <span class="stat-card-label">已挂</span>
+                </div>
+                <n-tooltip :show="hover.rejected" trigger="manual" placement="right">
+                  <template #trigger>
+                    <div
+                      class="stat-ring"
+                      :style="ringStyle(filteredStats.rejected, stats.real_count, 'urgent')"
+                      @mouseenter="hover.rejected = true"
+                      @mouseleave="hover.rejected = false"
+                    >
+                      <span class="stat-value">{{ filteredStats.rejected }}</span>
+                    </div>
+                  </template>
+                  {{ formatRatio(filteredStats.rejected, stats.real_count) }}
+                </n-tooltip>
+              </div>
             </n-card>
           </n-gi>
         </n-grid>
@@ -38,9 +102,29 @@
         <n-space wrap class="actions-row">
           <n-button type="primary" @click="openNew"><template #icon><n-icon><Plus /></n-icon></template>新增岗位</n-button>
           <n-button @click="refreshFromDB" :loading="reloading"><template #icon><n-icon><Refresh /></n-icon></template>刷新数据</n-button>
-          <n-button @click="refreshFromWeb" :loading="refreshing"><template #icon><n-icon><Globe /></n-icon></template>拉取最新岗位</n-button>
+          <n-button @click="refreshFromWeb" :loading="refreshing" disabled><template #icon><n-icon><Globe /></n-icon></template>拉取最新岗位</n-button>
           <n-input v-model:value="keyword" placeholder="搜索 公司 / 岗位 / 备注" clearable style="width: 260px" />
           <n-button quaternary type="primary" @click="resetFilters"><template #icon><n-icon><FilterOff /></n-icon></template>重置筛选</n-button>
+          <n-popconfirm
+            @positive-click="onBulkDelete"
+            :positive-button-props="{ loading: bulkDeleting }"
+            :show="bulkPopOpen"
+            @update:show="(v) => (bulkPopOpen = v)"
+          >
+            <template #trigger>
+              <n-button
+                type="error"
+                ghost
+                :loading="bulkDeleting"
+                :disabled="checkedIds.length === 0"
+                @click="bulkPopOpen = checkedIds.length > 0"
+              >
+                <template #icon><n-icon><Trash /></n-icon></template>
+                批量删除 ({{ checkedIds.length }})
+              </n-button>
+            </template>
+            确认删除选中的 {{ checkedIds.length }} 条岗位？此操作不可撤销。
+          </n-popconfirm>
         </n-space>
 
         <!-- 筛选 -->
@@ -106,6 +190,33 @@
               />
             </div>
             <div class="filter-cell">
+              <span class="filter-label">环节</span>
+              <n-select
+                v-model:value="filter.result"
+                :options="resultFilterOptions"
+                multiple size="small" placeholder="全部"
+                :max-tag-count="2"
+              />
+            </div>
+            <div class="filter-cell">
+              <span class="filter-label">轮次</span>
+              <n-select
+                v-model:value="filter.round"
+                :options="stageFilterOptions"
+                multiple size="small" placeholder="全部"
+                :max-tag-count="2"
+              />
+            </div>
+            <div class="filter-cell">
+              <span class="filter-label">批次</span>
+              <n-select
+                v-model:value="filter.batch"
+                :options="batchFilterOptions"
+                multiple size="small" placeholder="全部"
+                :max-tag-count="2"
+              />
+            </div>
+            <div class="filter-cell">
               <span class="filter-label">验证</span>
               <n-select
                 v-model:value="filter.verified"
@@ -128,18 +239,76 @@
         <n-card :bordered="true" class="table-card" embedded>
           <n-data-table
             :columns="columns"
-            :data="sortedJobs"
+            :data="pagedJobs"
             :row-key="(row) => row.id"
             :bordered="false"
             :single-line="false"
             size="small"
             :row-props="rowProps"
-            :pagination="pagination"
+            :pagination="false"
+            :checked-row-keys="checkedIds"
+            @update:checked-row-keys="(keys) => (checkedIds = keys)"
             @update:sorter="onSorterChange"
           />
+          <n-pagination
+            v-if="filteredJobs.length > 0"
+            class="table-pagination"
+            :page="tablePage"
+            :page-size="tablePageSize"
+            :item-count="filteredJobs.length"
+            :page-sizes="[10, 20, 50, 100]"
+            show-size-picker
+            show-quick-jumper
+            @update:page="(p) => (tablePage = p)"
+            @update:page-size="(s) => { tablePageSize = s; tablePage = 1 }"
+          >
+            <template #prefix>共 {{ filteredJobs.length }} 条</template>
+          </n-pagination>
         </n-card>
 
         <JobForm v-model:show="formOpen" :job="editingJob" @save="onSave" />
+        <n-modal
+          v-model:show="applyModalOpen"
+          preset="card"
+          :title="applyModalJob ? `🚀 去投递 — ${applyModalJob.company} · ${applyModalJob.position}` : '去投递'"
+          style="width:560px; max-width:calc(100vw - 32px)"
+          @update:show="(v) => { if (!v) closeApplyModal() }"
+        >
+          <div v-if="applyModalJob" class="apply-modal-content">
+            <n-descriptions :column="1" bordered size="small">
+              <n-descriptions-item label="公司">{{ applyModalJob.company }}</n-descriptions-item>
+              <n-descriptions-item label="岗位">{{ applyModalJob.position }}</n-descriptions-item>
+              <n-descriptions-item label="工作地">{{ applyModalJob.city }} · {{ applyModalJob.category }}</n-descriptions-item>
+              <n-descriptions-item v-if="applyModalJob.salary_range" label="薪资">{{ applyModalJob.salary_range }}</n-descriptions-item>
+              <n-descriptions-item v-if="applyModalJob.deadline" label="截止日期">{{ applyModalJob.deadline }}</n-descriptions-item>
+              <n-descriptions-item label="投递链接">
+                <a :href="applyModalJob.link" target="_blank" rel="noopener" style="color:#18a058;word-break:break-all">{{ applyModalJob.link }}</a>
+              </n-descriptions-item>
+            </n-descriptions>
+            <n-space justify="end" style="margin-top:16px">
+              <n-button @click="closeApplyModal">关闭</n-button>
+              <n-button type="primary" @click="() => { window.open(applyModalJob.link, '_blank', 'noopener') }">
+                <template #icon><n-icon><ExternalLink /></n-icon></template>
+                去投递
+              </n-button>
+            </n-space>
+          </div>
+        </n-modal>
+        <n-modal
+          v-model:show="detailModalOpen"
+          preset="card"
+          :title="detailModalJob ? `${detailModalJob.company} · ${detailModalJob.position}` : '岗位详情'"
+          style="width:680px; max-width:calc(100vw - 32px)"
+          @update:show="(v) => { if (!v) closeDetail() }"
+        >
+          <div v-if="detailModalJob" class="detail-modal-content">
+            <div v-if="detailModalJob.notes" style="white-space:pre-wrap;font-size:14px;line-height:1.8;word-break:break-word;max-height:60vh;overflow-y:auto;padding:12px 16px;background:#fafbfc;border-radius:8px;border:1px solid #eee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">{{ detailModalJob.notes }}</div>
+            <div v-else style="color:#aaa;text-align:center;padding:40px 0">暂无备注内容</div>
+            <n-space justify="end" style="margin-top:12px">
+              <n-button @click="closeDetail">关闭</n-button>
+            </n-space>
+          </div>
+        </n-modal>
         <n-modal v-model:show="refreshing" :mask-closable="false" preset="card" style="width:560px" :title="fetchStatus.title">
           <n-space vertical size="medium">
             <div class="fetch-progress">
@@ -182,9 +351,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted, h, watch } from 'vue'
 import {
-  NConfigProvider, NMessageProvider, NGrid, NGi, NCard, NStatistic,
-  NIcon, NSpace, NButton, NInput,
-  NTag, NSelect, NDataTable, NModal, NSpin, NPopconfirm, useMessage, zhCN, dateZhCN,
+  NConfigProvider, NMessageProvider, NGrid, NGi, NCard,
+  NIcon, NSpace, NButton, NInput, NTooltip,
+  NTag, NSelect, NDataTable, NModal, NSpin, NPopconfirm, NPagination, useMessage, zhCN, dateZhCN,
 } from 'naive-ui'
 import { Plus, Refresh, Globe, Stack, Check, Clock, AlertTriangle, Edit, Trash, ExternalLink, Circle, CircleCheck, CircleX, AlertCircle, Loader, FilterOff } from '@vicons/tabler'
 import JobForm from './JobForm.vue'
@@ -200,10 +369,9 @@ const renderTag = (type, label, handleClose) =>
 const renderCategoryTag = ({ option, handleClose }) => renderTag(catTag[option.value] || 'default', option.label, handleClose)
 const renderCityTag = ({ option, handleClose }) => renderTag('default', option.label, handleClose)
 const deadlineOptions = [
-  { label: '7天内截止', value: 'urgent' },
+  { label: '全部', value: 'all' },
   { label: '招聘中', value: 'active' },
   { label: '已过期', value: 'overdue' },
-  { label: '无截止日期', value: 'no-deadline' },
 ]
 const appliedFilterOptions = [
   { label: '待投递', value: 0 },
@@ -211,7 +379,40 @@ const appliedFilterOptions = [
   { label: '已笔试', value: 2 },
   { label: '已面试', value: 3 },
   { label: '已 offer', value: 4 },
-  { label: '已拒', value: 5 },
+  { label: '已结束', value: 5 },
+]
+const resultFilterOptions = [
+  { label: '进行中', value: 0 },
+  { label: '简历过', value: 1 },
+  { label: '笔试过', value: 2 },
+  { label: '一面过', value: 3 },
+  { label: '二面过', value: 4 },
+  { label: '终面过', value: 5 },
+  { label: 'HR 面过', value: 6 },
+  { label: '简历挂', value: -1 },
+  { label: '笔试挂', value: -2 },
+  { label: '一面挂', value: -3 },
+  { label: '二面挂', value: -4 },
+  { label: '终面挂', value: -5 },
+  { label: 'HR 面挂', value: -6 },
+  { label: '主动撤回', value: -7 },
+  { label: '我拒 offer', value: -8 },
+  { label: 'offer 撤回', value: -9 },
+  { label: '其他', value: 99 },
+]
+const stageFilterOptions = [
+  { label: '一面', value: 1 },
+  { label: '二面', value: 2 },
+  { label: '三面', value: 3 },
+  { label: '终面', value: 4 },
+  { label: 'HR 面', value: 5 },
+]
+const batchFilterOptions = [
+  { label: '实习', value: '实习' },
+  { label: '27届秋招提前批', value: '27届秋招提前批' },
+  { label: '27届秋招', value: '27届秋招' },
+  { label: '27届春招', value: '27届春招' },
+  { label: '未开始', value: '未开始' },
 ]
 const verifiedFilterOptions = [
   { label: '全部', value: 'all' },
@@ -250,15 +451,24 @@ const catTag = { '公务员': 'info', '国企': 'error', '事业单位': 'warnin
 const themeOverrides = { common: { primaryColor: '#18a058', primaryColorHover: '#36ad6a', primaryColorPressed: '#0c7a43', primaryColorSuppl: '#36ad6a', borderRadius: '6px' } }
 
 const jobs = ref([])
-const stats = reactive({ total: 0, real_count: 0, placeholder_count: 0, applied_count: 0, pending_count: 0, urgent_count: 0 })
+const stats = reactive({ total: 0, real_count: 0, placeholder_count: 0, applied_count: 0, pending_count: 0, urgent_count: 0, rejected_count: 0 })
 const formOpen = ref(false)
 const editingJob = ref(null)
+const applyModalOpen = ref(false)
+const applyModalJob = ref(null)
+const detailModalOpen = ref(false)
+const detailModalJob = ref(null)
 const keyword = ref('')
 const reloading = ref(false)
-const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 2, 3, 4, 5], verified: 'all', source: 'all', salaryMin: 0, hasNextAction: false, weekend: 'all', deadlineRange: 'active' })
+const checkedIds = ref([])
+const bulkDeleting = ref(false)
+const bulkPopOpen = ref(false)
+// 4 张卡片各自的 hover 状态（手动控制 tooltip 显示百分比）
+const hover = reactive({ real: false, applied: false, pending: false, rejected: false })
+const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 2, 3, 4, 5], result: [0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6, -7, -8, -9, 99], round: [1, 2, 3, 4, 5], batch: ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始'], verified: 'all', source: 'all', salaryMin: 0, hasNextAction: false, weekend: 'all', deadlineRange: 'active' })
 let msg = null
 
-onMounted(() => { try { msg = useMessage() } catch(e) {} ; refreshFromDB(false) })
+onMounted(() => { try { msg = useMessage() } catch(e) {} ; refreshFromDB(false); loadCompanies() })
 
 // ===== API 调用 =====
 // 加载数据 + 统计（静默模式不弹 toast）
@@ -286,6 +496,19 @@ watch(() => filter.weekend, () => refreshFromDB(true))
 
 // 单字段更新（如勾选已投递）— 用 PATCH 接口，不传整个数组
 const patchJob = async (id, patch) => {
+  // 自动维护 applied_at：applied 0→>=1 时记"投递时间",>=1→0 时清空
+  if (patch.applied !== undefined) {
+    const current = jobs.value.find(j => j.id === id)
+    const oldApplied = Number(current?.applied ?? 0)
+    const newApplied = Number(patch.applied)
+    if (oldApplied < 1 && newApplied >= 1) {
+      const now = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      patch.applied_at = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+    } else if (oldApplied >= 1 && newApplied < 1) {
+      patch.applied_at = ''
+    }
+  }
   try {
     const r = await fetch('/api/jobs/patch', {
       method: 'POST',
@@ -308,13 +531,21 @@ const patchJob = async (id, patch) => {
 // 新增 / 编辑
 const openNew = () => { editingJob.value = null; formOpen.value = true }
 const openEdit = (job) => { editingJob.value = { ...job }; formOpen.value = true }
+const openApplyModal = (job) => { applyModalJob.value = { ...job }; applyModalOpen.value = true }
+const closeApplyModal = () => { applyModalOpen.value = false; applyModalJob.value = null }
+const openDetail = (job) => { detailModalJob.value = { ...job }; detailModalOpen.value = true }
+const closeDetail = () => { detailModalOpen.value = false; detailModalJob.value = null }
 
 const onSave = async (job) => {
   try {
-    const r = await fetch('/api/jobs', {
-      method: 'POST',
+    // 有 id → PATCH 更新;无 id → POST 新增
+    const url = job.id ? '/api/jobs/patch' : '/api/jobs'
+    const method = job.id ? 'POST' : 'POST'
+    const body = job.id ? { id: job.id, ...job } : { jobs: [job], source: 'manual' }
+    const r = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobs: [job], source: 'manual' }),
+      body: JSON.stringify(body),
     })
     const d = await r.json()
     if (!d.success) throw new Error(d.error || '保存失败')
@@ -343,7 +574,37 @@ const remove = async (job) => {
   }
 }
 
-const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 2, 3, 4, 5]; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.hasNextAction = false; filter.weekend = 'all'; filter.deadlineRange = 'active'; keyword.value = '' }
+// 批量删除：选中行一次请求，删除成功后再清空选中
+const onBulkDelete = async () => {
+  if (checkedIds.value.length === 0) return
+  bulkDeleting.value = true
+  try {
+    const r = await fetch('/api/jobs/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...checkedIds.value] }),
+    })
+    const d = await r.json()
+    if (!d.success) throw new Error(d.error || '批量删除失败')
+    msg?.success(`已删除 ${d.deleted ?? 0} / ${d.total} 条`)
+    checkedIds.value = []
+    bulkPopOpen.value = false
+    await refreshFromDB(true)
+  } catch (e) {
+    msg?.warning('批量删除失败：' + e.message)
+  } finally {
+    bulkDeleting.value = false
+  }
+}
+
+// 数据刷新后清掉已失效的勾选（被同步删除的行）
+watch(jobs, (next) => {
+  if (checkedIds.value.length === 0) return
+  const alive = new Set(next.map(j => j.id))
+  checkedIds.value = checkedIds.value.filter(id => alive.has(id))
+})
+
+const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 2, 3, 4, 5]; filter.result = [0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6, -7, -8, -9, 99]; filter.round = [1, 2, 3, 4, 5]; filter.batch = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.hasNextAction = false; filter.weekend = 'all'; filter.deadlineRange = 'active'; keyword.value = '' }
 
 // 拉取最新（按钮触发 fetch.mjs，跑完后从 DB 重载）
 const refreshing = ref(false)
@@ -471,9 +732,23 @@ const refreshFromWeb = async () => {
 
 // ===== 筛选/分页逻辑 =====
 const days = (d) => { if(!d) return null; const dt = new Date(d); return isNaN(dt) ? null : Math.ceil((dt.getTime()-Date.now())/86400000) }
-const matchDeadline = (job, range) => { const d = days(job.deadline); switch(range) { case 'overdue': return d !== null && d < 0; case 'urgent': return d !== null && d >= 0 && d <= 7; case 'active': return d !== null && d >= 0; case 'no-deadline': return d === null; default: return true } }
+const matchDeadline = (job, range) => { const d = days(job.deadline); switch(range) { case 'overdue': return d !== null && d < 0; case 'active': return d === null || d >= 0; case 'all': default: return true } }
 
 const matchApplied = (job, allowedStatuses) => allowedStatuses.includes(Number(job.applied ?? 0))
+const matchResult = (job, allowed) => {
+  // filter.result 0 表示"进行中"(对应 result=null 的行)
+  const v = job.result == null ? 0 : Number(job.result)
+  return allowed.includes(v)
+}
+const matchRound = (job, allowed) => {
+  const v = job.round == null ? null : Number(job.round)
+  if (v == null) return true  // 无 round 的行(非面试环节)始终匹配
+  return allowed.includes(v)
+}
+const matchBatch = (job, allowed) => {
+  const v = job.batch == null || job.batch === '' ? '__none__' : job.batch
+  return allowed.includes(v)
+}
 const matchVerified = (job, v) => v === 'all' || Number(job.verified ?? 0) === Number(v)
 const matchSource = (job, v) => v === 'all' || job.source === v
 // salary_range "15-20k×13" → 起始数字 15（k 为单位）
@@ -501,14 +776,35 @@ const matchSalaryRange = (job, opt) => {
 const matchHasNextAction = (job, on) => !on || !!job.next_action
 const filteredJobs = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
-  return jobs.value.filter(j => filter.category.includes(j.category) && filter.city.includes(j.city) && matchApplied(j, filter.applied) && matchVerified(j, filter.verified) && matchSource(j, filter.source) && matchSalaryRange(j, filter.salaryMin) && matchHasNextAction(j, filter.hasNextAction) && matchDeadline(j, filter.deadlineRange) && (!kw || (j.company+' '+j.position+' '+j.notes+' '+(j.salary_range||'')+' '+(j.next_action||'')).toLowerCase().includes(kw)))
+  return jobs.value.filter(j => filter.category.includes(j.category) && filter.city.includes(j.city) && matchApplied(j, filter.applied) && matchResult(j, filter.result) && matchRound(j, filter.round) && matchBatch(j, filter.batch) && matchVerified(j, filter.verified) && matchSource(j, filter.source) && matchSalaryRange(j, filter.salaryMin) && matchHasNextAction(j, filter.hasNextAction) && matchDeadline(j, filter.deadlineRange) && (!kw || (j.company+' '+j.position+' '+j.notes+' '+(j.salary_range||'')+' '+(j.next_action||'')).toLowerCase().includes(kw)))
+})
+
+// 4 张统计卡片都用筛选后的本地数据；占比的分母固定为全部岗位(stats.real_count)
+// applied 判定口径与 APPLIED_META 对齐：applied ∈ [1,5] 都算"已投递"
+// rejected 判定口径：result < 0（简历挂/笔试挂/一面挂/.../offer 撤回）
+// 注意：要排除 is_placeholder=1 的占位行（与后端 real_count 对齐）
+const filteredStats = computed(() => {
+  let real = 0, applied = 0, pending = 0, rejected = 0
+  for (const j of filteredJobs.value) {
+    if (j.is_placeholder) continue
+    real++
+    const ap = Number(j.applied ?? 0)
+    if (ap >= 1 && ap <= 5) applied++
+    else if (ap === 0) pending++
+    const rs = j.result == null ? null : Number(j.result)
+    if (rs != null && rs < 0) rejected++
+  }
+  return { real, applied, pending, rejected }
 })
 
 // 排序后传给 n-data-table（n-data-table 的内置 3 态太难控，改用 data 已是排好序的）
 // 默认按截止日期升序
 const sortMap = ref({ deadline: 'ascend' })
 const tablePageSize = ref(10)  // 表格分页大小（响应式，n-data-table 改时回写）
-const sorters = { applied: (a, b, o) => cmp(a.applied, b.applied) * (o === 'ascend' ? 1 : -1), company: (a, b, o) => cmp(a.company, b.company) * (o === 'ascend' ? 1 : -1), position: (a, b, o) => cmp(a.position, b.position) * (o === 'ascend' ? 1 : -1), city: (a, b, o) => cmp(a.city, b.city) * (o === 'ascend' ? 1 : -1), deadline: (a, b, o) => cmpDeadline(a.deadline, b.deadline) * (o === 'ascend' ? 1 : -1), category: (a, b, o) => cmp(a.category, b.category) * (o === 'ascend' ? 1 : -1), weekend: (a, b, o) => cmp(a.weekend, b.weekend) * (o === 'ascend' ? 1 : -1), notes: (a, b, o) => cmp(a.notes, b.notes) * (o === 'ascend' ? 1 : -1), salary_range: (a, b, o) => (salarySortVal(a.salary_range) - salarySortVal(b.salary_range)) * (o === 'ascend' ? 1 : -1), next_action: (a, b, o) => cmp(a.next_action, b.next_action) * (o === 'ascend' ? 1 : -1) }
+const tablePage = ref(1)       // 当前页（外置分页用）
+// 过滤/数据变化时回到第 1 页
+watch([filteredJobs, keyword, filter], () => { tablePage.value = 1 }, { deep: true })
+const sorters = { applied: (a, b, o) => cmp(a.applied, b.applied) * (o === 'ascend' ? 1 : -1), company: (a, b, o) => cmp(a.company, b.company) * (o === 'ascend' ? 1 : -1), position: (a, b, o) => cmp(a.position, b.position) * (o === 'ascend' ? 1 : -1), city: (a, b, o) => cmp(a.city, b.city) * (o === 'ascend' ? 1 : -1), deadline: (a, b, o) => cmpDeadline(a.deadline, b.deadline) * (o === 'ascend' ? 1 : -1), category: (a, b, o) => cmp(a.category, b.category) * (o === 'ascend' ? 1 : -1), batch: (a, b, o) => cmp(a.batch, b.batch) * (o === 'ascend' ? 1 : -1), weekend: (a, b, o) => cmp(a.weekend, b.weekend) * (o === 'ascend' ? 1 : -1), notes: (a, b, o) => cmp(a.notes, b.notes) * (o === 'ascend' ? 1 : -1), salary_range: (a, b, o) => (salarySortVal(a.salary_range) - salarySortVal(b.salary_range)) * (o === 'ascend' ? 1 : -1), next_action: (a, b, o) => cmp(a.next_action, b.next_action) * (o === 'ascend' ? 1 : -1) }
 const sortedJobs = computed(() => {
   const entry = Object.entries(sortMap.value)[0]
   if (!entry) return filteredJobs.value
@@ -530,7 +826,7 @@ const onSorterChange = (sorter) => {
 
 // ===== 列定义 =====
 const renderDeadline = (row) => {
-  if (!row.deadline) return h('span', { style: 'color:#aaa' }, '—')
+  if (!row.deadline) return h('span', { style: 'color:#2080f0;font-weight:600' }, '长期')
   const d = days(row.deadline); let c = '#18a058'; if (d < 0) c = '#888'; else if (d <= 7) c = '#d03050'; else if (d <= 30) c = '#f0a020'
   let t = row.deadline; if (d < 0) t += ' (已过)'; else if (d === 0) t += ' (今天)'; else if (d <= 7) t += ` (剩${d}天)`
   return h('span', { style: `color:${c};font-weight:${d>=0&&d<=7?'600':'normal'}` }, t)
@@ -552,22 +848,82 @@ const APPLIED_META = {
   2: { label: '已笔试', color: '#722ed1' },
   3: { label: '已面试', color: '#f0a020' },
   4: { label: '已 offer', color: '#18a058' },
-  5: { label: '已拒', color: '#d03050' },
+  5: { label: '已结束', color: '#999' },
 }
 const appliedOptions = Object.entries(APPLIED_META).map(([k, v]) => ({ label: v.label, value: Number(k) }))
 
+// 环节 = round(轮次) + result(结果) 拼出的人话
+// round: 1=一面 2=二面 3=三面 4=终面 5=HR 面
+const ROUND_META = { 1: '一面', 2: '二面', 3: '三面', 4: '终面', 5: 'HR面' }
+// result: 正数=过 负数=挂/拒 0=进行中;绝对值:1=简历 2=笔试 3=一面 4=二面 5=终面 6=HR 7=主动撤回 8=我拒offer 9=offer撤回 99=其他
+const STAGE_RESULT_META = {
+  '1:1':  { label: '简历过',   color: '#18a058' },
+  '2:2':  { label: '笔试过',   color: '#18a058' },
+  '3:3':  { label: '一面过',   color: '#18a058' },
+  '4:4':  { label: '二面过',   color: '#18a058' },
+  '5:5':  { label: '终面过',   color: '#18a058' },
+  '5:6':  { label: 'HR 面过',  color: '#18a058' },
+  '1:-1': { label: '简历挂',   color: '#d03050' },
+  '2:-2': { label: '笔试挂',   color: '#d03050' },
+  '3:-3': { label: '一面挂',   color: '#d03050' },
+  '4:-4': { label: '二面挂',   color: '#d03050' },
+  '5:-5': { label: '终面挂',   color: '#d03050' },
+  '5:-6': { label: 'HR 面挂',  color: '#d03050' },
+  '-1:-7':{ label: '主动撤回', color: '#999' },
+  '-1:-8':{ label: '我拒 offer', color: '#999' },
+  '-1:-9':{ label: 'offer 撤回', color: '#999' },
+  '-1:99':{ label: '其他',     color: '#999' },
+}
+// 进行中: applied=1/2/3 且 result=null → "投递中" / "笔试待考" / "X面进行中"
+// applied=5 且 result=null → "进行中"(老数据兜底)
+// applied=4 → "HR 面过"
+// applied=0 → 不显示
+function stageLabel(row) {
+  const ap = Number(row.applied ?? 0)
+  const rd = row.round == null ? null : Number(row.round)
+  const rs = row.result == null ? null : Number(row.result)
+  if (ap === 0) return { label: '—', color: '#aaa' }
+  // 优先按 round+result 精确匹配
+  if (rd != null && rs != null) {
+    const key = `${rd}:${rs}`
+    if (STAGE_RESULT_META[key]) return STAGE_RESULT_META[key]
+  }
+  // 仅 result 有值(无 round):用 result 绝对值映射阶段名
+  if (rs != null) {
+    if (rs > 0) {
+      const stageMap = { 1: '简历过', 2: '笔试过', 3: '一面过', 4: '二面过', 5: '终面过', 6: 'HR 面过' }
+      return { label: stageMap[rs] || '已过', color: '#18a058' }
+    }
+    if (rs < 0) {
+      const stageMap = { '-1': '简历挂', '-2': '笔试挂', '-3': '一面挂', '-4': '二面挂', '-5': '终面挂', '-6': 'HR 面挂', '-7': '主动撤回', '-8': '我拒 offer', '-9': 'offer 撤回' }
+      return { label: stageMap[String(rs)] || '其他', color: rs < -6 ? '#999' : '#d03050' }
+    }
+  }
+  // 进行中
+  if (ap === 1) return { label: '进行中', color: '#2080f0' }
+  if (ap === 2) return { label: '笔试待考', color: '#2080f0' }
+  if (ap === 3) return { label: rd != null ? `${ROUND_META[rd]}进行中` : '面试进行中', color: '#2080f0' }
+  if (ap === 4) return { label: 'HR 面过', color: '#18a058' }
+  if (ap === 5) return { label: '进行中', color: '#2080f0' }
+  return { label: '—', color: '#aaa' }
+}
+
 const renderApplied = (row) => {
   const meta = APPLIED_META[row.applied] || APPLIED_META[0]
+  const ap = Number(row.applied ?? 0)
+  const hasLink = ap === 0 && row.link                        // 待投递 + 有链接 → 跳投递链接
+  const hasProgress = ap >= 1 && !!row.progress_url           // 已投递 + 有进度链接 → 跳进度页
+  const clickable = hasLink || hasProgress
   return h(NTag, {
-    type: row.applied === 4 ? 'success' : row.applied === 5 ? 'error' : row.applied >= 2 ? 'warning' : row.applied === 1 ? 'info' : 'default',
+    type: row.applied === 4 ? 'success' : row.applied === 5 ? 'default' : row.applied >= 2 ? 'warning' : row.applied === 1 ? 'info' : 'default',
     size: 'small',
     bordered: false,
     round: true,
-    style: 'cursor:pointer',
-    onClick: () => {
-      // 点击循环切换到下一状态（不打开下拉）
-      const next = (Number(row.applied ?? 0) + 1) % 6
-      patchJob(row.id, { applied: next })
+    style: clickable ? 'cursor:pointer' : 'cursor:default',
+    onClick: (e) => {
+      e.stopPropagation()
+      if (hasLink) window.open(row.link, '_blank', 'noopener')
+      else if (hasProgress) window.open(row.progress_url, '_blank', 'noopener')
     },
   }, { default: () => meta.label })
 }
@@ -591,7 +947,48 @@ const renderVerified = (row) => {
   return h('span', { style: `color:${meta.color};font-weight:600` }, meta.label)
 }
 
-const renderCompany = (row) => row.link ? h('a', { href: row.link, target: '_blank', style: 'color:#18a058' }, [row.company, ' ', h(NIcon, { size: 11 }, { default: () => h(ExternalLink) })]) : h('span', null, row.company)
+// 公司名 → MD 路由,从 /api/companies 加载(在 onMounted 触发)
+const companyMap = ref({})  // { name: route }
+const loadCompanies = async () => {
+  try {
+    const r = await fetch('/api/companies').then(r => r.json())
+    if (r.success) {
+      const m = {}
+      for (const { name, route } of r.data) m[name] = route
+      companyMap.value = m
+    }
+  } catch (e) { /* 静默失败,不影响其他功能 */ }
+}
+
+// 匹配规则:精确 → 前缀 → 文件名包含
+const findCompanyRoute = (company) => {
+  if (!company) return null
+  const map = companyMap.value
+  if (map[company]) return map[company]
+  for (const [name, route] of Object.entries(map)) {
+    if (name === company) return route
+    if (name.startsWith(company) || company.startsWith(name)) return route
+    if (name.includes(company) || company.includes(name)) return route
+  }
+  return null
+}
+
+const renderCompany = (row) => {
+  const route = findCompanyRoute(row.company)
+  // 1) 有公司介绍 md → 跳站内 md(无论是否已投递)
+  if (route) {
+    return h('a', { href: route, style: 'color:#18a058;text-decoration:none', onClick: (e) => e.stopPropagation() }, row.company)
+  }
+  // 2) 没 md 且未投递 → 弹 Modal 展示投递链接
+  if (Number(row.applied ?? 0) === 0 && row.link) {
+    return h('a', {
+      style: 'color:#2080f0;cursor:pointer;text-decoration:none',
+      onClick: (e) => { e.stopPropagation(); openApplyModal(row) },
+    }, [row.company, ' ', h(NIcon, { size: 11 }, { default: () => h(ExternalLink) })])
+  }
+  // 3) 没 md 且已投递 → 普通文字
+  return h('span', null, row.company)
+}
 
 const renderActions = (row) => {
   const editBtn = h(NButton, { size: 'tiny', quaternary: true, circle: true, onClick: () => openEdit(row) }, { icon: () => h(NIcon, null, { default: () => h(Edit) }) })
@@ -603,9 +1000,7 @@ const renderActions = (row) => {
 }
 
 const rowProps = (row) => ({
-  style: row.applied
-    ? 'opacity:0.45'
-    : (row.is_placeholder ? 'opacity:0.7; background:#fafafa' : 'cursor:pointer'),
+  style: row.is_placeholder ? 'opacity:0.7; background:#fafafa' : 'cursor:pointer',
   onDblclick: () => openEdit(row),
 })
 
@@ -618,19 +1013,57 @@ const cmpDeadline = (a, b) => {
   return a.localeCompare(b)
 }
 
+// 计算占比（基于 real_count，避免除零返回 0%）
+// 入参是当前卡片值与分母（总岗位），返回形如 "40.0%"（分子=0 时 "0%"）
+const formatRatio = (n, total) => {
+  const num = Number(n ?? 0)
+  const den = Number(total ?? 0)
+  if (!den) return '0%'
+  const pct = (num / den) * 100
+  // 整数比例不显示小数（40%）；否则保留 1 位小数（33.3%）
+  return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`
+}
+
+// conic-gradient 实现的进度圈样式
+// 用"双层圆 + mask 擦除"代替 SVG：
+//   外层 (mask-shell)：铺满整圈背景色（未填充 = 浅灰），用 mask 把内部"擦空"只留环形带
+//   内层 (mask-fill)：从 12 点钟方向起画一段 conic 渐变到 pct%，同样用 mask 只留环形带
+// kind = 'normal' | 'urgent'：已挂用警示红，其它用品牌绿
+const ringStyle = (num, den, kind = 'normal') => {
+  const n = Number(num ?? 0)
+  const d = Number(den ?? 0)
+  const pct = d > 0 ? Math.max(0, Math.min(100, (n / d) * 100)) : 0
+  // 配色
+  const emptyColor = kind === 'urgent' ? '#f5dde0' : '#eef0f2'
+  const fillColor  = kind === 'urgent' ? '#d03050' : '#18a058'
+  // 0% 时只画背景圆；>0% 时画背景 + 前景扇形
+  const fillBg = pct > 0
+    ? `conic-gradient(from -90deg, ${fillColor} 0% ${pct}%, transparent ${pct}% 100%)`
+    : 'transparent'
+  return {
+    '--ring-empty': emptyColor,
+    '--ring-fill':  fillColor,
+    '--ring-fill-bg': fillBg,
+    '--ring-pct': `${pct}%`,
+  }
+}
+
 const columns = computed(() => [
+  { type: 'selection', width: 36, disabled: (row) => false },
   { title: '公司', key: 'company', width: 180, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.company, b.company), sortOrder: sortMap.value.company || false, ellipsis: { tooltip: true }, render: renderCompany },
   { title: '岗位', key: 'position', width: 180, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.position, b.position), sortOrder: sortMap.value.position || false, ellipsis: { tooltip: true } },
   { title: '工作地', key: 'city', width: 88, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.city, b.city), sortOrder: sortMap.value.city || false, ellipsis: { tooltip: true } },
-  { title: '薪资', key: 'salary_range', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => salarySortVal(a.salary_range) - salarySortVal(b.salary_range), sortOrder: sortMap.value.salary_range || false, ellipsis: { tooltip: true }, render: (row) => row.salary_range ? h('span', { style: 'font-weight:600;color:#18a058' }, row.salary_range) : h('span', { style: 'color:#aaa' }, '—') },
+  { title: '薪资', key: 'salary_range', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => salarySortVal(a.salary_range) - salarySortVal(b.salary_range), sortOrder: sortMap.value.salary_range || false, ellipsis: { tooltip: true }, render: (row) => row.salary_range ? h('span', { style: 'font-weight:600;color:#18a058' }, row.salary_range) : h('span', { style: 'color:#2080f0;font-weight:600' }, '面议') },
   { title: '截止日期', key: 'deadline', width: 160, titleAlign: 'center', align: 'center', sorter: (a, b) => cmpDeadline(a.deadline, b.deadline), sortOrder: sortMap.value.deadline || false, ellipsis: { tooltip: true }, render: renderDeadline },
   { title: '类别', key: 'category', width: 100, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.category, b.category), sortOrder: sortMap.value.category || false, ellipsis: { tooltip: true }, render: renderCategory },
+  { title: '批次', key: 'batch', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.batch, b.batch), sortOrder: sortMap.value.batch || false, ellipsis: { tooltip: true }, render: (row) => row.batch ? h(NTag, { size: 'small', bordered: false, round: true, type: row.batch === '实习' ? 'info' : 'warning' }, { default: () => row.batch }) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '周末', key: 'weekend', width: 90, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.weekend, b.weekend), sortOrder: sortMap.value.weekend || false, ellipsis: { tooltip: true }, render: renderWeekend },
-  { title: '备注', key: 'notes', minWidth: 160, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.notes, b.notes), sortOrder: sortMap.value.notes || false, ellipsis: { tooltip: true }, render: (row) => row.notes ? h('span', { style: 'font-size:12px' }, row.notes) : h('span', { style: 'color:#aaa' }, '—') },
+  { title: '备注', key: 'notes', minWidth: 220, titleAlign: 'center', align: 'left', sorter: (a, b) => cmp(a.notes, b.notes), sortOrder: sortMap.value.notes || false, render: (row) => row.notes ? h('div', { style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;max-width:100%', title: '点击查看完整备注', onClick: (e) => { e.stopPropagation(); openDetail(row) }, onMouseenter: (e) => { e.currentTarget.style.background = '#f5f5f5' }, onMouseleave: (e) => { e.currentTarget.style.background = 'transparent' } }, row.notes) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '投递状态', key: 'applied', width: 110, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.applied, b.applied), sortOrder: sortMap.value.applied || false, ellipsis: { tooltip: true }, render: renderApplied },
+  { title: '环节', key: 'stage', width: 120, titleAlign: 'center', align: 'center', ellipsis: { tooltip: true }, render: (row) => { const m = stageLabel(row); return h('span', { style: `color:${m.color};font-weight:600;font-size:12px` }, m.label) } },
   { title: '下一步', key: 'next_action', width: 160, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.next_action, b.next_action), sortOrder: sortMap.value.next_action || false, ellipsis: { tooltip: true }, render: (row) => row.next_action ? h('span', { style: 'font-size:12px' }, row.next_action) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '验证', key: 'verified', width: 78, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.verified, b.verified), sortOrder: sortMap.value.verified || false, ellipsis: { tooltip: true }, render: renderVerified },
-  { title: '来源', key: 'source', width: 64, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.source, b.source), sortOrder: sortMap.value.source || false, ellipsis: { tooltip: true }, render: renderSource },
+  { title: '来源', key: 'source', width: 96, minWidth: 96, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.source, b.source), sortOrder: sortMap.value.source || false, ellipsis: { tooltip: true }, render: renderSource },
   { title: '操作', key: 'actions', width: 90, titleAlign: 'center', align: 'center', render: renderActions },
 ])
 
@@ -645,11 +1078,67 @@ const pagination = computed(() => ({
   onUpdatePage: () => { /* reset filter 时已经会触发刷新，pageSize 切换由内部管理 */ },
   prefix: () => `共 ${filteredJobs.value.length} 条`,
 }))
+
+// ===== 外置分页（卡片底部,不随表体滚动） =====
+const pagedJobs = computed(() => {
+  const start = (tablePage.value - 1) * tablePageSize.value
+  return sortedJobs.value.slice(start, start + tablePageSize.value)
+})
 </script>
 
 <style scoped>
 .offer-dashboard { margin: 12px 0; }
 .stats-row { margin-bottom: 14px; }
+
+/* 卡片内部布局：label 在上，圆圈在下居中 */
+.stat-card { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 0; min-height: 140px; }
+.stat-card-head { display: flex; align-items: center; gap: 4px; align-self: flex-start; padding-left: 2px; }
+.stat-card-icon { color: var(--text-color-3); }
+.stat-card-label { font-size: 13px; color: var(--text-color-2); font-weight: 500; }
+
+/* 圆圈：conic-gradient 双层 + mask 擦出环形带
+   实现思路：
+   - 外层 .stat-ring 本身是 96×96 的圆，纯背景色 = 进度空余部分（浅灰）
+   - 用 ::before 画一层 conic 渐变（已填充部分 = 品牌色），再 ::after 在中间挖一个圆孔（mask）
+   - 这样视觉上得到一个 8px 宽的彩色环，进度扇形从 12 点钟方向起
+*/
+.stat-ring {
+  position: relative;
+  width: 96px; height: 96px;
+  border-radius: 50%;
+  background: var(--ring-empty, #eef0f2);
+  cursor: default;
+}
+/* 进度扇形（前景层）：用 ::before，绝对定位铺满，conic 渐变画 0%→pct% 的彩色弧 */
+.stat-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ring-fill-bg, transparent);
+  /* 用 mask 把中间擦空、只留 6px 环形带（96px 圆 → 半径 48px；环落在 41-47px 半径处）
+     强制 mask-mode: alpha 让各浏览器（Chrome/Firefox/Safari）行为一致 */
+  -webkit-mask:
+    radial-gradient(circle, transparent 40px, #000 41px, #000 47px, transparent 48px) alpha;
+          mask:
+    radial-gradient(circle, transparent 40px, #000 41px, #000 47px, transparent 48px) alpha;
+  -webkit-mask-mode: alpha;
+          mask-mode: alpha;
+  transition: background 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stat-value {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-weight: 700;
+  color: var(--text-color-1);
+  letter-spacing: -0.5px;
+  pointer-events: none;
+  /* tabular-nums 让数字宽度一致，避免数字跳变时圆圈中心偏移 */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
 .urgent-card { background: linear-gradient(135deg, rgba(208,48,80,0.05), transparent); }
 .actions-row { margin-bottom: 14px; }
 .filter-card { margin-bottom: 14px; background: var(--bg-color-soft, #fafafa); }
@@ -686,6 +1175,7 @@ const pagination = computed(() => ({
 .filter-row :deep(.n-base-selection .n-base-selection-tags) { overflow: hidden; }
 .table-card :deep(.n-data-table) { overflow-x: auto; }
 .table-card :deep(.n-data-table-th .n-data-table-th__title) { white-space: nowrap; }
+.table-pagination { margin-top: 12px; display: flex; justify-content: center; }
 
 /* 拉取进度弹窗 */
 .fetch-progress { display: flex; flex-direction: column; gap: 8px; }

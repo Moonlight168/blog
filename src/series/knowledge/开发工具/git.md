@@ -82,6 +82,8 @@ git push origin --delete 分支名  # 删除远程分支
 
 **原则：** 公共分支用 merge，个人分支用 rebase。
 
+→ [回答历史](../../../series/答题历史/Java/java-答题记录.md#git-merge-vs-git-rebase)
+
 
 ## Git Flow 分支管理策略？
 
@@ -193,3 +195,16 @@ git push origin 分支名
 git reset --hard HEAD~1
 git push origin 分支名 --force
 ```
+
+## PR 提交流程？CR 意见不认同怎么处理？
+
+1. 单 PR ≤ 400 行 → 自测通过 → 提 PR 写清楚改动点和原因 → CR → CI 过 → 合并
+2. 不认同的意见：先理解对方出发点 → 说明自己理由（拿代码/文档依据）→ 实在僵持拉第三人或 leader 仲裁 → 最终以团队规范为准
+
+→ [回答历史](../../../series/答题历史/我的项目/gf-cms-答题记录.md#pr-提交流程cr-意见不认同怎么处理)
+
+## Docker 多阶段构建解决什么？
+
+**减小最终镜像体积**。阶段 1 用 Maven+JDK 编译，阶段 2 只复制 jar+JRE 运行，扔掉 Maven、源码、完整 JDK。
+
+→ [回答历史](../../../series/答题历史/Java/java-答题记录.md#docker-多阶段构建解决什么)
