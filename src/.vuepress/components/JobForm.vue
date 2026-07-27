@@ -100,7 +100,7 @@
         </n-space>
       </n-form-item>
 
-      <n-form-item label="信息来源">
+      <n-form-item label="渠道">
         <n-select v-model:value="form.source" :options="sourceOptions" />
       </n-form-item>
 
@@ -199,8 +199,12 @@ const roundOptions = [
   { label: 'HR 面', value: 5 },
 ]
 const sourceOptions = [
-  { label: '手动', value: 'manual' },
-  { label: 'AI 抓取', value: 'fetch' },
+  { label: '官网', value: '官网' },
+  { label: '前程无忧', value: '前程无忧' },
+  { label: '应届生招聘', value: '应届生招聘' },
+  { label: '猎聘', value: '猎聘' },
+  { label: '智联招聘', value: '智联招聘' },
+  { label: 'BOSS直聘', value: 'BOSS直聘' },
 ]
 const verifiedOptions = [
   { label: '待验证', value: 0 },
@@ -225,7 +229,7 @@ const form = reactive({
   round: null,
   result: null,
   batch: null,
-  source: 'manual',
+  source: '官网',
   verified: 0,
   salary_range: '',
   next_action: '',

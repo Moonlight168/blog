@@ -244,3 +244,22 @@ Spring Boot 启动流程 = **创建 SpringApplication → 准备环境 → 创�
 
    env.getProperty("app.name");
    ```
+
+## Spring Boot 自动配置原理是什么？
+
+- `@EnableAutoConfiguration` → `@Import(AutoConfigurationImportSelector.class)`
+- 启动时读 `META-INF/spring/...AutoConfiguration.imports`，获取所有自动配置类列表
+- 逐个用条件注解筛选：`@ConditionalOnClass`（classpath 有对应 jar？）、`@ConditionalOnMissingBean`（用户自己写了吗？）
+- 符合条件的执行 `@Bean`，将对象放入 IoC 容器
+- `@Bean` 创建时通过 `@ConfigurationProperties` 从 `application.properties` 取值
+- 跟 IOC 的关系：IOC 管对象生命周期；自动配置是省去手写 `@Bean` 的过程；properties 只提供参数值
+
+→ [回答历史](/series/答题历史/框架/springboot-答题记录.md#spring-boot-自动配置原理是什么)
+
+## `@SpringBootApplication` 包含哪几个注解？
+
+- **`@SpringBootConfiguration`** — 标记配置类（底层 `@Configuration`）
+- **`@EnableAutoConfiguration`** — 自动配置核心
+- **`@ComponentScan`** — 组件扫描
+
+→ [回答历史](/series/答题历史/框架/springboot-答题记录.md#springbootapplication-包含哪几个注解)

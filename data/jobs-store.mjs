@@ -113,9 +113,13 @@ function sanitize(raw) {
   // batch: 实习/27届秋招提前批/27届秋招/27届春招;其他/null/空字符串→null
   const _batch = raw.batch == null || raw.batch === '' ? null : String(raw.batch).trim()
   const batch = ALLOWED_BATCH.includes(_batch) ? _batch : null
-  // source: manual / fetch / placeholder
-  const src = String(raw.source ?? 'manual')
-  const source = ['manual', 'fetch', 'placeholder'].includes(src) ? src : 'manual'
+  // source (内部字段) / channel (UI 暴露): 官网 / 前程无忧 / 应届生招聘 / 猎聘 / 智联招聘 / BOSS直聘
+  // 兼容旧值: manual / fetch / placeholder → 官网
+  const ALLOWED_CHANNEL = ['官网', '前程无忧', '应届生招聘', '猎聘', '智联招聘', 'BOSS直聘']
+  const src = String(raw.source ?? '官网')
+  const source = ALLOWED_CHANNEL.includes(src) ? src
+    : src === 'manual' || src === 'fetch' || src === 'placeholder' ? '官网'
+    : '官网'
   // verified: 0/1/2
   const verified = [0,1,2].includes(Number(raw.verified)) ? Number(raw.verified) : 1
   const j = {

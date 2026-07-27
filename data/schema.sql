@@ -15,7 +15,7 @@ PRAGMA encoding = 'UTF-8';
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS jobs (
   id              TEXT PRIMARY KEY,                -- 'job-001' 或 'job-fetch-{ts}-{n}'
-  category        TEXT NOT NULL,                   -- 中小厂 / 国企 / 事业单位 / 公务员 / 小而美企业
+  category        TEXT NOT NULL,                   -- 公务员 / 国企 / 事业单位 / 大厂 / 中大厂 / 中小厂 / 小而美企业
   city            TEXT NOT NULL,                   -- 广州市 / 深圳市 / 佛山市 / 清远市 / 跨地市
   company         TEXT NOT NULL,
   position        TEXT NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   result          INTEGER,                          -- 本轮结果: NULL=进行中; 正数=过(1简历过 2笔试过 ...); 负数=挂/拒(-1主动撤回 -2我拒offer -99其他挂因)
   batch           TEXT,                              -- 投递批次: 实习 / 27届秋招提前批 / 27届秋招 / 27届春招 / 未开始(招聘未启动); NULL=未分类
   is_placeholder  INTEGER NOT NULL DEFAULT 0,     -- 1 = 占位条目（_待补充）
-  source          TEXT NOT NULL DEFAULT 'manual', -- manual / fetch / placeholder
+  source          TEXT NOT NULL DEFAULT '官网', -- 渠道: 官网 / 前程无忧 / 应届生招聘 / 猎聘 / 智联招聘 / BOSS直聘
   verified        INTEGER NOT NULL DEFAULT 1,     -- 0=待验证 1=已验证 2=失效
   salary_range    TEXT DEFAULT '',                -- 薪资范围,如 "15-20k×13" 或 "面议"
   next_action     TEXT DEFAULT '',                -- 下一步动作,如 "7/20 笔试"、"等 HR 联系"

@@ -250,7 +250,7 @@ Spring 的依赖注入（DI）通过 IoC 容器 + 反射机制，在运行时动
    - 无法通过缓存机制复用对象
    - 会导致无限递归创建，最终栈溢出
 
-→ [回答历史](../../../series/答题历史/框架/spring-答题记录.md#spring-循环依赖怎么解决)
+→ [回答历史](/series/答题历史/框架/spring-答题记录.md#spring-循环依赖怎么解决)
 
 ## Spring 注入 Bean 的方式
 
@@ -453,7 +453,7 @@ Spring Bean 支持 6 种作用域：
 3. **异常被吞**——try-catch 没往外抛；默认只回滚 RuntimeException。
 4. **数据库引擎不支持**——如 MyISAM。
 
-→ [回答历史](../../../series/答题历史/框架/spring-答题记录.md#transactional-失效的常见原因)
+→ [回答历史](/series/答题历史/框架/spring-答题记录.md#transactional-失效的常见原因)
 
 1. **传播机制（Propagation）**
 
@@ -502,4 +502,45 @@ ApplicationContext 的原理是：**以 BeanFactory 为核心，通过统一的 
 
 **不能放敏感信息**——JWT 是 Base64 编码不是加密，任何人解码可见 payload。另外需要配合：短 TTL + refresh token、生产换掉默认密钥。
 
-→ [回答历史](../../../series/答题历史/框架/spring-答题记录.md#jwt-认证流程token-里能放敏感信息吗)
+→ [回答历史](/series/答题历史/框架/spring-答题记录.md#jwt-认证流程token-里能放敏感信息吗)
+
+## Spring Bean 默认单例，多线程并发会有安全问题吗？怎么处理？
+
+- 看 Bean **有没有共享可变状态**（成员变量）。Controller/Service 只调方法不存成员变量 → 天然线程安全。
+- 有状态时：`ThreadLocal`、加锁（synchronized/Lock）、或改用 prototype 作用域。
+- 能用无状态就无状态，最优解是不持有状态。
+
+→ [回答历史](/series/答题历史/框架/spring-答题记录.md#spring-bean-默认单例多线程并发会有安全问题吗怎么处理)
+
+## Spring IoC 容器启动过程中，Bean 的完整生命周期是怎样的？
+
+1. **实例化** — 反射调用构造器创建对象
+2. **属性填充** — 注入 `@Autowired`、`@Value` 等依赖
+3. **Aware 回调** — `BeanNameAware`、`BeanFactoryAware`、`ApplicationContextAware` 等，Spring 把容器元信息塞给 Bean
+4. **BeanPostProcessor 前置处理** — `postProcessBeforeInitialization`
+5. **初始化** — `@PostConstruct` → `InitializingBean.afterPropertiesSet()` → `init-method`
+6. **BeanPostProcessor 后置处理** — `postProcessAfterInitialization`，**AOP 代理在这一步生成**
+7. **就绪** — 放入单例池
+8. **销毁** — 容器关闭时 `@PreDestroy` → `DisposableBean.destroy()` → `destroy-method`
+
+- 简记：**实例化 → 注入 → Aware → 前置 → 初始化 → 后置(AOP) → 就绪 → 销毁**
+- 三级缓存（`singletonFactories` / `earlySingletonObjects` / `singletonObjects`）是解决**循环依赖**的机制，不是生命周期本身，发生在步骤 2 之后
+
+→ [回答历史](/series/答题历史/框架/spring-答题记录.md#spring-ioc-容器启动过程中bean-的完整生命周期是怎样的)
+
+## Spring Aware 接口是什么？
+
+- Aware 是一组**回调接口**，Spring 创建 Bean 时若发现它实现了某个 Aware 接口，就把容器底层信息主动塞给它
+- `ApplicationContextAware` 塞上下文，`BeanNameAware` 塞名字，`EnvironmentAware` 塞环境配置等
+- Aware 回调在 `@PostConstruct` 之前执行，确保初始化方法里相关信息已就绪
+
+→ [回答历史](/series/答题历史/框架/spring-答题记录.md#spring-aware-接口是什么)
+
+## Spring Aware 接口实际开发中还有用吗？
+
+- **业务代码很少直接用** — `@Autowired`、`@Value`、构造器注入已覆盖 99% 场景
+- **框架/基础设施仍依赖它** — 工具类拿 Bean（如 `SpringUtils`）、Spring 内部 Bean 获取容器能力
+- **Spring 4.3+ 可直接注入替代** — `@Autowired private ApplicationContext context;`，因为 Spring 把自己注册成了 Bean
+- 面试考点不在实用性，在它在生命周期链上的位置和扩展点意义
+
+→ [回答历史](/series/答题历史/框架/spring-答题记录.md#spring-aware-接口实际开发中还有用吗)
