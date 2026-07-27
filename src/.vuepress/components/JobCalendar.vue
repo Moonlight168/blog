@@ -358,7 +358,7 @@ import {
 import { Plus, Refresh, Globe, Stack, Check, Clock, AlertTriangle, Edit, Trash, ExternalLink, Circle, CircleCheck, CircleX, AlertCircle, Loader, FilterOff } from '@vicons/tabler'
 import JobForm from './JobForm.vue'
 
-const categories = ['公务员', '国企', '事业单位', '中小厂', '小而美企业']
+const categories = ['公务员', '国企', '事业单位', '大厂', '中大厂', '中小厂', '小而美企业']
 const cities = ['广州市', '深圳市', '佛山市', '清远市', '跨地市']
 
 const categoryOptions = categories.map(c => ({ label: c, value: c }))
@@ -422,8 +422,12 @@ const verifiedFilterOptions = [
 ]
 const sourceFilterOptions = [
   { label: '全部', value: 'all' },
-  { label: '手动', value: 'manual' },
-  { label: 'AI 抓取', value: 'fetch' },
+  { label: '官网', value: '官网' },
+  { label: '前程无忧', value: '前程无忧' },
+  { label: '应届生招聘', value: '应届生招聘' },
+  { label: '猎聘', value: '猎聘' },
+  { label: '智联招聘', value: '智联招聘' },
+  { label: 'BOSS直聘', value: 'BOSS直聘' },
 ]
 const salaryOptions = [
   { label: '不限', value: 0 },
@@ -446,7 +450,7 @@ const weekendOptions = [
   { label: '未知', value: 'unknown' },
 ]
 
-const catTag = { '公务员': 'info', '国企': 'error', '事业单位': 'warning', '中小厂': 'success', '小而美企业': 'warning' }
+const catTag = { '公务员': 'info', '国企': 'error', '事业单位': 'warning', '大厂': 'success', '中大厂': 'success', '中小厂': 'warning', '小而美企业': 'default' }
 
 const themeOverrides = { common: { primaryColor: '#18a058', primaryColorHover: '#36ad6a', primaryColorPressed: '#0c7a43', primaryColorSuppl: '#36ad6a', borderRadius: '6px' } }
 
@@ -465,7 +469,7 @@ const bulkDeleting = ref(false)
 const bulkPopOpen = ref(false)
 // 4 张卡片各自的 hover 状态（手动控制 tooltip 显示百分比）
 const hover = reactive({ real: false, applied: false, pending: false, rejected: false })
-const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 2, 3, 4, 5], result: [0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6, -7, -8, -9, 99], round: [1, 2, 3, 4, 5], batch: ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始'], verified: 'all', source: 'all', salaryMin: 0, hasNextAction: false, weekend: 'all', deadlineRange: 'active' })
+const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 2, 3, 4], result: [0, 1, 2, 3, 4, 5, 6], round: [1, 2, 3, 4, 5], batch: ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始'], verified: 'all', source: 'all', salaryMin: 0, hasNextAction: false, weekend: 'all', deadlineRange: 'active' })
 let msg = null
 
 onMounted(() => { try { msg = useMessage() } catch(e) {} ; refreshFromDB(false); loadCompanies() })
@@ -604,7 +608,7 @@ watch(jobs, (next) => {
   checkedIds.value = checkedIds.value.filter(id => alive.has(id))
 })
 
-const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 2, 3, 4, 5]; filter.result = [0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6, -7, -8, -9, 99]; filter.round = [1, 2, 3, 4, 5]; filter.batch = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.hasNextAction = false; filter.weekend = 'all'; filter.deadlineRange = 'active'; keyword.value = '' }
+const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 2, 3, 4]; filter.result = [0, 1, 2, 3, 4, 5, 6]; filter.round = [1, 2, 3, 4, 5]; filter.batch = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.hasNextAction = false; filter.weekend = 'all'; filter.deadlineRange = 'active'; keyword.value = '' }
 
 // 拉取最新（按钮触发 fetch.mjs，跑完后从 DB 重载）
 const refreshing = ref(false)
@@ -800,7 +804,7 @@ const filteredStats = computed(() => {
 // 排序后传给 n-data-table（n-data-table 的内置 3 态太难控，改用 data 已是排好序的）
 // 默认按截止日期升序
 const sortMap = ref({ deadline: 'ascend' })
-const tablePageSize = ref(10)  // 表格分页大小（响应式，n-data-table 改时回写）
+const tablePageSize = ref(20)  // 表格分页大小（响应式，n-data-table 改时回写）
 const tablePage = ref(1)       // 当前页（外置分页用）
 // 过滤/数据变化时回到第 1 页
 watch([filteredJobs, keyword, filter], () => { tablePage.value = 1 }, { deep: true })
@@ -929,11 +933,15 @@ const renderApplied = (row) => {
 }
 
 const SOURCE_META = {
-  manual: { label: '手动', color: '#909399' },
-  fetch: { label: 'AI', color: '#2080f0' },
+  '官网': { label: '官网', color: '#18a058' },
+  '前程无忧': { label: '前程无忧', color: '#2080f0' },
+  '应届生招聘': { label: '应届生招聘', color: '#722ed1' },
+  '猎聘': { label: '猎聘', color: '#f0a020' },
+  '智联招聘': { label: '智联招聘', color: '#d03050' },
+  'BOSS直聘': { label: 'BOSS直聘', color: '#0099cc' },
 }
 const renderSource = (row) => {
-  const meta = SOURCE_META[row.source] || SOURCE_META.manual
+  const meta = SOURCE_META[row.source] || { label: row.source || '—', color: '#909399' }
   return h('span', { style: `color:${meta.color};font-size:12px;font-weight:600` }, meta.label)
 }
 
@@ -1049,21 +1057,21 @@ const ringStyle = (num, den, kind = 'normal') => {
 }
 
 const columns = computed(() => [
-  { type: 'selection', width: 36, disabled: (row) => false },
-  { title: '公司', key: 'company', width: 180, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.company, b.company), sortOrder: sortMap.value.company || false, ellipsis: { tooltip: true }, render: renderCompany },
+  { type: 'selection', width: 36, fixed: 'left', disabled: (row) => false },
+  { title: '公司', key: 'company', width: 180, fixed: 'left', titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.company, b.company), sortOrder: sortMap.value.company || false, ellipsis: { tooltip: true }, render: renderCompany },
   { title: '岗位', key: 'position', width: 180, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.position, b.position), sortOrder: sortMap.value.position || false, ellipsis: { tooltip: true } },
   { title: '工作地', key: 'city', width: 88, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.city, b.city), sortOrder: sortMap.value.city || false, ellipsis: { tooltip: true } },
   { title: '薪资', key: 'salary_range', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => salarySortVal(a.salary_range) - salarySortVal(b.salary_range), sortOrder: sortMap.value.salary_range || false, ellipsis: { tooltip: true }, render: (row) => row.salary_range ? h('span', { style: 'font-weight:600;color:#18a058' }, row.salary_range) : h('span', { style: 'color:#2080f0;font-weight:600' }, '面议') },
-  { title: '截止日期', key: 'deadline', width: 160, titleAlign: 'center', align: 'center', sorter: (a, b) => cmpDeadline(a.deadline, b.deadline), sortOrder: sortMap.value.deadline || false, ellipsis: { tooltip: true }, render: renderDeadline },
   { title: '类别', key: 'category', width: 100, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.category, b.category), sortOrder: sortMap.value.category || false, ellipsis: { tooltip: true }, render: renderCategory },
-  { title: '批次', key: 'batch', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.batch, b.batch), sortOrder: sortMap.value.batch || false, ellipsis: { tooltip: true }, render: (row) => row.batch ? h(NTag, { size: 'small', bordered: false, round: true, type: row.batch === '实习' ? 'info' : 'warning' }, { default: () => row.batch }) : h('span', { style: 'color:#aaa' }, '—') },
-  { title: '周末', key: 'weekend', width: 90, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.weekend, b.weekend), sortOrder: sortMap.value.weekend || false, ellipsis: { tooltip: true }, render: renderWeekend },
-  { title: '备注', key: 'notes', minWidth: 220, titleAlign: 'center', align: 'left', sorter: (a, b) => cmp(a.notes, b.notes), sortOrder: sortMap.value.notes || false, render: (row) => row.notes ? h('div', { style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;max-width:100%', title: '点击查看完整备注', onClick: (e) => { e.stopPropagation(); openDetail(row) }, onMouseenter: (e) => { e.currentTarget.style.background = '#f5f5f5' }, onMouseleave: (e) => { e.currentTarget.style.background = 'transparent' } }, row.notes) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '投递状态', key: 'applied', width: 110, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.applied, b.applied), sortOrder: sortMap.value.applied || false, ellipsis: { tooltip: true }, render: renderApplied },
   { title: '环节', key: 'stage', width: 120, titleAlign: 'center', align: 'center', ellipsis: { tooltip: true }, render: (row) => { const m = stageLabel(row); return h('span', { style: `color:${m.color};font-weight:600;font-size:12px` }, m.label) } },
+  { title: '批次', key: 'batch', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.batch, b.batch), sortOrder: sortMap.value.batch || false, ellipsis: { tooltip: true }, render: (row) => row.batch ? h(NTag, { size: 'small', bordered: false, round: true, type: row.batch === '实习' ? 'info' : row.batch === '未开始' ? 'default' : 'warning' }, { default: () => row.batch }) : h('span', { style: 'color:#aaa' }, '—') },
+  { title: '周末', key: 'weekend', width: 90, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.weekend, b.weekend), sortOrder: sortMap.value.weekend || false, ellipsis: { tooltip: true }, render: renderWeekend },
+  { title: '备注', key: 'notes', minWidth: 220, titleAlign: 'center', align: 'left', sorter: (a, b) => cmp(a.notes, b.notes), sortOrder: sortMap.value.notes || false, render: (row) => row.notes ? h('div', { style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;max-width:100%', title: '点击查看完整备注', onClick: (e) => { e.stopPropagation(); openDetail(row) }, onMouseenter: (e) => { e.currentTarget.style.background = '#f5f5f5' }, onMouseleave: (e) => { e.currentTarget.style.background = 'transparent' } }, row.notes) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '下一步', key: 'next_action', width: 160, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.next_action, b.next_action), sortOrder: sortMap.value.next_action || false, ellipsis: { tooltip: true }, render: (row) => row.next_action ? h('span', { style: 'font-size:12px' }, row.next_action) : h('span', { style: 'color:#aaa' }, '—') },
+  { title: '截止日期', key: 'deadline', width: 160, titleAlign: 'center', align: 'center', sorter: (a, b) => cmpDeadline(a.deadline, b.deadline), sortOrder: sortMap.value.deadline || false, ellipsis: { tooltip: true }, render: renderDeadline },
   { title: '验证', key: 'verified', width: 78, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.verified, b.verified), sortOrder: sortMap.value.verified || false, ellipsis: { tooltip: true }, render: renderVerified },
-  { title: '来源', key: 'source', width: 96, minWidth: 96, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.source, b.source), sortOrder: sortMap.value.source || false, ellipsis: { tooltip: true }, render: renderSource },
+  { title: '渠道', key: 'source', width: 96, minWidth: 96, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.source, b.source), sortOrder: sortMap.value.source || false, ellipsis: { tooltip: true }, render: renderSource },
   { title: '操作', key: 'actions', width: 90, titleAlign: 'center', align: 'center', render: renderActions },
 ])
 

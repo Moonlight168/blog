@@ -310,6 +310,11 @@ export default defineUserConfig({
       },
     }),
 
+    // 注:VuePress 2 / @vuepress/markdown 不支持 markdown.link.preprocess 钩子。
+    // 也尝试过 extendsMarkdown + markdown-it core.ruler 改 link token,但实际渲染
+    // 出来仍是相对路径。改回绝对路径字面量最可靠。
+    // 路径常量统一维护在项目根 .env 的 ANSWER_HISTORY_REL,只在文档里参考使用。
+
     plugins: [
         registerComponentsPlugin({
             componentsDir: componentsDir
