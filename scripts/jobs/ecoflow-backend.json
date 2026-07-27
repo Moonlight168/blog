@@ -38,7 +38,7 @@
   "applied": 0,
   "_applied_options": {"0": "待投递", "1": "已投递", "2": "已笔试", "3": "已面试", "4": "已 offer", "5": "已拒"},
 
-  "source": "manual",
+  "source": "官网",
   "_source_options": {"manual": "手动录入", "fetch": "AI 抓取"},
 
   "verified": 0,

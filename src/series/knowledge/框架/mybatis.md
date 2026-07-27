@@ -149,5 +149,5 @@ MyBatis 提供两级缓存机制：
 
 必须用 `${}`：动态表名/列名/ORDER BY，**必须配合白名单校验**。
 
-→ [回答历史](../../../series/答题历史/框架/mybatis-答题记录.md#mybatis-和-的区别)
+→ [回答历史](/series/答题历史/框架/mybatis-答题记录.md#mybatis-和-的区别)
 

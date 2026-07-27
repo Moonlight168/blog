@@ -1,0 +1,22 @@
+{
+  "_comment": "赛意信息 2027 届校招 .NET 开发岗。官网: gzsie.zhiye.com。用户原话：目前只有 .NET 招聘。",
+  "_category_options": ["公务员", "国企", "事业单位", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "小而美企业",
+  "city": "广州市",
+  "company": "广州赛意信息科技股份有限公司",
+  "position": ".NET 开发工程师",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://gzsie.zhiye.com/campus/detail?jobAdId=641b282d-2fd1-4266-a21d-b22583b10683",
+  "notes": "公司：广州赛意信息科技股份有限公司（深交所创业板 300687.SZ，2017 年上市，广州本土 MES/MOM 龙头，4000+ 人，服务华为/美的/松下/索尼等 300+ 客户，23 个行业覆盖）。岗位：2027 届校招 .NET 开发工程师，本科及以上。JD：企业级 MES/ERP 系统服务端开发与定制（C# / .NET Core / SQL Server）。匹配：.NET 技术栈与 Java 背景错位（用户需突击），但公司是广州本地上市小而美，双休 + 双休 + 上市股权激励。",
+  "salary_range": "面议",
+  "next_action": "在 gzsie.zhiye.com 注册简历，突击 .NET 基础（C# / LINQ / async）",
+  "deadline": null,
+  "applied": 0,
+  "round": null,
+  "result": null,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}

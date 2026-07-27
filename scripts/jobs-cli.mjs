@@ -29,7 +29,7 @@
  *       round       1=一面 2=二面 3=三面 4=终面 5=HR 面（默认 null）;非面试环节不填
  *       result      null=进行中;正数=过;负数=挂/拒(-1主动撤回 -2我拒offer 1简历过 2笔试过 ... 6HR面过 99其他)
  *       batch       '实习'|'27届秋招提前批'|'27届秋招'|'27届春招'|'未开始'（默认 null）
- *       source      'manual'|'fetch'（默认 'manual'）
+ *       source/channel  '官网'|'前程无忧'|'应届生招聘'|'猎聘'|'智联招聘'|'BOSS直聘'（默认 '官网'）
  *       verified    0|1|2（默认 0）  0=待验证 1=已验证 2=失效
  *       salary_range  如 '15-20k×13'
  *       next_action   如 '7/20 笔试'
@@ -59,11 +59,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
 
 // ===== 校验 =====
-const CATEGORIES = ['公务员', '国企', '事业单位', '中小厂', '小而美企业']
+const CATEGORIES = ['公务员', '国企', '事业单位', '大厂', '中大厂', '中小厂', '小而美企业']
 const CITIES = ['广州市', '深圳市', '佛山市', '清远市', '跨地市']
 const EDUCATIONS = ['不限', '专科', '本科', '本科及以上', '硕士', '博士']
 const WEEKENDS = ['周末双休', '单休', '大小周']
-const SOURCES = ['manual', 'fetch']
+const SOURCES = ['官网', '前程无忧', '应届生招聘', '猎聘', '智联招聘', 'BOSS直聘']
 const APPLIED = [0, 1, 2, 3, 4, 5]
 const ROUND = [1, 2, 3, 4, 5]
 const BATCH = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']
@@ -134,7 +134,7 @@ function validate(raw, { partial = false } = {}) {
     round:      raw.round === undefined || raw.round === null || raw.round === '' ? null : Number(raw.round),
     result:     raw.result === undefined || raw.result === null || raw.result === '' ? null : Number(raw.result),
     batch:      raw.batch === undefined || raw.batch === null || raw.batch === '' ? null : String(raw.batch),
-    source:     raw.source || 'manual',
+    source:     raw.source || '官网',
     verified:   Number(raw.verified ?? 1),
     salary_range: String(raw.salary_range || '').slice(0, 80),
     next_action:  String(raw.next_action || '').slice(0, 200),

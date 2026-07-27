@@ -62,3 +62,12 @@ class Person {
 若只重写 equals，两个内容相同的对象 equals 返回 true，但 hashCode 不同（默认返回地址）。这会导致 HashSet、HashMap 等哈希表结构异常：
 1. 两个"相等"对象被视为不同元素
 2. contains()、remove() 等方法行为错误
+
+## `==` 和 `equals` 区别？Integer 缓存范围是？
+
+- `==`：基本类型比值，引用类型比**地址**
+- `equals`：默认比地址，String/Integer 等重写后比**值**
+- Integer 有内部缓存池 **-128 ~ 127**，范围内 `==` 为 true（复用同一对象），范围外每次 new 新对象，`==` 为 false
+- 所以 Integer 比较**一律用 `equals`**，避免缓存范围的坑
+
+→ [回答历史](/series/答题历史/Java/java-答题记录.md#和-equals-区别integer-缓存范围是)
