@@ -81,6 +81,16 @@
         <n-select v-model:value="form.applied" :options="appliedOptions" />
       </n-form-item>
 
+      <n-form-item label="投递时间" v-if="form.applied >= 1">
+        <n-date-picker
+          v-model:value="form.appliedAtTs"
+          type="date"
+          clearable
+          placeholder="选择投递日期（默认今天）"
+          style="width: 100%"
+        />
+      </n-form-item>
+
       <n-form-item label="环节" v-if="form.applied !== 0">
         <n-space style="width:100%" :wrap-item="false">
           <n-select
@@ -222,6 +232,7 @@ const form = reactive({
   company: '',
   position: '',
   deadlineTs: null,
+  appliedAtTs: null,
   education: '本科',
   link: '',
   notes: '',
@@ -253,6 +264,8 @@ watch(
         form.company = props.job.company || ''
         form.position = props.job.position || ''
         form.deadlineTs = props.job.deadline ? new Date(props.job.deadline).getTime() : null
+        // applied_at 形如 "2026-07-26" / "2026-07-26 10:00"，取前 10 位
+        form.appliedAtTs = props.job.applied_at ? new Date(String(props.job.applied_at).slice(0, 10)).getTime() : null
         form.education = props.job.education || '本科'
         form.link = props.job.link || ''
         form.notes = props.job.notes || ''
@@ -271,6 +284,7 @@ watch(
         form.company = ''
         form.position = ''
         form.deadlineTs = null
+        form.appliedAtTs = null
         form.education = '本科'
         form.link = ''
         form.notes = ''
@@ -300,6 +314,9 @@ const onSubmit = async () => {
   const deadline = form.deadlineTs
     ? new Date(form.deadlineTs).toISOString().slice(0, 10)
     : null
+  const applied_at = form.appliedAtTs
+    ? new Date(form.appliedAtTs).toISOString().slice(0, 10)
+    : null
   emit('save', {
     ...(props.job || {}),
     category: form.category,
@@ -307,6 +324,7 @@ const onSubmit = async () => {
     company: form.company.trim(),
     position: form.position.trim(),
     deadline,
+    applied_at: form.applied >= 1 ? (applied_at || '') : '',
     education: form.education,
     link: form.link.trim() || null,
     notes: form.notes.trim(),

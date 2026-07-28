@@ -500,7 +500,7 @@ watch(() => filter.weekend, () => refreshFromDB(true))
 
 // 单字段更新（如勾选已投递）— 用 PATCH 接口，不传整个数组
 const patchJob = async (id, patch) => {
-  // 自动维护 applied_at：applied 0→>=1 时记"投递时间",>=1→0 时清空
+  // 自动维护 applied_at：applied 0→>=1 时记"投递日期"(YYYY-MM-DD),>=1→0 时清空
   if (patch.applied !== undefined) {
     const current = jobs.value.find(j => j.id === id)
     const oldApplied = Number(current?.applied ?? 0)
@@ -508,7 +508,7 @@ const patchJob = async (id, patch) => {
     if (oldApplied < 1 && newApplied >= 1) {
       const now = new Date()
       const pad = (n) => String(n).padStart(2, '0')
-      patch.applied_at = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+      patch.applied_at = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`
     } else if (oldApplied >= 1 && newApplied < 1) {
       patch.applied_at = ''
     }
@@ -802,19 +802,26 @@ const filteredStats = computed(() => {
 })
 
 // 排序后传给 n-data-table（n-data-table 的内置 3 态太难控，改用 data 已是排好序的）
-// 默认按截止日期升序
-const sortMap = ref({ deadline: 'ascend' })
+// 默认：复合排序 — 状态分组（已开始未投递/已投递/未开始/已结束）+ 组内次级键
+// 用户点列头 → 进入"单列覆盖"模式，按点中的列 + 升/降
+const sortMap = ref({})  // 空对象 = 用默认复合排序
 const tablePageSize = ref(20)  // 表格分页大小（响应式，n-data-table 改时回写）
 const tablePage = ref(1)       // 当前页（外置分页用）
 // 过滤/数据变化时回到第 1 页
 watch([filteredJobs, keyword, filter], () => { tablePage.value = 1 }, { deep: true })
-const sorters = { applied: (a, b, o) => cmp(a.applied, b.applied) * (o === 'ascend' ? 1 : -1), company: (a, b, o) => cmp(a.company, b.company) * (o === 'ascend' ? 1 : -1), position: (a, b, o) => cmp(a.position, b.position) * (o === 'ascend' ? 1 : -1), city: (a, b, o) => cmp(a.city, b.city) * (o === 'ascend' ? 1 : -1), deadline: (a, b, o) => cmpDeadline(a.deadline, b.deadline) * (o === 'ascend' ? 1 : -1), category: (a, b, o) => cmp(a.category, b.category) * (o === 'ascend' ? 1 : -1), batch: (a, b, o) => cmp(a.batch, b.batch) * (o === 'ascend' ? 1 : -1), weekend: (a, b, o) => cmp(a.weekend, b.weekend) * (o === 'ascend' ? 1 : -1), notes: (a, b, o) => cmp(a.notes, b.notes) * (o === 'ascend' ? 1 : -1), salary_range: (a, b, o) => (salarySortVal(a.salary_range) - salarySortVal(b.salary_range)) * (o === 'ascend' ? 1 : -1), next_action: (a, b, o) => cmp(a.next_action, b.next_action) * (o === 'ascend' ? 1 : -1) }
+const sorters = { applied: (a, b, o) => cmp(a.applied, b.applied) * (o === 'ascend' ? 1 : -1), company: (a, b, o) => cmp(a.company, b.company) * (o === 'ascend' ? 1 : -1), position: (a, b, o) => cmp(a.position, b.position) * (o === 'ascend' ? 1 : -1), city: (a, b, o) => cmp(a.city, b.city) * (o === 'ascend' ? 1 : -1), deadline: (a, b, o) => cmpDeadline(a.deadline, b.deadline) * (o === 'ascend' ? 1 : -1), category: (a, b, o) => cmp(a.category, b.category) * (o === 'ascend' ? 1 : -1), batch: (a, b, o) => cmp(a.batch, b.batch) * (o === 'ascend' ? 1 : -1), weekend: (a, b, o) => cmp(a.weekend, b.weekend) * (o === 'ascend' ? 1 : -1), notes: (a, b, o) => cmp(a.notes, b.notes) * (o === 'ascend' ? 1 : -1), salary_range: (a, b, o) => (salarySortVal(a.salary_range) - salarySortVal(b.salary_range)) * (o === 'ascend' ? 1 : -1), next_action: (a, b, o) => cmp(a.next_action, b.next_action) * (o === 'ascend' ? 1 : -1), applied_at: (a, b, o) => cmpAppliedAt(a.applied_at, b.applied_at) * (o === 'ascend' ? 1 : -1) }
+// 默认排序：状态分组 + 组内次级键（点列头切到单列模式后会被覆盖）
+const DEFAULT_SORT_FN = (a, b) => {
+  const ba = bucketOf(a), bb = bucketOf(b)
+  if (ba !== bb) return ba - bb
+  return secondaryCmp(a, b, ba)
+}
 const sortedJobs = computed(() => {
   const entry = Object.entries(sortMap.value)[0]
-  if (!entry) return filteredJobs.value
+  if (!entry) return [...filteredJobs.value].sort(DEFAULT_SORT_FN)
   const [columnKey, order] = entry
   const fn = sorters[columnKey]
-  if (!fn) return filteredJobs.value
+  if (!fn) return [...filteredJobs.value].sort(DEFAULT_SORT_FN)
   return [...filteredJobs.value].sort((a, b) => fn(a, b, order))
 })
 
@@ -1020,6 +1027,44 @@ const cmpDeadline = (a, b) => {
   if (!b) return -1
   return a.localeCompare(b)
 }
+// applied_at 形如 "2026-07-02 10:00" / "" / null，空值排最后
+const cmpAppliedAt = (a, b) => {
+  const sa = String(a ?? '').trim()
+  const sb = String(b ?? '').trim()
+  if (!sa && !sb) return 0
+  if (!sa) return 1
+  if (!sb) return -1
+  return sa.localeCompare(sb)
+}
+
+// ===== 复合排序：状态分组 + 组内次级键 =====
+// Bucket 1 = 已开始未投递（batch 有具体值 & applied=0）
+// Bucket 2 = 已投递（applied ∈ [1,4]）
+// Bucket 3 = 未开始（batch='未开始'，任何 applied）
+// Bucket 4 = 已结束（applied=5 或 result<0）
+const bucketOf = (j) => {
+  const ap = Number(j.applied ?? 0)
+  const rs = j.result == null ? null : Number(j.result)
+  const batch = j.batch == null || j.batch === '' ? null : j.batch
+  if (ap === 5 || (rs != null && rs < 0)) return 4
+  if (batch === '未开始') return 3
+  if (ap === 0) return 1
+  return 2
+}
+// 组内次级排序：
+//   Bucket 1: deadline 升序（越急越前），deadline 为空的排最后
+//   Bucket 2: applied_at 升序（最早投递越前）
+//   Bucket 3: company 升序（字母序）
+//   Bucket 4: applied_at 降序（最近结束越前）
+const secondaryCmp = (a, b, bucket) => {
+  switch (bucket) {
+    case 1: return cmpDeadline(a.deadline, b.deadline)
+    case 2: return cmpAppliedAt(a.applied_at, b.applied_at)
+    case 3: return cmp(a.company, b.company)
+    case 4: return -cmpAppliedAt(a.applied_at, b.applied_at)
+    default: return 0
+  }
+}
 
 // 计算占比（基于 real_count，避免除零返回 0%）
 // 入参是当前卡片值与分母（总岗位），返回形如 "40.0%"（分子=0 时 "0%"）
@@ -1061,11 +1106,12 @@ const columns = computed(() => [
   { title: '公司', key: 'company', width: 180, fixed: 'left', titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.company, b.company), sortOrder: sortMap.value.company || false, ellipsis: { tooltip: true }, render: renderCompany },
   { title: '岗位', key: 'position', width: 180, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.position, b.position), sortOrder: sortMap.value.position || false, ellipsis: { tooltip: true } },
   { title: '工作地', key: 'city', width: 88, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.city, b.city), sortOrder: sortMap.value.city || false, ellipsis: { tooltip: true } },
-  { title: '薪资', key: 'salary_range', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => salarySortVal(a.salary_range) - salarySortVal(b.salary_range), sortOrder: sortMap.value.salary_range || false, ellipsis: { tooltip: true }, render: (row) => row.salary_range ? h('span', { style: 'font-weight:600;color:#18a058' }, row.salary_range) : h('span', { style: 'color:#2080f0;font-weight:600' }, '面议') },
+  { title: '批次', key: 'batch', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.batch, b.batch), sortOrder: sortMap.value.batch || false, ellipsis: { tooltip: true }, render: (row) => row.batch ? h(NTag, { size: 'small', bordered: false, round: true, type: row.batch === '实习' ? 'info' : row.batch === '未开始' ? 'default' : 'warning' }, { default: () => row.batch }) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '类别', key: 'category', width: 100, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.category, b.category), sortOrder: sortMap.value.category || false, ellipsis: { tooltip: true }, render: renderCategory },
   { title: '投递状态', key: 'applied', width: 110, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.applied, b.applied), sortOrder: sortMap.value.applied || false, ellipsis: { tooltip: true }, render: renderApplied },
+  { title: '投递时间', key: 'applied_at', width: 140, titleAlign: 'center', align: 'center', sorter: (a, b) => cmpAppliedAt(a.applied_at, b.applied_at), sortOrder: sortMap.value.applied_at || false, ellipsis: { tooltip: true }, render: (row) => row.applied_at ? h('span', { style: 'font-size:12px;color:var(--text-color-2)' }, row.applied_at) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '环节', key: 'stage', width: 120, titleAlign: 'center', align: 'center', ellipsis: { tooltip: true }, render: (row) => { const m = stageLabel(row); return h('span', { style: `color:${m.color};font-weight:600;font-size:12px` }, m.label) } },
-  { title: '批次', key: 'batch', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.batch, b.batch), sortOrder: sortMap.value.batch || false, ellipsis: { tooltip: true }, render: (row) => row.batch ? h(NTag, { size: 'small', bordered: false, round: true, type: row.batch === '实习' ? 'info' : row.batch === '未开始' ? 'default' : 'warning' }, { default: () => row.batch }) : h('span', { style: 'color:#aaa' }, '—') },
+  { title: '薪资', key: 'salary_range', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => salarySortVal(a.salary_range) - salarySortVal(b.salary_range), sortOrder: sortMap.value.salary_range || false, ellipsis: { tooltip: true }, render: (row) => row.salary_range ? h('span', { style: 'font-weight:600;color:#18a058' }, row.salary_range) : h('span', { style: 'color:#2080f0;font-weight:600' }, '面议') },
   { title: '周末', key: 'weekend', width: 90, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.weekend, b.weekend), sortOrder: sortMap.value.weekend || false, ellipsis: { tooltip: true }, render: renderWeekend },
   { title: '备注', key: 'notes', minWidth: 220, titleAlign: 'center', align: 'left', sorter: (a, b) => cmp(a.notes, b.notes), sortOrder: sortMap.value.notes || false, render: (row) => row.notes ? h('div', { style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;max-width:100%', title: '点击查看完整备注', onClick: (e) => { e.stopPropagation(); openDetail(row) }, onMouseenter: (e) => { e.currentTarget.style.background = '#f5f5f5' }, onMouseleave: (e) => { e.currentTarget.style.background = 'transparent' } }, row.notes) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '下一步', key: 'next_action', width: 160, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.next_action, b.next_action), sortOrder: sortMap.value.next_action || false, ellipsis: { tooltip: true }, render: (row) => row.next_action ? h('span', { style: 'font-size:12px' }, row.next_action) : h('span', { style: 'color:#aaa' }, '—') },
