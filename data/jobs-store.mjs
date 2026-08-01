@@ -102,14 +102,27 @@ function sanitize(raw) {
   if (!raw || typeof raw !== 'object') return null
   const w = raw.weekend
   const weekend = ALLOWED_WEEKEND.includes(w) ? w : null
-  // applied: 0/1/2/3/4/5
-  const applied = [0,1,2,3,4,5].includes(Number(raw.applied)) ? Number(raw.applied) : 0
-  // round: 1=一面 2=二面 3=三面 4=终面 5=HR 面;其他值(NULL/undefined/NaN/越界)→null
+  // applied 精简枚举: 0=待投递 1=已投递 4=已 offer 5=已结束;不再支持 2=已笔试/3=已面试(由 round 字段表达)
+  const _applied = Number(raw.applied)
+  const applied = [0,1,4,5].includes(_applied) ? _applied : 0
+  // round: 0=简历初筛 1=笔试 2=测评 3=一面 4=二面 5=三面 6=终面 7=HR 面;其他值(NULL/undefined/NaN/越界)→null
   const _round = raw.round == null ? null : Number(raw.round)
-  const round = [1,2,3,4,5].includes(_round) ? _round : null
-  // result: NULL=进行中;正数=过(1简历过 2笔试过 ...);负数=挂(-1主动撤回 -2我拒offer -99其他)
+  const round = [0,1,2,3,4,5,6,7].includes(_round) ? _round : null
+  // result 精简语义: NULL=进行中; 1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 99=其他
+  // 兼容旧数据(2~6 笔试过/一面过.../-2~-6 笔试挂/一面挂...):通过 round 推断阶段,只保留定性
   const _result = raw.result == null ? null : Number(raw.result)
-  const result = _result != null && Number.isInteger(_result) && _result >= -99 && _result <= 99 ? _result : null
+  const _resultSign = _result != null && _result !== 0 ? Math.sign(_result) : null
+  const _resultAbs = _result != null ? Math.abs(_result) : null
+  let result = null
+  if (_result == null) {
+    result = null  // 进行中
+  } else if (_resultAbs === 7 || _resultAbs === 8 || _resultAbs === 9 || _resultAbs === 99) {
+    result = _result  // 主动撤回(-7)/我拒offer(-8)/offer撤回(-9)/其他(±99)
+  } else if (_resultSign === 1) {
+    result = 1  // 过
+  } else if (_resultSign === -1) {
+    result = -1  // 挂
+  }
   // batch: 实习/27届秋招提前批/27届秋招/27届春招;其他/null/空字符串→null
   const _batch = raw.batch == null || raw.batch === '' ? null : String(raw.batch).trim()
   const batch = ALLOWED_BATCH.includes(_batch) ? _batch : null
