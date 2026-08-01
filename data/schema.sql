@@ -24,9 +24,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   weekend         TEXT,                            -- 周末双休 / 单休 / 大小周 / NULL (未知)
   link            TEXT,
   notes           TEXT DEFAULT '',
-  applied         INTEGER NOT NULL DEFAULT 0,     -- 0=待投递 1=已投递 2=已笔试 3=已面试 4=已 offer 5=已结束
-  round           INTEGER,                          -- 当前第几轮: 1=一面 2=二面 3=三面 4=终面 5=HR 面; NULL=非面试环节或未开始
-  result          INTEGER,                          -- 本轮结果: NULL=进行中; 正数=过(1简历过 2笔试过 ...); 负数=挂/拒(-1主动撤回 -2我拒offer -99其他挂因)
+  applied         INTEGER NOT NULL DEFAULT 0,     -- 0=待投递 1=已投递 4=已 offer 5=已结束(精简枚举,已笔试/已面试由 round 字段表达)
+  round           INTEGER,                          -- 当前第几轮: 0=简历初筛 1=测评 2=笔试 3=一面 4=二面 5=三面 6=终面 7=HR 面; NULL=非流程环节或已结束
+  result          INTEGER,                          -- 本轮结果定性: NULL=进行中; 1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 99=其他(具体阶段由 round 决定)
   batch           TEXT,                              -- 投递批次: 实习 / 27届秋招提前批 / 27届秋招 / 27届春招 / 未开始(招聘未启动); NULL=未分类
   is_placeholder  INTEGER NOT NULL DEFAULT 0,     -- 1 = 占位条目（_待补充）
   source          TEXT NOT NULL DEFAULT '官网', -- 渠道: 官网 / 前程无忧 / 应届生招聘 / 猎聘 / 智联招聘 / BOSS直聘

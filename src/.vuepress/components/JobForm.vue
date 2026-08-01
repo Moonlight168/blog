@@ -77,7 +77,7 @@
         <n-select v-model:value="form.batch" :options="batchOptions" clearable />
       </n-form-item>
 
-      <n-form-item label="已投递" path="applied">
+      <n-form-item label="投递状态" path="applied">
         <n-select v-model:value="form.applied" :options="appliedOptions" />
       </n-form-item>
 
@@ -91,7 +91,7 @@
         />
       </n-form-item>
 
-      <n-form-item label="环节" v-if="form.applied !== 0">
+      <n-form-item label="轮次" v-if="form.applied !== 0">
         <n-space style="width:100%" :wrap-item="false">
           <n-select
             v-model:value="form.round"
@@ -166,8 +166,6 @@ const educationOptions = [
 const appliedOptions = [
   { label: '待投递', value: 0 },
   { label: '已投递', value: 1 },
-  { label: '已笔试', value: 2 },
-  { label: '已面试', value: 3 },
   { label: '已 offer', value: 4 },
   { label: '已结束', value: 5 },
 ]
@@ -180,21 +178,11 @@ const batchOptions = [
   { label: '未开始', value: '未开始' },
 ]
 
-// result 枚举:NULL=进行中,正数=过,负数=挂/拒
+// result 枚举精简:NULL=进行中, 1=过, -1=挂, -7=主动撤回, -8=我拒offer, -9=offer撤回, 99=其他
 const resultOptions = [
   { label: '— 进行中（不选）', value: null },
-  { label: '✓ 简历过', value: 1 },
-  { label: '✓ 笔试过', value: 2 },
-  { label: '✓ 一面过', value: 3 },
-  { label: '✓ 二面过', value: 4 },
-  { label: '✓ 终面过', value: 5 },
-  { label: '✓ HR 面过', value: 6 },
-  { label: '✗ 简历挂', value: -1 },
-  { label: '✗ 笔试挂', value: -2 },
-  { label: '✗ 一面挂', value: -3 },
-  { label: '✗ 二面挂', value: -4 },
-  { label: '✗ 终面挂', value: -5 },
-  { label: '✗ HR 面挂', value: -6 },
+  { label: '✓ 过', value: 1 },
+  { label: '✗ 挂', value: -1 },
   { label: '↩ 主动撤回', value: -7 },
   { label: '↩ 我拒 offer', value: -8 },
   { label: '↩ offer 撤回', value: -9 },
@@ -202,11 +190,14 @@ const resultOptions = [
 ]
 const roundOptions = [
   { label: '— 不限（不选）', value: null },
-  { label: '一面', value: 1 },
-  { label: '二面', value: 2 },
-  { label: '三面', value: 3 },
-  { label: '终面', value: 4 },
-  { label: 'HR 面', value: 5 },
+  { label: '简历初筛', value: 0 },
+  { label: '测评', value: 1 },
+  { label: '笔试', value: 2 },
+  { label: '一面', value: 3 },
+  { label: '二面', value: 4 },
+  { label: '三面', value: 5 },
+  { label: '终面', value: 6 },
+  { label: 'HR 面', value: 7 },
 ]
 const sourceOptions = [
   { label: '官网', value: '官网' },
