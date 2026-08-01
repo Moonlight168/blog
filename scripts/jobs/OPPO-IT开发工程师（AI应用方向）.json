@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "中大厂",
+  "city": "东莞市",
+  "company": "OPPO",
+  "position": "IT开发工程师（AI应用方向）",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://careers.oppo.com/university/oppo/center/history",
+  "notes": "公司：OPPO 广东移动通信有限公司（2004 年成立，中国头部智能手机与 IoT 厂商，总部东莞）。岗位：IT 开发工程师（AI 应用方向），27 届校招，本科及以上，东莞市。JD：负责营销/供应链/研发/财务/HR/办公等 IT 产品 AI 升级重构中的技术方案设计与落地，含 AI/Agent 智能体设计、工程实现与效果测试；协助产品经理完成 AI 场景落地可行性分析；参与 IT 产品系统架构设计与方案设计。要求：计算机/人工智能相关专业，熟悉 Java/Python，熟悉 Web 网络编程与中间件（Redis/RocketMQ/MySQL）；对大模型使用/应用有了解，了解 MCP/A2A 协议，具备提示词撰写/优化思路。AI 能力要求：掌握 AI 功能工程化实现，能编程调用 API，可完成算法复现。",
+  "salary_range": "面议",
+  "next_action": "已投递，等待简历筛选/笔试通知",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-07-31",
+  "progress_url": "https://careers.oppo.com/university/oppo/center/history",
+  "round": null,
+  "result": null,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}

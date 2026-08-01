@@ -17,7 +17,7 @@
  *
  *   json-file 字段（必填标 *）：
  *     * category    '公务员'|'国企'|'事业单位'|'中小厂'|'小而美企业'
- *     * city        '广州市'|'深圳市'|'佛山市'|'清远市'|'跨地市'
+ *     * city        '广州市'|'深圳市'|'佛山市'|'清远市'|'上海市'|'东莞市'|'跨地市'
  *     * company     公司名（≤120 字符）
  *     * position    岗位名（≤120 字符）
  *       deadline    'YYYY-MM-DD' 或 null
@@ -25,9 +25,9 @@
  *       weekend     '周末双休'|'单休'|'大小周'（默认 '周末双休'）
  *       link        投递链接（≤500 字符）
  *       notes       备注（≤500 字符）
- *       applied     0..5（默认 0）  0=待投递 1=已投递 2=已笔试 3=已面试 4=已 offer 5=已结束
- *       round       1=一面 2=二面 3=三面 4=终面 5=HR 面（默认 null）;非面试环节不填
- *       result      null=进行中;正数=过;负数=挂/拒(-1主动撤回 -2我拒offer 1简历过 2笔试过 ... 6HR面过 99其他)
+ *       applied     0..5（默认 0）  0=待投递 1=已投递 4=已 offer 5=已结束(精简枚举,已笔试/已面试由 round 字段表达;不再支持 2/3)
+ *       round       0=简历初筛 1=测评 2=笔试 3=一面 4=二面 5=三面 6=终面 7=HR 面（默认 null）;非流程环节或已结束不填
+ *       result      null=进行中;1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 99=其他(精简语义,具体阶段由 round 决定)
  *       batch       '实习'|'27届秋招提前批'|'27届秋招'|'27届春招'|'未开始'（默认 null）
  *       source/channel  '官网'|'前程无忧'|'应届生招聘'|'猎聘'|'智联招聘'|'BOSS直聘'（默认 '官网'）
  *       verified    0|1|2（默认 0）  0=待验证 1=已验证 2=失效
@@ -60,12 +60,12 @@ const projectRoot = join(__dirname, '..')
 
 // ===== 校验 =====
 const CATEGORIES = ['公务员', '国企', '事业单位', '大厂', '中大厂', '中小厂', '小而美企业']
-const CITIES = ['广州市', '深圳市', '佛山市', '清远市', '跨地市']
+const CITIES = ['广州市', '深圳市', '佛山市', '清远市', '上海市', '东莞市', '跨地市']
 const EDUCATIONS = ['不限', '专科', '本科', '本科及以上', '硕士', '博士']
 const WEEKENDS = ['周末双休', '单休', '大小周']
 const SOURCES = ['官网', '前程无忧', '应届生招聘', '猎聘', '智联招聘', 'BOSS直聘']
 const APPLIED = [0, 1, 2, 3, 4, 5]
-const ROUND = [1, 2, 3, 4, 5]
+const ROUND = [0, 1, 2, 3, 4, 5, 6, 7]
 const BATCH = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']
 const VERIFIED = [0, 1, 2]
 
@@ -203,6 +203,14 @@ async function cmdUpdate(args) {
   if (Object.keys(patch).length === 0) err('未传任何 --field value')
 
   // 用 partial 模式校验（允许只传部分字段）
+  const merged = { ...existing, ...patch }
+  // 自动补 round:已投递但未指定 round → 默认 round=0(简历初筛中)
+  if (Number(merged.applied) === 1 && (merged.round === undefined || merged.round === null || merged.round === '')) {
+    if (patch.round === undefined) {
+      patch.round = 0
+      info('自动补 round=0(简历初筛中)')
+    }
+  }
   const validated = validate({ ...existing, ...patch }, { partial: true })
   // partial 把 id 也吃了，回填
   validated.id = existing.id

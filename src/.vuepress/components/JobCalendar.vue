@@ -135,7 +135,7 @@
               <n-select
                 v-model:value="filter.category"
                 :options="categoryOptions"
-                multiple size="small" placeholder="全部"
+                multiple size="small" placeholder="不限"
                 :max-tag-count="2" :render-tag="renderCategoryTag"
               />
             </div>
@@ -144,7 +144,7 @@
               <n-select
                 v-model:value="filter.city"
                 :options="cityOptions"
-                multiple size="small" placeholder="全部"
+                multiple size="small" placeholder="不限"
                 :max-tag-count="2" :render-tag="renderCityTag"
               />
             </div>
@@ -173,37 +173,29 @@
               />
             </div>
             <div class="filter-cell">
-              <span class="filter-label">动作</span>
-              <n-select
-                v-model:value="filter.hasNextAction"
-                :options="hasActionOptions"
-                size="small"
-              />
-            </div>
-            <div class="filter-cell">
               <span class="filter-label">投递</span>
               <n-select
                 v-model:value="filter.applied"
                 :options="appliedFilterOptions"
-                multiple size="small" placeholder="全部"
+                multiple size="small" placeholder="不限"
                 :max-tag-count="2"
               />
             </div>
             <div class="filter-cell">
               <span class="filter-label">环节</span>
               <n-select
-                v-model:value="filter.result"
-                :options="resultFilterOptions"
-                multiple size="small" placeholder="全部"
+                v-model:value="filter.round"
+                :options="stageFilterOptions"
+                multiple size="small" placeholder="不限"
                 :max-tag-count="2"
               />
             </div>
             <div class="filter-cell">
-              <span class="filter-label">轮次</span>
+              <span class="filter-label">结果</span>
               <n-select
-                v-model:value="filter.round"
-                :options="stageFilterOptions"
-                multiple size="small" placeholder="全部"
+                v-model:value="filter.result"
+                :options="resultFilterOptions"
+                multiple size="small" placeholder="不限"
                 :max-tag-count="2"
               />
             </div>
@@ -212,7 +204,7 @@
               <n-select
                 v-model:value="filter.batch"
                 :options="batchFilterOptions"
-                multiple size="small" placeholder="全部"
+                multiple size="small" placeholder="不限"
                 :max-tag-count="2"
               />
             </div>
@@ -359,7 +351,7 @@ import { Plus, Refresh, Globe, Stack, Check, Clock, AlertTriangle, Edit, Trash, 
 import JobForm from './JobForm.vue'
 
 const categories = ['公务员', '国企', '事业单位', '大厂', '中大厂', '中小厂', '小而美企业']
-const cities = ['广州市', '深圳市', '佛山市', '清远市', '跨地市']
+const cities = ['广州市', '深圳市', '佛山市', '清远市', '上海市', '东莞市']
 
 const categoryOptions = categories.map(c => ({ label: c, value: c }))
 const cityOptions = cities.map(c => ({ label: c, value: c }))
@@ -369,43 +361,34 @@ const renderTag = (type, label, handleClose) =>
 const renderCategoryTag = ({ option, handleClose }) => renderTag(catTag[option.value] || 'default', option.label, handleClose)
 const renderCityTag = ({ option, handleClose }) => renderTag('default', option.label, handleClose)
 const deadlineOptions = [
-  { label: '全部', value: 'all' },
+  { label: '不限', value: 'all' },
   { label: '招聘中', value: 'active' },
   { label: '已过期', value: 'overdue' },
 ]
 const appliedFilterOptions = [
   { label: '待投递', value: 0 },
   { label: '已投递', value: 1 },
-  { label: '已笔试', value: 2 },
-  { label: '已面试', value: 3 },
   { label: '已 offer', value: 4 },
   { label: '已结束', value: 5 },
 ]
 const resultFilterOptions = [
   { label: '进行中', value: 0 },
-  { label: '简历过', value: 1 },
-  { label: '笔试过', value: 2 },
-  { label: '一面过', value: 3 },
-  { label: '二面过', value: 4 },
-  { label: '终面过', value: 5 },
-  { label: 'HR 面过', value: 6 },
-  { label: '简历挂', value: -1 },
-  { label: '笔试挂', value: -2 },
-  { label: '一面挂', value: -3 },
-  { label: '二面挂', value: -4 },
-  { label: '终面挂', value: -5 },
-  { label: 'HR 面挂', value: -6 },
+  { label: '过', value: 1 },
+  { label: '挂', value: -1 },
   { label: '主动撤回', value: -7 },
   { label: '我拒 offer', value: -8 },
   { label: 'offer 撤回', value: -9 },
   { label: '其他', value: 99 },
 ]
 const stageFilterOptions = [
-  { label: '一面', value: 1 },
-  { label: '二面', value: 2 },
-  { label: '三面', value: 3 },
-  { label: '终面', value: 4 },
-  { label: 'HR 面', value: 5 },
+  { label: '简历初筛', value: 0 },
+  { label: '测评', value: 1 },
+  { label: '笔试', value: 2 },
+  { label: '一面', value: 3 },
+  { label: '二面', value: 4 },
+  { label: '三面', value: 5 },
+  { label: '终面', value: 6 },
+  { label: 'HR 面', value: 7 },
 ]
 const batchFilterOptions = [
   { label: '实习', value: '实习' },
@@ -415,13 +398,13 @@ const batchFilterOptions = [
   { label: '未开始', value: '未开始' },
 ]
 const verifiedFilterOptions = [
-  { label: '全部', value: 'all' },
+  { label: '不限', value: 'all' },
   { label: '待验证', value: 0 },
   { label: '已验证', value: 1 },
   { label: '失效', value: 2 },
 ]
 const sourceFilterOptions = [
-  { label: '全部', value: 'all' },
+  { label: '不限', value: 'all' },
   { label: '官网', value: '官网' },
   { label: '前程无忧', value: '前程无忧' },
   { label: '应届生招聘', value: '应届生招聘' },
@@ -438,12 +421,8 @@ const salaryOptions = [
   { label: '8k-1w', value: 8 },
   { label: '≥1w', value: 10 },
 ]
-const hasActionOptions = [
-  { label: '全部', value: false },
-  { label: '有待办', value: true },
-]
 const weekendOptions = [
-  { label: '全部', value: 'all' },
+  { label: '不限', value: 'all' },
   { label: '双休', value: '周末双休' },
   { label: '单休', value: '单休' },
   { label: '大小周', value: '大小周' },
@@ -469,7 +448,7 @@ const bulkDeleting = ref(false)
 const bulkPopOpen = ref(false)
 // 4 张卡片各自的 hover 状态（手动控制 tooltip 显示百分比）
 const hover = reactive({ real: false, applied: false, pending: false, rejected: false })
-const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 2, 3, 4], result: [0, 1, 2, 3, 4, 5, 6], round: [1, 2, 3, 4, 5], batch: ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始'], verified: 'all', source: 'all', salaryMin: 0, hasNextAction: false, weekend: 'all', deadlineRange: 'active' })
+const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 4, 5], result: [0, 1, -1, -7, -8, -9, 99], round: [0, 1, 2, 3, 4, 5, 6, 7], batch: ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始'], verified: 'all', source: 'all', salaryMin: 0, weekend: 'all', deadlineRange: 'all' })
 let msg = null
 
 onMounted(() => { try { msg = useMessage() } catch(e) {} ; refreshFromDB(false); loadCompanies() })
@@ -608,7 +587,7 @@ watch(jobs, (next) => {
   checkedIds.value = checkedIds.value.filter(id => alive.has(id))
 })
 
-const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 2, 3, 4]; filter.result = [0, 1, 2, 3, 4, 5, 6]; filter.round = [1, 2, 3, 4, 5]; filter.batch = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.hasNextAction = false; filter.weekend = 'all'; filter.deadlineRange = 'active'; keyword.value = '' }
+const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 4, 5]; filter.result = [0, 1, -1, -7, -8, -9, 99]; filter.round = [0, 1, 2, 3, 4, 5, 6, 7]; filter.batch = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.weekend = 'all'; filter.deadlineRange = 'all'; keyword.value = '' }
 
 // 拉取最新（按钮触发 fetch.mjs，跑完后从 DB 重载）
 const refreshing = ref(false)
@@ -777,10 +756,9 @@ const matchSalaryRange = (job, opt) => {
   if (opt === 10) return v >= 10              // ≥1w
   return true
 }
-const matchHasNextAction = (job, on) => !on || !!job.next_action
 const filteredJobs = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
-  return jobs.value.filter(j => filter.category.includes(j.category) && filter.city.includes(j.city) && matchApplied(j, filter.applied) && matchResult(j, filter.result) && matchRound(j, filter.round) && matchBatch(j, filter.batch) && matchVerified(j, filter.verified) && matchSource(j, filter.source) && matchSalaryRange(j, filter.salaryMin) && matchHasNextAction(j, filter.hasNextAction) && matchDeadline(j, filter.deadlineRange) && (!kw || (j.company+' '+j.position+' '+j.notes+' '+(j.salary_range||'')+' '+(j.next_action||'')).toLowerCase().includes(kw)))
+  return jobs.value.filter(j => filter.category.includes(j.category) && filter.city.includes(j.city) && matchApplied(j, filter.applied) && matchResult(j, filter.result) && matchRound(j, filter.round) && matchBatch(j, filter.batch) && matchVerified(j, filter.verified) && matchSource(j, filter.source) && matchSalaryRange(j, filter.salaryMin) && matchDeadline(j, filter.deadlineRange) && (!kw || (j.company+' '+j.position+' '+j.notes+' '+(j.salary_range||'')+' '+(j.next_action||'')).toLowerCase().includes(kw)))
 })
 
 // 4 张统计卡片都用筛选后的本地数据；占比的分母固定为全部岗位(stats.real_count)
@@ -863,59 +841,49 @@ const APPLIED_META = {
 }
 const appliedOptions = Object.entries(APPLIED_META).map(([k, v]) => ({ label: v.label, value: Number(k) }))
 
-// 环节 = round(轮次) + result(结果) 拼出的人话
+// 环节 = round(轮次) + result(结果定性) 拼出的人话
 // round: 1=一面 2=二面 3=三面 4=终面 5=HR 面
-const ROUND_META = { 1: '一面', 2: '二面', 3: '三面', 4: '终面', 5: 'HR面' }
-// result: 正数=过 负数=挂/拒 0=进行中;绝对值:1=简历 2=笔试 3=一面 4=二面 5=终面 6=HR 7=主动撤回 8=我拒offer 9=offer撤回 99=其他
-const STAGE_RESULT_META = {
-  '1:1':  { label: '简历过',   color: '#18a058' },
-  '2:2':  { label: '笔试过',   color: '#18a058' },
-  '3:3':  { label: '一面过',   color: '#18a058' },
-  '4:4':  { label: '二面过',   color: '#18a058' },
-  '5:5':  { label: '终面过',   color: '#18a058' },
-  '5:6':  { label: 'HR 面过',  color: '#18a058' },
-  '1:-1': { label: '简历挂',   color: '#d03050' },
-  '2:-2': { label: '笔试挂',   color: '#d03050' },
-  '3:-3': { label: '一面挂',   color: '#d03050' },
-  '4:-4': { label: '二面挂',   color: '#d03050' },
-  '5:-5': { label: '终面挂',   color: '#d03050' },
-  '5:-6': { label: 'HR 面挂',  color: '#d03050' },
-  '-1:-7':{ label: '主动撤回', color: '#999' },
-  '-1:-8':{ label: '我拒 offer', color: '#999' },
-  '-1:-9':{ label: 'offer 撤回', color: '#999' },
-  '-1:99':{ label: '其他',     color: '#999' },
-}
-// 进行中: applied=1/2/3 且 result=null → "投递中" / "笔试待考" / "X面进行中"
-// applied=5 且 result=null → "进行中"(老数据兜底)
-// applied=4 → "HR 面过"
-// applied=0 → 不显示
+const ROUND_META = { 0: '简历初筛', 1: '测评', 2: '笔试', 3: '一面', 4: '二面', 5: '三面', 6: '终面', 7: 'HR面' }
+// result 精简语义:0=进行中 1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 99=其他
+const RESULT_LABEL = { 0: '进行中', 1: '过', '-1': '挂', '-7': '主动撤回', '-8': '我拒 offer', '-9': 'offer 撤回', '99': '其他' }
+// 阶段×结果配色矩阵:每个组合用完全不同的强对比色,不用同色系渐变
+// value 索引:0=简历初筛 1=测评 2=笔试 3=一面 4=二面 5=三面 6=终面 7=HR面
+// 过:8 个阶段 8 种色
+const PASS_COLOR = { 0: '#13c2c2', 1: '#f0a020', 2: '#9bc7ea', 3: '#18a058', 4: '#722ed1', 5: '#2080f0', 6: '#0f4d7e', 7: '#d03050' }
+// 挂:8 个阶段 8 种深浅红
+const FAIL_COLOR = { 0: '#a91826', 1: '#8e121e', 2: '#f17c87', 3: '#d03050', 4: '#a91826', 5: '#8e121e', 6: '#6b0e16', 7: '#4a0a0f' }
+// 进行中:8 个阶段 8 种浅色
+const PROG_COLOR = { 0: '#909399', 1: '#f0a020', 2: '#67aade', 3: '#36ad6a', 4: '#9254de', 5: '#2080f0', 6: '#155ea3', 7: '#0f4d7e' }
+const SPECIAL_COLOR = '#999'  // 主动撤回/我拒/offer撤回/其他
+// 兜底阶段名(round 缺失时,根据 applied 推断,如 applied=2 推断笔试)
+const APPLIED_STAGE = { 0: '待投递', 1: '简历', 2: '笔试', 3: '面试', 4: 'HR', 5: '已结束' }
+// 阶段对应"X面过"颜色:过=绿 挂=红 进行中=蓝 撤回=灰
 function stageLabel(row) {
   const ap = Number(row.applied ?? 0)
   const rd = row.round == null ? null : Number(row.round)
   const rs = row.result == null ? null : Number(row.result)
   if (ap === 0) return { label: '—', color: '#aaa' }
-  // 优先按 round+result 精确匹配
-  if (rd != null && rs != null) {
-    const key = `${rd}:${rs}`
-    if (STAGE_RESULT_META[key]) return STAGE_RESULT_META[key]
+  // 特殊结果(主动撤回/我拒/offer撤回/其他):不分阶段,直接显示
+  if (rs != null && (rs <= -7 || rs >= 99 || rs === -8 || rs === -9)) {
+    return { label: RESULT_LABEL[String(rs)] || '其他', color: SPECIAL_COLOR }
   }
-  // 仅 result 有值(无 round):用 result 绝对值映射阶段名
+  // 阶段名 = round 优先,fallback 到 applied 推断
+  const stageName = rd != null ? ROUND_META[rd] : APPLIED_STAGE[ap]
+  const stageKey = rd != null ? rd : ap  // 用 round 索引配色,fallback applied
+  // 有 result(过/挂/进行中)
   if (rs != null) {
-    if (rs > 0) {
-      const stageMap = { 1: '简历过', 2: '笔试过', 3: '一面过', 4: '二面过', 5: '终面过', 6: 'HR 面过' }
-      return { label: stageMap[rs] || '已过', color: '#18a058' }
-    }
-    if (rs < 0) {
-      const stageMap = { '-1': '简历挂', '-2': '笔试挂', '-3': '一面挂', '-4': '二面挂', '-5': '终面挂', '-6': 'HR 面挂', '-7': '主动撤回', '-8': '我拒 offer', '-9': 'offer 撤回' }
-      return { label: stageMap[String(rs)] || '其他', color: rs < -6 ? '#999' : '#d03050' }
-    }
+    if (rs === 0) return { label: `${stageName}进行中`, color: PROG_COLOR[stageKey] || '#2080f0' }
+    if (rs === 1) return { label: `${stageName}过`, color: PASS_COLOR[stageKey] || '#18a058' }
+    if (rs === -1) return { label: `${stageName}挂`, color: FAIL_COLOR[stageKey] || '#d03050' }
+    return { label: `${stageName}${RESULT_LABEL[String(rs)] || ''}`, color: '#666' }
   }
-  // 进行中
-  if (ap === 1) return { label: '进行中', color: '#2080f0' }
-  if (ap === 2) return { label: '笔试待考', color: '#2080f0' }
-  if (ap === 3) return { label: rd != null ? `${ROUND_META[rd]}进行中` : '面试进行中', color: '#2080f0' }
-  if (ap === 4) return { label: 'HR 面过', color: '#18a058' }
-  if (ap === 5) return { label: '进行中', color: '#2080f0' }
+  // 无 result:进行中兜底(round 优先,fallback applied 推断)
+  if (rd != null) return { label: `${ROUND_META[rd]}进行中`, color: PROG_COLOR[rd] || '#2080f0' }
+  if (ap === 1) return { label: '投递中', color: PROG_COLOR[0] || '#909399' }
+  if (ap === 2) return { label: '笔试待考', color: PROG_COLOR[1] || '#f0a020' }
+  if (ap === 3) return { label: '面试进行中', color: PROG_COLOR[3] || '#36ad6a' }
+  if (ap === 4) return { label: 'HR 面过', color: PASS_COLOR[7] || '#d03050' }
+  if (ap === 5) return { label: '已结束', color: '#999' }
   return { label: '—', color: '#aaa' }
 }
 
@@ -1038,30 +1006,46 @@ const cmpAppliedAt = (a, b) => {
 }
 
 // ===== 复合排序：状态分组 + 组内次级键 =====
-// Bucket 1 = 已开始未投递（batch 有具体值 & applied=0）
-// Bucket 2 = 已投递（applied ∈ [1,4]）
-// Bucket 3 = 未开始（batch='未开始'，任何 applied）
-// Bucket 4 = 已结束（applied=5 或 result<0）
+// 排序按列顺序（投递状态 → 环节 → 投递时间）：
+//   Bucket 1 = 待投递（applied=0，优先级最高：已开始未投,需要尽快处理）
+//   Bucket 2 = 已投递（applied=1，进行中主体）
+//   Bucket 3 = 已 offer（applied=4，进度最深）
+//   Bucket 4 = 未开始（batch='未开始'）
+//   Bucket 5 = 已结束（applied=5 或 result<0，排在最后）
+// 核心原则：投递状态决定主桶；进度越深桶号越小；待投递单独置顶；已结束兜底
 const bucketOf = (j) => {
   const ap = Number(j.applied ?? 0)
   const rs = j.result == null ? null : Number(j.result)
   const batch = j.batch == null || j.batch === '' ? null : j.batch
-  if (ap === 5 || (rs != null && rs < 0)) return 4
-  if (batch === '未开始') return 3
+  // 已结束放最后
+  if (ap === 5 || (rs != null && rs < 0)) return 5
+  // 未开始放第四
+  if (batch === '未开始') return 4
+  // 已开始未投递 = 最高优先级
   if (ap === 0) return 1
-  return 2
+  // 已投递 / 已 offer 按进度排
+  if (ap === 1) return 2  // 已投递
+  if (ap === 4) return 3  // 已 offer
+  // 兜底：未知状态归到已结束
+  return 5
 }
-// 组内次级排序：
-//   Bucket 1: deadline 升序（越急越前），deadline 为空的排最后
-//   Bucket 2: applied_at 升序（最早投递越前）
-//   Bucket 3: company 升序（字母序）
-//   Bucket 4: applied_at 降序（最近结束越前）
+// 组内次级排序（按列顺序）：
+//   Bucket 1 (待投递):   deadline 升序（越急越前），空排最后
+//   Bucket 2~3 (进行中): ① round 降序（轮次越深越前） ② 同 round 按 applied_at 升序（最早投递越前）
+//   Bucket 4 (未开始):   company 升序（字母序）
+//   Bucket 5 (已结束):   applied_at 降序（最近结束越前）
 const secondaryCmp = (a, b, bucket) => {
   switch (bucket) {
     case 1: return cmpDeadline(a.deadline, b.deadline)
-    case 2: return cmpAppliedAt(a.applied_at, b.applied_at)
-    case 3: return cmp(a.company, b.company)
-    case 4: return -cmpAppliedAt(a.applied_at, b.applied_at)
+    case 2:
+    case 3: {
+      const ar = a.round == null ? -1 : Number(a.round)
+      const br = b.round == null ? -1 : Number(b.round)
+      if (ar !== br) return br - ar  // round 降序
+      return cmpAppliedAt(a.applied_at, b.applied_at)  // 同 round 按 applied_at 升序
+    }
+    case 4: return cmp(a.company, b.company)
+    case 5: return -cmpAppliedAt(a.applied_at, b.applied_at)
     default: return 0
   }
 }
@@ -1107,10 +1091,10 @@ const columns = computed(() => [
   { title: '岗位', key: 'position', width: 180, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.position, b.position), sortOrder: sortMap.value.position || false, ellipsis: { tooltip: true } },
   { title: '工作地', key: 'city', width: 88, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.city, b.city), sortOrder: sortMap.value.city || false, ellipsis: { tooltip: true } },
   { title: '批次', key: 'batch', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.batch, b.batch), sortOrder: sortMap.value.batch || false, ellipsis: { tooltip: true }, render: (row) => row.batch ? h(NTag, { size: 'small', bordered: false, round: true, type: row.batch === '实习' ? 'info' : row.batch === '未开始' ? 'default' : 'warning' }, { default: () => row.batch }) : h('span', { style: 'color:#aaa' }, '—') },
-  { title: '类别', key: 'category', width: 100, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.category, b.category), sortOrder: sortMap.value.category || false, ellipsis: { tooltip: true }, render: renderCategory },
   { title: '投递状态', key: 'applied', width: 110, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.applied, b.applied), sortOrder: sortMap.value.applied || false, ellipsis: { tooltip: true }, render: renderApplied },
-  { title: '投递时间', key: 'applied_at', width: 140, titleAlign: 'center', align: 'center', sorter: (a, b) => cmpAppliedAt(a.applied_at, b.applied_at), sortOrder: sortMap.value.applied_at || false, ellipsis: { tooltip: true }, render: (row) => row.applied_at ? h('span', { style: 'font-size:12px;color:var(--text-color-2)' }, row.applied_at) : h('span', { style: 'color:#aaa' }, '—') },
   { title: '环节', key: 'stage', width: 120, titleAlign: 'center', align: 'center', ellipsis: { tooltip: true }, render: (row) => { const m = stageLabel(row); return h('span', { style: `color:${m.color};font-weight:600;font-size:12px` }, m.label) } },
+  { title: '投递时间', key: 'applied_at', width: 140, titleAlign: 'center', align: 'center', sorter: (a, b) => cmpAppliedAt(a.applied_at, b.applied_at), sortOrder: sortMap.value.applied_at || false, ellipsis: { tooltip: true }, render: (row) => row.applied_at ? h('span', { style: 'font-size:12px;color:var(--text-color-2)' }, row.applied_at) : h('span', { style: 'color:#aaa' }, '—') },
+  { title: '类别', key: 'category', width: 100, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.category, b.category), sortOrder: sortMap.value.category || false, ellipsis: { tooltip: true }, render: renderCategory },
   { title: '薪资', key: 'salary_range', width: 120, titleAlign: 'center', align: 'center', sorter: (a, b) => salarySortVal(a.salary_range) - salarySortVal(b.salary_range), sortOrder: sortMap.value.salary_range || false, ellipsis: { tooltip: true }, render: (row) => row.salary_range ? h('span', { style: 'font-weight:600;color:#18a058' }, row.salary_range) : h('span', { style: 'color:#2080f0;font-weight:600' }, '面议') },
   { title: '周末', key: 'weekend', width: 90, titleAlign: 'center', align: 'center', sorter: (a, b) => cmp(a.weekend, b.weekend), sortOrder: sortMap.value.weekend || false, ellipsis: { tooltip: true }, render: renderWeekend },
   { title: '备注', key: 'notes', minWidth: 220, titleAlign: 'center', align: 'left', sorter: (a, b) => cmp(a.notes, b.notes), sortOrder: sortMap.value.notes || false, render: (row) => row.notes ? h('div', { style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;max-width:100%', title: '点击查看完整备注', onClick: (e) => { e.stopPropagation(); openDetail(row) }, onMouseenter: (e) => { e.currentTarget.style.background = '#f5f5f5' }, onMouseleave: (e) => { e.currentTarget.style.background = 'transparent' } }, row.notes) : h('span', { style: 'color:#aaa' }, '—') },

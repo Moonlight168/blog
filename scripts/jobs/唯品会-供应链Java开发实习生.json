@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "中大厂",
+  "city": "上海市",
+  "company": "唯品会",
+  "position": "【2027届实习生】供应链Java开发实习生",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://app-tc.mokahr.com/campus-recruitment/vipshophr/8015",
+  "notes": "公司：唯品会（VIPS，NYSE 美股上市，中国头部特卖电商平台，总部广州）。岗位：【2027 届实习生】供应链 Java 开发实习生，本科及以上，27 届实习。JD：负责主站核心供应链业务系统设计与开发，覆盖供应商服务、库存调度、订单履约、仓储物流、财务结算全链路；技术栈含 Java 后端（Spring/MyBatis 等）+ Redis + Kafka + MySQL；要求 Java 基础扎实（多线程/集合/JVM）、对 MySQL/Redis/Kafka 至少一种有深入学习实践、设计模式与 TDD 实践、半年内精读过技术书籍。实习期望：每周 ≥4 天、持续 ≥6 个月。优先考虑供应链/电商/ERP/仓储物流经验者、开源贡献或技术博客者。",
+  "salary_range": "面议",
+  "next_action": "已投递，等待简历筛选/笔试通知",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-07-31",
+  "progress_url": "https://app-tc.mokahr.com/campus-recruitment/vipshophr/8015#/candidateHome/applications",
+  "round": null,
+  "result": null,
+  "batch": "实习",
+  "source": "官网",
+  "verified": 1
+}

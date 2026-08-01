@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "中小厂",
+  "city": "深圳市",
+  "company": "深德科",
+  "position": "JAVA开发管培生",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "",
+  "notes": "公司：深圳市深德科(集团)有限公司（深圳中小厂,2026 校招投放 JAVA 管培生岗位,公司具体规模/上市/业务覆盖待核实）。岗位：JAVA 开发管培生 5-7k 校招,本科及以上,招 10 人,广东深圳,27 届秋招。JD：JAVA 应用程序设计/开发/维护;模块详细设计、编码实现、单元测试;按计划完成开发任务;参与需求分析与系统设计;编写技术文档与接口文档。要求：计算机/软件工程等相关专业,2027 届统招本科及以上,有个人项目/实习/开源经验者优先;Java 基础扎实(OOP);熟悉 IntelliJ IDEA/Eclipse + Git;数据库基础(SQL/索引/事务);至少 2 种主流框架(Spring/Spring Boot/Spring Cloud);可尽快到岗。投递渠道：微信小程序。**进度查看说明**：进度需通过微信小程序查看,无 web 端进度页。",
+  "salary_range": "5-7k",
+  "next_action": "已投递,从微信小程序查进度",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-08-01",
+  "progress_url": "",
+  "round": null,
+  "result": null,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}
