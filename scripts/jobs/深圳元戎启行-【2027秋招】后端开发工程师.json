@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "大厂",
+  "city": "深圳市",
+  "company": "深圳元戎启行科技有限公司",
+  "position": "【2027秋招】后端开发工程师",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://app.mokahr.com/campus-recruitment/deeproute/145894",
+  "progress_url": "https://app.mokahr.com/campus-recruitment/deeproute/145894#/candidateHome/applications",
+  "notes": "公司：深圳元戎启行（自动驾驶独角兽，Robotaxi 头部，已与多家车企量产合作，超 40 万辆搭载城市 NOA 方案车辆进入消费市场，覆盖十余款热销车型）。岗位：【2027秋招】后端开发工程师，本科及以上，深圳。JD：参与 Robotaxi 运营后台开发与维护，包括订单派发与车辆调度逻辑、5G 远程接管（云代驾）模块、合规数据上报与云端协同；要求计算机相关专业，熟练 C++/Go/Java 之一，NOI/ACM 或大型开源项目经历加分。",
+  "salary_range": "面议",
+  "next_action": "等初筛结果",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-08-05",
+  "round": null,
+  "result": null,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}

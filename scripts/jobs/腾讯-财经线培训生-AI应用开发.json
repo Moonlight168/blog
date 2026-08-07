@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "大厂",
+  "city": "上海市",
+  "company": "腾讯",
+  "position": "财经线培训生-AI应用开发",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://join.qq.com",
+  "notes": "公司：深圳市腾讯计算机系统有限公司（00700.HK 港股上市,中国互联网巨头,社交/游戏/腾讯云/AI 全栈,总部深圳南山区）。岗位：后台开发(实习,应届实习岗,技术),本科及以上,上海远程面试,实习。JD：实现/优化公司产品功能,构建关键服务与基础设施;持续优化架构,关注 AI 在智能运维/故障预测领域应用;引入 AI 编程工具提升效率;与产品/前端合作推进 AI 后端集成;线上问题快速定位,探索 AI 智能故障诊断;关注 AI/大模型技术在后端架构应用。要求：扎实编程(C/C++/Java/Go 一门);TCP/UDP 网络协议 + 进程间通讯;算法/操作系统/软件工程/设计模式/数据结构/数据库/网络安全;Python/Shell + MySQL/SQL + NoSQL/Key-value。加分项：分布式系统/负载均衡/容灾/高可用/云原生。投递渠道：腾讯校招(join.qq.com)。进度查看：https://join.qq.com/progress.html 。AI 应用技能要求：善于借助 AI 工具拆解复杂问题。",
+  "salary_range": "面议",
+  "next_action": "已投递,等待简历筛选/笔试通知",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-08-01",
+  "progress_url": "https://join.qq.com/progress.html",
+  "round": null,
+  "result": null,
+  "batch": "实习",
+  "source": "官网",
+  "verified": 1
+}

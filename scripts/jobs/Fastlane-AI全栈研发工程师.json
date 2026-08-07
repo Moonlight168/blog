@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "中大厂",
+  "city": "深圳市",
+  "company": "Fastlane",
+  "position": "AI全栈研发工程师",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://fastbase.jobs.feishu.cn/588906/position/application",
+  "notes": "公司：Fastlane（2018 年成立，中国领先的 DTC 平台运营服务商，加速创新品牌全球化，总部深圳，业务覆盖北美/欧洲/日韩/拉美/中东 50+ 国家和地区；合作行业消费电子/智能家居/户外/时尚/影音，多个 DTC 品牌销售额从零突破 1 亿元；价值观 Open-minded/Ambitious/Committed/Collaborative；通过飞书招聘 ATS 投递，公司 ID 588906）。岗位：AI 全栈研发工程师(27 届校招)，本科及以上，深圳，12-20KCNY/月。JD：找 AI 原住民（熟练 Claude Code/Cursor/GitHub Copilot，能用 AI 提升 3-5 倍开发效率，3-5 年负责单一模块不需要，快速成长为全栈架构师）。岗位职责：重构集团信息大脑（财务信息化/CRM/供应链管理 全栈开发与架构设计，对接金蝶等外部系统，做企业级数据集成）；ERP 系统拆解与进化（维护+模块化拆解+重构）；开发数据看板（实时库存/订单履约/财务大盘/BI 报表）；系统生态数据集成+API 开发+数据中台；AI 极客开发（代码生成/自动化测试/文档产出，参与集团智能化开发工具建设）。要求：2026/2027 届本科及以上，计算机/软工；精通 Go/Python/Node.js/PHP 至少一门 + React；AI Native 基因（硬核门槛，重度依赖 Claude Code/Cursor/Copilot）；PostgreSQL/MySQL + RESTful API + 企业级应用或 BI 报表经验。加分项：高星技术博客/活跃开源 Contributor；大厂实习+ERP/财务/企业信息化经验。福利：扁平高效（直接与业务/产品一号位对话）；AI 工具订阅+充足云服务/API 额度；产品直接服务消费者和一线业务。投递渠道：飞书招聘。进度查看：https://fastbase.jobs.feishu.cn/588906/position/application 。",
+  "salary_range": "12-20k",
+  "next_action": "已投递,等待简历筛选/笔试通知",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-08-04",
+  "progress_url": "https://fastbase.jobs.feishu.cn/588906/position/application",
+  "round": null,
+  "result": null,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}

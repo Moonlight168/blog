@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "大厂",
+  "city": "深圳市",
+  "company": "欣旺达电子股份有限公司",
+  "position": "智能技术实习生",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://sunwodacampus.zhiye.com/",
+  "progress_url": "https://sunwodacampus.zhiye.com/personal/deliveryRecord",
+  "notes": "公司：欣旺达电子股份有限公司（深交所上市，股票代码 300207，全球动力电池 Top 10，消费电池 + 动力电池 + 储能 + 智能硬件多业务线，深圳光明区总部）。岗位：智能技术实习生，本科及以上，深圳光明区。JD：协助整理多渠道业务数据，开发数据处理工具完成数据清洗/录入/标准化；参与数平台功能可视化（智能报告生成界面、简单设计界面）；优化数据处理流程。要求计算机/大数据/AI/软工相关专业，掌握 Python/Java 至少一种，熟悉 SQL（MySQL/Oracle），有数据处理工具开发或数据分析项目经验优先。",
+  "salary_range": "面议",
+  "next_action": "等简历筛选 → 面试",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-08-05",
+  "round": null,
+  "result": null,
+  "batch": "实习",
+  "source": "官网",
+  "verified": 1
+}

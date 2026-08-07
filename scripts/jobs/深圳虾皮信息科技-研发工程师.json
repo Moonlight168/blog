@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "大厂",
+  "city": "深圳市",
+  "company": "深圳虾皮信息科技",
+  "position": "研发工程师",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://app.mokahr.com/candidate/applications/deliver-query/shopee",
+  "notes": "公司：深圳虾皮信息科技有限公司（Shopee，Sea Group SE 纽交所上市旗下,东南亚电商+金融+游戏巨头,腾讯前高管 Forrest Li 创办,总部新加坡,中国深圳/上海/北京有分部）。岗位：研发工程师-深圳(27 届校招)，本科及以上,深圳,面议。JD：参与公司业务系统及技术平台设计/开发/持续优化;服务端架构设计与研发,构建高性能/高可用/高扩展性分布式系统;深入理解业务需求,完成需求分析/技术方案设计;持续优化系统性能/稳定性;设计辅助工具提高研发效率;关注 AI 技术趋势(LLM/Agent/AIGC),探索业务场景应用,参与智能化研发实践;运用 Vibe Coding 提升代码生成/测试效率。要求：2027 届本科及以上,计算机/软工/AI/数据科学专业;扎实数据结构/算法/计算机基础;Golang/Java/Python/C/C++ 至少一种;Web 服务开发(Gin/gRPC/Spring Boot/Django/Flask/MySQL/Redis/Kafka);设计模式/系统架构/工程实践;分布式/高并发/性能优化;对 AI 保持浓厚兴趣,愿意学习大模型应用/Agent/Skill/Prompt Engineering。投递渠道：Moka。进度查看：https://app.mokahr.com/candidate/applications/deliver-query/shopee 。",
+  "salary_range": "面议",
+  "next_action": "已投递,等待简历筛选/笔试通知",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-08-04",
+  "progress_url": "https://app.mokahr.com/candidate/applications/deliver-query/shopee",
+  "round": null,
+  "result": null,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}
