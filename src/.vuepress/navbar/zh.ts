@@ -28,11 +28,6 @@ export const zhNavbar = navbar([
         icon: "/imges/OISG/OISG.png",
         link: "OISG/",
       },
-      {
-        text: "邮院通",
-        icon: "/assets/icon/校园.png",
-        link: "邮院通/",
-      },
     ],
   },
   // 博客（一级导航，按分类组织）
