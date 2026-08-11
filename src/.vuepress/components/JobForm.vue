@@ -160,6 +160,7 @@ const educationOptions = [
   { label: '不限', value: '不限' },
   { label: '专科', value: '专科' },
   { label: '本科', value: '本科' },
+  { label: '本科及以上', value: '本科及以上' },
   { label: '硕士', value: '硕士' },
   { label: '博士', value: '博士' },
 ]
@@ -179,14 +180,15 @@ const batchOptions = [
 ]
 
 // result 枚举精简:NULL=进行中, 1=过, -1=挂, -7=主动撤回, -8=我拒offer, -9=offer撤回, 99=其他
+// -10 人才储备库不可手动编辑（由后端 21 天规则自动设置）
 const resultOptions = [
-  { label: '— 进行中（不选）', value: null },
-  { label: '✓ 过', value: 1 },
-  { label: '✗ 挂', value: -1 },
-  { label: '↩ 主动撤回', value: -7 },
-  { label: '↩ 我拒 offer', value: -8 },
-  { label: '↩ offer 撤回', value: -9 },
-  { label: '? 其他', value: 99 },
+  { label: '进行中', value: null },
+  { label: '过', value: 1 },
+  { label: '挂', value: -1 },
+  { label: '主动撤回', value: -7 },
+  { label: '我拒 offer', value: -8 },
+  { label: 'offer 撤回', value: -9 },
+  { label: '其他', value: 99 },
 ]
 const roundOptions = [
   { label: '— 不限（不选）', value: null },
@@ -263,6 +265,8 @@ watch(
         form.applied = Number(props.job.applied ?? 0)
         form.round = props.job.round == null ? null : Number(props.job.round)
         form.result = props.job.result == null ? null : Number(props.job.result)
+        // 人才储备库(result=-10)是后端自动判定,前端不暴露,UI 上看不到
+        if (form.result === -10) form.result = null
         form.batch = props.job.batch == null || props.job.batch === '' ? null : props.job.batch
         form.source = props.job.source || 'manual'
         form.verified = Number(props.job.verified ?? 0)

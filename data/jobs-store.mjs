@@ -108,7 +108,7 @@ function sanitize(raw) {
   // round: 0=简历初筛 1=笔试 2=测评 3=一面 4=二面 5=三面 6=终面 7=HR 面;其他值(NULL/undefined/NaN/越界)→null
   const _round = raw.round == null ? null : Number(raw.round)
   const round = [0,1,2,3,4,5,6,7].includes(_round) ? _round : null
-  // result 精简语义: NULL=进行中; 1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 99=其他
+  // result 精简语义: NULL=进行中; 1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 -10=人才储备库 99=其他
   // 兼容旧数据(2~6 笔试过/一面过.../-2~-6 笔试挂/一面挂...):通过 round 推断阶段,只保留定性
   const _result = raw.result == null ? null : Number(raw.result)
   const _resultSign = _result != null && _result !== 0 ? Math.sign(_result) : null
@@ -116,8 +116,8 @@ function sanitize(raw) {
   let result = null
   if (_result == null) {
     result = null  // 进行中
-  } else if (_resultAbs === 7 || _resultAbs === 8 || _resultAbs === 9 || _resultAbs === 99) {
-    result = _result  // 主动撤回(-7)/我拒offer(-8)/offer撤回(-9)/其他(±99)
+  } else if (_resultAbs === 7 || _resultAbs === 8 || _resultAbs === 9 || _resultAbs === 10 || _resultAbs === 99) {
+    result = _result  // 主动撤回(-7)/我拒offer(-8)/offer撤回(-9)/人才储备库(-10)/其他(±99)
   } else if (_resultSign === 1) {
     result = 1  // 过
   } else if (_resultSign === -1) {
@@ -385,7 +385,8 @@ export const jobs = {
         SUM(CASE WHEN is_placeholder = 0 AND applied = 0 AND deadline IS NOT NULL
                  AND julianday(deadline) - julianday('now') BETWEEN 0 AND 7
                  THEN 1 ELSE 0 END) AS urgent_count,
-        SUM(CASE WHEN result IS NOT NULL AND result < 0 THEN 1 ELSE 0 END) AS rejected_count
+        SUM(CASE WHEN result IS NOT NULL AND result < 0 AND result != -10 THEN 1 ELSE 0 END) AS rejected_count,
+        SUM(CASE WHEN result = -10 THEN 1 ELSE 0 END) AS talent_pool_count
       FROM jobs
     `).get()
   },

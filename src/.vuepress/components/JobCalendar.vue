@@ -2,8 +2,8 @@
   <n-config-provider :theme="null" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
       <div class="offer-dashboard">
-        <!-- 统计卡片：4 张全部随筛选条件变化；占比以全部岗位为分母；hover 显示百分比 -->
-        <n-grid x-gap="12" y-gap="12" cols="1 s:2 m:4" responsive="screen" class="stats-row">
+        <!-- 统计卡片：5 张全部随筛选条件变化；占比以全部岗位为分母；hover 显示百分比 -->
+        <n-grid x-gap="12" y-gap="12" cols="1 s:2 m:5" responsive="screen" class="stats-row">
           <n-gi>
             <n-card hoverable embedded>
               <div class="stat-card">
@@ -92,6 +92,29 @@
                     </div>
                   </template>
                   {{ formatRatio(filteredStats.rejected, stats.real_count) }}
+                </n-tooltip>
+              </div>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card hoverable embedded>
+              <div class="stat-card">
+                <div class="stat-card-head">
+                  <n-icon :size="16" class="stat-card-icon"><CircleX /></n-icon>
+                  <span class="stat-card-label">人才储备库</span>
+                </div>
+                <n-tooltip :show="hover.talent_pool" trigger="manual" placement="right">
+                  <template #trigger>
+                    <div
+                      class="stat-ring"
+                      :style="ringStyle(filteredStats.talent_pool, stats.real_count, 'normal')"
+                      @mouseenter="hover.talent_pool = true"
+                      @mouseleave="hover.talent_pool = false"
+                    >
+                      <span class="stat-value">{{ filteredStats.talent_pool }}</span>
+                    </div>
+                  </template>
+                  {{ formatRatio(filteredStats.talent_pool, stats.real_count) }}
                 </n-tooltip>
               </div>
             </n-card>
@@ -378,6 +401,7 @@ const resultFilterOptions = [
   { label: '主动撤回', value: -7 },
   { label: '我拒 offer', value: -8 },
   { label: 'offer 撤回', value: -9 },
+  { label: '人才储备库', value: -10 },
   { label: '其他', value: 99 },
 ]
 const stageFilterOptions = [
@@ -447,8 +471,8 @@ const checkedIds = ref([])
 const bulkDeleting = ref(false)
 const bulkPopOpen = ref(false)
 // 4 张卡片各自的 hover 状态（手动控制 tooltip 显示百分比）
-const hover = reactive({ real: false, applied: false, pending: false, rejected: false })
-const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 4, 5], result: [0, 1, -1, -7, -8, -9, 99], round: [0, 1, 2, 3, 4, 5, 6, 7], batch: ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始'], verified: 'all', source: 'all', salaryMin: 0, weekend: 'all', deadlineRange: 'all' })
+const hover = reactive({ real: false, applied: false, pending: false, rejected: false, talent_pool: false })
+const filter = reactive({ category: [...categories], city: [...cities], applied: [0, 1, 4, 5], result: [0, 1, -1, -7, -8, -9, -10, 99], round: [0, 1, 2, 3, 4, 5, 6, 7], batch: ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始'], verified: 'all', source: 'all', salaryMin: 0, weekend: 'all', deadlineRange: 'all' })
 let msg = null
 
 onMounted(() => { try { msg = useMessage() } catch(e) {} ; refreshFromDB(false); loadCompanies() })
@@ -521,6 +545,10 @@ const closeDetail = () => { detailModalOpen.value = false; detailModalJob.value 
 
 const onSave = async (job) => {
   try {
+    // 同步:result=-1(挂) → applied=5(已结束)
+    if (job.result === -1 || Number(job.result) === -1) {
+      job.applied = 5
+    }
     // 有 id → PATCH 更新;无 id → POST 新增
     const url = job.id ? '/api/jobs/patch' : '/api/jobs'
     const method = job.id ? 'POST' : 'POST'
@@ -587,7 +615,7 @@ watch(jobs, (next) => {
   checkedIds.value = checkedIds.value.filter(id => alive.has(id))
 })
 
-const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 4, 5]; filter.result = [0, 1, -1, -7, -8, -9, 99]; filter.round = [0, 1, 2, 3, 4, 5, 6, 7]; filter.batch = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.weekend = 'all'; filter.deadlineRange = 'all'; keyword.value = '' }
+const resetFilters = () => { filter.category = [...categories]; filter.city = [...cities]; filter.applied = [0, 1, 4, 5]; filter.result = [0, 1, -1, -7, -8, -9, -10, 99]; filter.round = [0, 1, 2, 3, 4, 5, 6, 7]; filter.batch = ['实习', '27届秋招提前批', '27届秋招', '27届春招', '未开始']; filter.verified = 'all'; filter.source = 'all'; filter.salaryMin = 0; filter.weekend = 'all'; filter.deadlineRange = 'all'; keyword.value = '' }
 
 // 拉取最新（按钮触发 fetch.mjs，跑完后从 DB 重载）
 const refreshing = ref(false)
@@ -763,10 +791,11 @@ const filteredJobs = computed(() => {
 
 // 4 张统计卡片都用筛选后的本地数据；占比的分母固定为全部岗位(stats.real_count)
 // applied 判定口径与 APPLIED_META 对齐：applied ∈ [1,5] 都算"已投递"
-// rejected 判定口径：result < 0（简历挂/笔试挂/一面挂/.../offer 撤回）
+// rejected 判定口径：result < 0 且 result != -10（人才储备库不算挂）
+// talent_pool 判定口径：result = -10
 // 注意：要排除 is_placeholder=1 的占位行（与后端 real_count 对齐）
 const filteredStats = computed(() => {
-  let real = 0, applied = 0, pending = 0, rejected = 0
+  let real = 0, applied = 0, pending = 0, rejected = 0, talent_pool = 0
   for (const j of filteredJobs.value) {
     if (j.is_placeholder) continue
     real++
@@ -774,9 +803,10 @@ const filteredStats = computed(() => {
     if (ap >= 1 && ap <= 5) applied++
     else if (ap === 0) pending++
     const rs = j.result == null ? null : Number(j.result)
-    if (rs != null && rs < 0) rejected++
+    if (rs === -10) talent_pool++
+    else if (rs != null && rs < 0) rejected++
   }
-  return { real, applied, pending, rejected }
+  return { real, applied, pending, rejected, talent_pool }
 })
 
 // 排序后传给 n-data-table（n-data-table 的内置 3 态太难控，改用 data 已是排好序的）
@@ -844,8 +874,8 @@ const appliedOptions = Object.entries(APPLIED_META).map(([k, v]) => ({ label: v.
 // 环节 = round(轮次) + result(结果定性) 拼出的人话
 // round: 1=一面 2=二面 3=三面 4=终面 5=HR 面
 const ROUND_META = { 0: '简历初筛', 1: '测评', 2: '笔试', 3: '一面', 4: '二面', 5: '三面', 6: '终面', 7: 'HR面' }
-// result 精简语义:0=进行中 1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 99=其他
-const RESULT_LABEL = { 0: '进行中', 1: '过', '-1': '挂', '-7': '主动撤回', '-8': '我拒 offer', '-9': 'offer 撤回', '99': '其他' }
+// result 精简语义:0=进行中 1=过 -1=挂 -7=主动撤回 -8=我拒offer -9=offer撤回 -10=人才储备库 99=其他
+const RESULT_LABEL = { 0: '进行中', 1: '过', '-1': '挂', '-7': '主动撤回', '-8': '我拒 offer', '-9': 'offer 撤回', '-10': '人才储备库', '99': '其他' }
 // 阶段×结果配色矩阵:每个组合用完全不同的强对比色,不用同色系渐变
 // value 索引:0=简历初筛 1=测评 2=笔试 3=一面 4=二面 5=三面 6=终面 7=HR面
 // 过:8 个阶段 8 种色
@@ -863,8 +893,8 @@ function stageLabel(row) {
   const rd = row.round == null ? null : Number(row.round)
   const rs = row.result == null ? null : Number(row.result)
   if (ap === 0) return { label: '—', color: '#aaa' }
-  // 特殊结果(主动撤回/我拒/offer撤回/其他):不分阶段,直接显示
-  if (rs != null && (rs <= -7 || rs >= 99 || rs === -8 || rs === -9)) {
+  // 特殊结果(主动撤回/我拒/offer撤回/人才储备库/其他):不分阶段,直接显示
+  if (rs != null && (rs <= -7 || rs >= 99 || rs === -8 || rs === -9 || rs === -10)) {
     return { label: RESULT_LABEL[String(rs)] || '其他', color: SPECIAL_COLOR }
   }
   // 阶段名 = round 优先,fallback 到 applied 推断
@@ -1011,41 +1041,69 @@ const cmpAppliedAt = (a, b) => {
 //   Bucket 2 = 已投递（applied=1，进行中主体）
 //   Bucket 3 = 已 offer（applied=4，进度最深）
 //   Bucket 4 = 未开始（batch='未开始'）
-//   Bucket 5 = 已结束（applied=5 或 result<0，排在最后）
-// 核心原则：投递状态决定主桶；进度越深桶号越小；待投递单独置顶；已结束兜底
+//   Bucket 4 = 人才储备库（result=-10，自动判定，优先级最高）
+//   Bucket 5 = 已结束/其他（applied=5 或 result=99，独立桶，排在挂前）
+//   Bucket 6 = 已挂（result<0 且 !=-10，按进度靠后排前；简历初筛挂 round=0 排最末）
+//   Bucket 7 = 已 offer（applied=4，排在最后）
+// 核心原则：投递状态决定主桶；进度越深桶号越小；待投递单独置顶；人才储备库 > 已结束/其他 > 挂 > offer
 const bucketOf = (j) => {
   const ap = Number(j.applied ?? 0)
   const rs = j.result == null ? null : Number(j.result)
   const batch = j.batch == null || j.batch === '' ? null : j.batch
-  // 已结束放最后
-  if (ap === 5 || (rs != null && rs < 0)) return 5
-  // 未开始放第四
-  if (batch === '未开始') return 4
+  // 人才储备库单独成桶,优先级最高
+  if (rs === -10) return 4
+  // 已结束(applied=5)和"其他"(result=99)合并到 bucket 5,排在挂前
+  if (ap === 5 || rs === 99) return 5
+  // 已挂(result<0 且 !=-10/99)放挂桶
+  if (rs != null && rs < 0) return 6
+  // 未开始
+  if (batch === '未开始') return 3
   // 已开始未投递 = 最高优先级
   if (ap === 0) return 1
   // 已投递 / 已 offer 按进度排
   if (ap === 1) return 2  // 已投递
-  if (ap === 4) return 3  // 已 offer
+  if (ap === 4) return 7  // 已 offer
   // 兜底：未知状态归到已结束
   return 5
 }
 // 组内次级排序（按列顺序）：
 //   Bucket 1 (待投递):   deadline 升序（越急越前），空排最后
-//   Bucket 2~3 (进行中): ① round 降序（轮次越深越前） ② 同 round 按 applied_at 升序（最早投递越前）
-//   Bucket 4 (未开始):   company 升序（字母序）
-//   Bucket 5 (已结束):   applied_at 降序（最近结束越前）
+//   Bucket 2 (已投递):   round 降序（轮次越深越前）→ applied_at 升序（最早投递越前）
+//   Bucket 3 (未开始):   company 升序（字母序）
+//   Bucket 4 (人才储备库): applied_at 降序（投递时间近的排前）
+//   Bucket 5 (已结束):   ap=5+result=null 在前，result=99 其他排最末；同组按 applied_at 降序
+//   Bucket 6 (挂):       round 升序（进度靠前排前：r=0 → r=2 → r=3 → r=7）；round=null 排最末 → applied_at 降序
+//   Bucket 7 (已 offer):  applied_at 降序（最近 offer 越前）
 const secondaryCmp = (a, b, bucket) => {
   switch (bucket) {
     case 1: return cmpDeadline(a.deadline, b.deadline)
-    case 2:
-    case 3: {
+    case 2: {
       const ar = a.round == null ? -1 : Number(a.round)
       const br = b.round == null ? -1 : Number(b.round)
       if (ar !== br) return br - ar  // round 降序
-      return cmpAppliedAt(a.applied_at, b.applied_at)  // 同 round 按 applied_at 升序
+      return cmpAppliedAt(a.applied_at, b.applied_at)
     }
-    case 4: return cmp(a.company, b.company)
-    case 5: return -cmpAppliedAt(a.applied_at, b.applied_at)
+    case 3: return cmp(a.company, b.company)
+    case 4: return -cmpAppliedAt(a.applied_at, b.applied_at)  // 人才储备库:投递时间近的排前
+    case 5: {
+      // 已结束桶内:ap=5+result=null 按 round 降序(环节越深排前),result=99 其他排最末
+      const ar = a.result == null || Number(a.result) === 0 ? 0 : 1
+      const br = b.result == null || Number(b.result) === 0 ? 0 : 1
+      if (ar !== br) return ar - br  // 正常结束(ar=0)在前,其他(ar=1)排末
+      // 同为正常结束:round 降序(环节深的前);round=null 排末
+      const ar2 = a.round == null ? -1 : Number(a.round)
+      const br2 = b.round == null ? -1 : Number(b.round)
+      if (ar2 !== br2) return br2 - ar2  // round 降序:7 > 3 > 2 > 0 > -1
+      return -cmpAppliedAt(a.applied_at, b.applied_at)  // 同 round 按 applied_at 降序
+    }
+    case 6: {
+      // 挂的排序:进度靠前排前(round 升序:0 < 2 < 3 < 7);round=null 视为最末
+      const ar = a.round == null ? 99 : Number(a.round)
+      const br = b.round == null ? 99 : Number(b.round)
+      if (ar !== br) return ar - br  // round 升序:简历初筛排前,HR面挂排末
+      return -cmpAppliedAt(a.applied_at, b.applied_at)  // 同 round 按 applied_at 降序
+    }
+    case 7: return -cmpAppliedAt(a.applied_at, b.applied_at) // 已 offer:最近 offer 排前
     default: return 0
   }
 }
