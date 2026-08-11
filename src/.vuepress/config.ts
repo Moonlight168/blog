@@ -29,6 +29,36 @@ function readBody(req) {
   })
 }
 
+// 人才储备库自动判定：
+//   applied=1 或 5（已投递/已结束）+ applied_at 距今 > 21 天 + result 为空 → result=-10（人才储备库）
+//   已有 result(过/挂/撤回/其他) 不覆盖；applied=0/4（待投递/已 offer）不触发
+const TALENT_POOL_DAYS = 21
+const applyTalentPoolRule = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) return rows
+  const nowMs = Date.now()
+  let mutated = false
+  const out = rows.map((row) => {
+    const ap = Number(row.applied ?? 0)
+    if (ap !== 1 && ap !== 5) return row
+    const rs = row.result == null ? null : Number(row.result)
+    if (rs != null) return row  // 已有定性结果,不覆盖
+    const apAt = row.applied_at
+    if (!apAt || typeof apAt !== 'string') return row
+    const ts = Date.parse(apAt.length > 10 ? apAt : `${apAt}T00:00:00`)
+    if (Number.isNaN(ts)) return row
+    const days = (nowMs - ts) / 86400000
+    if (days > TALENT_POOL_DAYS) {
+      mutated = true
+      return { ...row, result: -10 }
+    }
+    return row
+  })
+  return mutated ? out : rows
+}
+function applyTalentPoolRuleTo(rows) {
+  return applyTalentPoolRule(rows)
+}
+
 // ============================================================
 //  Offer API Vite Plugin (enforce: 'pre')
 //
@@ -78,6 +108,18 @@ async function handleApi(req, res) {
       if (!id) return json(res, 400, { success: false, error: 'id 必填' })
       const existing = jobs.findById(id)
       if (!existing) return json(res, 404, { success: false, error: 'not found' })
+      // 人才储备库(result=-10)是后端自动判定,前端不能写入
+      if (patch.result !== undefined && Number(patch.result) === -10) {
+        return json(res, 400, { success: false, error: '人才储备库不可手动设置,由 21 天自动判定' })
+      }
+      // 用户改了 applied_at → 触发人才储备库重判,清空 result 让 GET 时重新计算
+      if (patch.applied_at !== undefined && patch.applied_at !== existing.applied_at) {
+        patch.result = null
+      }
+      // 同步:result=-1(挂) → applied=5(已结束)
+      if (patch.result !== undefined && Number(patch.result) === -1) {
+        patch.applied = 5
+      }
       const result = jobs.upsert({ ...existing, ...patch })
       return json(res, 200, { success: true, ...result })
     } catch (e) {
@@ -98,7 +140,7 @@ async function handleApi(req, res) {
         limit:         u.searchParams.get('limit') ? Number(u.searchParams.get('limit')) : undefined,
         offset:        u.searchParams.get('offset') ? Number(u.searchParams.get('offset')) : undefined,
       }
-      const data = jobs.findAll(opts)
+      const data = applyTalentPoolRuleTo(jobs.findAll(opts))
       const stats = jobs.stats()
       return json(res, 200, { success: true, data, stats })
     } catch (e) {
@@ -262,7 +304,7 @@ async function handleApi(req, res) {
   // ---------- 兼容旧接口 ----------
   if (pathname === '/read-applications' && method === 'GET') {
     try {
-      const data = jobs.findAll({ isPlaceholder: 0 })
+      const data = applyTalentPoolRule(jobs.findAll({ isPlaceholder: 0 }))
       return json(res, 200, { success: true, data })
     } catch (e) {
       return json(res, 500, { success: false, error: e.message })
