@@ -163,6 +163,15 @@ async function cmdInsert(args) {
   const raw = JSON.parse(await readFile(absPath, 'utf-8'))
   const job = validate(raw)
 
+  // 人才储备库(result=-10)不可手动写入,JSON insert 也拒绝
+  if (job.result === -10) {
+    err('result=-10 人才储备库不可手动设置,由 21 天自动判定')
+  }
+  // 同步:result=-1(挂) → applied=5(已结束)
+  if (job.result === -1) {
+    job.applied = 5
+  }
+
   // 检查去重
   const existing = jobs.findAll({}).filter(j =>
     j.company === job.company && j.position === job.position && j.city === job.city
@@ -204,11 +213,31 @@ async function cmdUpdate(args) {
 
   // 用 partial 模式校验（允许只传部分字段）
   const merged = { ...existing, ...patch }
+  // 人才储备库(result=-10)是后端自动判定,CLI 不允许手动写入
+  if (patch.result !== undefined && patch.result !== null && patch.result !== '') {
+    if (Number(patch.result) === -10) {
+      err('result=-10 人才储备库不可手动设置,由 21 天自动判定')
+    }
+  }
+  // 用户改了 applied_at → 触发人才储备库重判,清空 result
+  if (patch.applied_at !== undefined && patch.applied_at !== existing.applied_at) {
+    patch.result = null
+  }
+  // 同步:result=-1(挂) → applied=5(已结束)
+  if (patch.result !== undefined && patch.result !== null && patch.result !== '' && Number(patch.result) === -1) {
+    patch.applied = 5
+  }
   // 自动补 round:已投递但未指定 round → 默认 round=0(简历初筛中)
+  // 人才储备库(result=-10)不算流程中,跳过自动补
   if (Number(merged.applied) === 1 && (merged.round === undefined || merged.round === null || merged.round === '')) {
     if (patch.round === undefined) {
-      patch.round = 0
-      info('自动补 round=0(简历初筛中)')
+      const _resResult = patch.result !== undefined ? Number(patch.result) : Number(existing.result)
+      if (_resResult === -10) {
+        // 人才储备库不补 round,保持 null
+      } else {
+        patch.round = 0
+        info('自动补 round=0(简历初筛中)')
+      }
     }
   }
   const validated = validate({ ...existing, ...patch }, { partial: true })

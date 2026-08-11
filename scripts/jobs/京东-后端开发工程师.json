@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "大厂",
+  "city": "跨地市",
+  "company": "北京京东世纪贸易有限公司 京东",
+  "position": "后端开发工程师",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://campus.jd.com/#/myDeliver?type=present",
+  "notes": "公司：北京京东世纪贸易有限公司（京东集团，纳斯达克/港股上市，万人级综合电商与供应链科技平台，覆盖京东零售、京东科技、京东物流等业务线）。岗位：后端开发工程师实习（软件研发方向），27 届实习优先，本科及以上，地点北京/上海/深圳。JD：负责业务系统需求分析、核心系统设计开发维护、灵活性与稳定性建设保障高可用；推动系统架构演进并与前端/产品/算法/测试协作；要求掌握 C/C++/Java/Go 至少一种，熟悉 TCP/IP/HTTP/HTTPS，有分布式/大数据/互联网实习经验者优先，明确要求熟练使用 Claude Code/Copilot/Cursor 等 AI 编程助手并对 Agent 编排架构有理解。",
+  "salary_range": "面议",
+  "next_action": "已进人才库，留意京东实习补录/转岗通知",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-03-23",
+  "progress_url": "https://campus.jd.com/#/myDeliver?type=present",
+  "round": null,
+  "result": -10,
+  "batch": "实习",
+  "source": "官网",
+  "verified": 1
+}

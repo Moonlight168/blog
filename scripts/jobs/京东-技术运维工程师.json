@@ -1,0 +1,23 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "大厂",
+  "city": "跨地市",
+  "company": "北京京东世纪贸易有限公司 京东",
+  "position": "技术运维工程师",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": "https://campus.jd.com/#/myDeliver?type=present",
+  "notes": "公司：北京京东世纪贸易有限公司（京东集团，纳斯达克/港股上市，万人级综合电商与供应链科技平台，覆盖京东零售、京东科技、京东物流等业务线）。岗位：技术运维工程师，27届秋招，本科及以上，北京/上海/深圳。JD：维护大规模系统稳定性，开发运维工具与平台，参与架构优化、性能与可伸缩性建设，提供系统技术支持；探索 AIOps 用于故障预测、日志分析和自动化运维。要求熟悉计算机网络体系、Unix/Linux，了解 AI 工具辅助排障与运维报告编写，认同京东价值观。已于 2026-03-23 投递，当前进人才库。",
+  "salary_range": "面议",
+  "next_action": "已进人才库，留意京东后续岗位/转岗通知",
+  "deadline": null,
+  "applied": 1,
+  "applied_at": "2026-03-23",
+  "progress_url": "https://campus.jd.com/#/myDeliver?type=present",
+  "round": null,
+  "result": -10,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}

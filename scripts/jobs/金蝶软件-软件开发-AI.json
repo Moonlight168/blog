@@ -1,0 +1,21 @@
+{
+  "_category_options": ["公务员", "国企", "事业单位", "大厂", "中大厂", "中小厂", "小而美企业"],
+  "_batch_options": ["实习", "27届秋招提前批", "27届秋招", "27届春招", "未开始"],
+  "category": "中大厂",
+  "city": "深圳市",
+  "company": "金蝶国际软件集团 金蝶",
+  "position": "软件开发-AI",
+  "education": "本科及以上",
+  "weekend": "周末双休",
+  "link": null,
+  "notes": "公司：金蝶国际软件集团 金蝶（港股 0268.HK 上市，中国领先的企业级 SaaS、ERP 和云服务提供商，总部深圳，员工数千人）。岗位：软件开发-AI（深圳），本科及以上，27 届校招。JD：基于 LangChain/LangGraph/LlamaIndex 构建多智能体协同应用；设计和实现 AI 服务后端系统，参与分布式 AI 服务架构设计；负责 AI 模型集成、优化与生产部署；协同工程团队推动产品 AI 化落地。要求熟悉 Java/Python、Spring Boot/FastAPI、Redis/Kafka/ES/PG，了解 RAG/向量数据库/Prompt 工程优先。",
+  "salary_range": "面议",
+  "next_action": "尽快投递",
+  "deadline": null,
+  "applied": 0,
+  "round": null,
+  "result": null,
+  "batch": "27届秋招",
+  "source": "官网",
+  "verified": 1
+}
