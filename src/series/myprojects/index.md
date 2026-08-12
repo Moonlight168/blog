@@ -44,19 +44,19 @@ order: 1
 🔗 [查看项目详情](./淘票票/README.md) | [GitHub](https://github.com/Moonlight168/taopiaopiao) | [Gitee](https://gitee.com/wish168/taopiaopiao)
 
 ----
-### 🤖 OISG · 绝缘油质量智能管家
-> 面向电力行业的变压器绝缘油试验数据分析平台，基于 Dify 编排智能体工作流 + Spring AI 工具调用，实现自然语言问答、数据查询与报告生成。
+### 🤖 OilGuard · 油品质量智能分析平台
+> 面向工业油品检测数据分析平台，基于 Dify 编排智能体工作流 + Spring AI 工具调用，实现自然语言问答、数据查询与报告生成。
 
 **🔧 技术栈：**
 `Spring Boot 3` · `Spring Security` · `JWT` · `MyBatis-Plus` ｜ `Dify` · `Spring AI` · `Quartz` · `MinIO`
 
 **📌 主要职责：**
-- 基于 Dify 编排绝缘油智能问答助手工作流，依托 Spring AI 暴露业务工具
+- 基于 Dify 编排油品质量智能问答助手工作流，依托 Spring AI 暴露业务工具
 - 负责在线 / 离线数据比对与规范性审核模块
 - 基于 Apache POI 实现 Word 模板占位符填充与报告生成
 - 集成企业微信 / 短信异常告警
 
-🔗 [查看项目详情](./OISG/README.md)
+🔗 [查看项目详情](./OilGuard/README.md)
 
 ---
 

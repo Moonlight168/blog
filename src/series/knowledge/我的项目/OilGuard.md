@@ -1,7 +1,7 @@
 ---
 series: 我的项目
-title: OISG 绝缘油质量智能管家
-icon: /imges/OISG/OISG.png
+title: OilGuard 油品质量智能分析平台
+icon: /imges/OilGuard/OilGuard.png
 order: 4
 categories: ["我的项目"]
 date: 2026-06-27
@@ -9,7 +9,7 @@ date: 2026-06-27
 
 ## 项目概述
 
-OISG（Oil-quality Inspection Smart Guardian）是面向电力行业的变压器绝缘油试验数据分析平台。系统对绝缘油离线试验数据进行**规范性审核**与**异常预警**，并基于 **Dify + Spring AI** 构建智能问答助手，让业务人员通过自然语言即可完成数据查询、报告生成等操作。
+OilGuard（Oil-quality Smart Guardian）是面向工业油品检测数据分析平台。系统对油品检测数据进行**规范性审核**与**异常预警**，并基于 **Dify + Spring AI** 构建智能问答助手，让业务人员通过自然语言即可完成数据查询、报告生成等操作。
 
 **技术栈：** Spring Boot 3、Spring Security、JWT、MyBatis-Plus、达梦 DM8、Dify、Spring AI、Quartz、Apache POI、MinIO
 
@@ -21,7 +21,7 @@ OISG（Oil-quality Inspection Smart Guardian）是面向电力行业的变压器
 
 **回答：** Dify 作为 LLM 应用编排平台，承担**工作流编排**与**知识库管理**两大职责：
 
-1. **工作流编排**：在 Dify 中编排绝缘油智能问答助手的完整业务流
+1. **工作流编排**：在 Dify 中编排油品质量智能问答助手的完整业务流
 2. **意图分类**：使用 Dify 的 LLM 节点对用户输入进行意图识别，输出意图字段用于路由分发
 3. **Agent 节点**：通过工具调用协议对接后端业务工具（设备查询、离线/在线数据、报告生成）
 4. **知识库管理**：维护电力行业标准文档，实现 RAG 检索增强

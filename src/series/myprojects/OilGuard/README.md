@@ -1,20 +1,20 @@
 ---
 order: 1
 title: 项目介绍
-icon: /imges/OISG/OISG.png
+icon: /imges/OilGuard/OilGuard.png
 dir:
-    text: OISG · 绝缘油质量智能管家
-    icon: /imges/OISG/OISG.png
+    text: OilGuard · 油品质量智能分析平台
+    icon: /imges/OilGuard/OilGuard.png
     order: 6
 ---
 
-# 🤖 OISG · 绝缘油质量智能管家
+# 🤖 OilGuard · 油品质量智能分析平台
 
-> 面向电力行业的变压器绝缘油试验数据分析平台，基于 **Dify** 编排智能体工作流，结合业务工具实现 **自然语言问答、数据查询、报告生成** 等能力。
+> 面向工业油品检测数据分析平台，基于 **Dify** 编排智能体工作流，结合业务工具实现 **自然语言问答、数据查询、报告生成** 等能力。
 
 ## 🛢️ 项目简介
 
-**OISG（Oil-quality Inspection Smart Guardian）** 是面向电力行业的变压器绝缘油试验数据分析平台。系统对绝缘油离线试验数据进行 **规范性审核** 与 **异常预警**，并基于 **Dify** 与 **Spring AI** 构建智能问答助手，让业务人员通过自然语言即可完成数据查询、报告生成等操作。
+**OilGuard（Oil-quality Smart Guardian）** 是面向工业油品检测数据分析平台。系统对油品检测数据进行 **规范性审核** 与 **异常预警**，并基于 **Dify** 与 **Spring AI** 构建智能问答助手，让业务人员通过自然语言即可完成数据查询、报告生成等操作。
 
 | 项目类型 | 角色 | 技术领域 |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ dir:
 
 ### 1. AI 智能问答助手
 
-- 基于 **Dify** 编排绝缘油智能问答助手工作流
+- 基于 **Dify** 编排油品质量智能问答助手工作流
 - 基于 **Spring AI** 将业务工具注册给大模型调用
 - 维护行业专属知识库，实现自然语言问答与报告生成
 
