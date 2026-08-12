@@ -15,10 +15,10 @@ projects:
     desc: 基于 RuoYi-Cloud + Flowable 的智能审批工作流系统，集成 LangGraph AI 智能设计与 ReAct Agent，支持自然语言生成流程与表单
     link: series/myprojects/FlowMind/
 
-  - icon: /imges/OISG/OISG.png
-    name: OISG · 绝缘油质量智能管家
-    desc: 基于 Dify + Spring AI 的电力行业绝缘油数据分析平台，提供自然语言问答与智能报告生成
-    link: series/myprojects/OISG/
+  - icon: /imges/OilGuard/OilGuard.png
+    name: OilGuard · 油品质量智能分析平台
+    desc: 基于 Dify + Spring AI 的工业油品检测数据分析平台，提供自然语言问答与智能报告生成
+    link: series/myprojects/OilGuard/
 
 footer:
   startYear: 2025

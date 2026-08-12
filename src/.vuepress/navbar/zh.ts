@@ -24,9 +24,9 @@ export const zhNavbar = navbar([
         link: "FlowMind/",
       },
       {
-        text: "OISG",
-        icon: "/imges/OISG/OISG.png",
-        link: "OISG/",
+        text: "OilGuard",
+        icon: "/imges/OilGuard/OilGuard.png",
+        link: "OilGuard/",
       },
     ],
   },
