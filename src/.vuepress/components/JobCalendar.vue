@@ -374,7 +374,7 @@ import { Plus, Refresh, Globe, Stack, Check, Clock, AlertTriangle, Edit, Trash, 
 import JobForm from './JobForm.vue'
 
 const categories = ['公务员', '国企', '事业单位', '大厂', '中大厂', '中小厂', '小而美企业']
-const cities = ['广州市', '深圳市', '佛山市', '清远市', '上海市', '东莞市']
+const cities = ['广州市', '深圳市', '佛山市', '清远市', '上海市', '东莞市', '中山市', '跨地市']
 
 const categoryOptions = categories.map(c => ({ label: c, value: c }))
 const cityOptions = cities.map(c => ({ label: c, value: c }))
