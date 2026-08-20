@@ -16,7 +16,7 @@ PRAGMA encoding = 'UTF-8';
 CREATE TABLE IF NOT EXISTS jobs (
   id              TEXT PRIMARY KEY,                -- 'job-001' 或 'job-fetch-{ts}-{n}'
   category        TEXT NOT NULL,                   -- 公务员 / 国企 / 事业单位 / 大厂 / 中大厂 / 中小厂 / 小而美企业
-  city            TEXT NOT NULL,                   -- 广州市 / 深圳市 / 佛山市 / 清远市 / 跨地市
+  city            TEXT NOT NULL,                   -- 广州市 / 深圳市 / 佛山市 / 清远市 / 上海市 / 东莞市 / 中山市 / 跨地市
   company         TEXT NOT NULL,
   position        TEXT NOT NULL,
   deadline        TEXT,                            -- YYYY-MM-DD 或 NULL

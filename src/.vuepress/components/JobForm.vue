@@ -154,6 +154,9 @@ const cityOptions = [
   { label: '深圳市', value: '深圳市' },
   { label: '佛山市', value: '佛山市' },
   { label: '清远市', value: '清远市' },
+  { label: '上海市', value: '上海市' },
+  { label: '东莞市', value: '东莞市' },
+  { label: '中山市', value: '中山市' },
   { label: '跨地市', value: '跨地市' },
 ]
 const educationOptions = [
