@@ -16,10 +16,11 @@ src/.vuepress/.temp/
 src/private
 src/trash
 
+# 忽略我的项目面试题（本地保留，不上传远程）
+src/series/knowledge/我的项目/
+
 # 忽略运行时日志（按天滚动）
 data/logs/
 
 .superpowers/
 docs/
-
-src/series/knowledge/我的项目/gf-cms.md
