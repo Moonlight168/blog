@@ -59,6 +59,17 @@ export const zhNavbar = navbar([
   ...(process.env.NODE_ENV === "development"
       ? [
           { text: "投资理财", icon: "/assets/icon/finance.png", link: "/private/finance/README.md" }, // 本地显示
+          // 我的项目（已迁移到 private，仅本地显示）
+          {
+            text: "我的项目",
+            icon: "/assets/icon/project.png",
+            prefix: "/private/series/myprojects/",
+            children: [
+              { text: "项目总览", icon: "/assets/icon/myprojects.png", link: "/private/series/myprojects/" },
+              { text: "FlowMind", icon: "/assets/icon/cloud_flow.png", link: "/private/series/myprojects/FlowMind/" },
+              { text: "OilGuard", icon: "/imges/OilGuard/OilGuard.png", link: "/private/series/myprojects/OilGuard/" },
+            ],
+          },
           {
             text: "人工智能",
             icon: "/assets/icon/ai.png",
