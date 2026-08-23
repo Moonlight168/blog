@@ -254,7 +254,7 @@ Spring Boot 启动流程 = **创建 SpringApplication → 准备环境 → 创�
 - `@Bean` 创建时通过 `@ConfigurationProperties` 从 `application.properties` 取值
 - 跟 IOC 的关系：IOC 管对象生命周期；自动配置是省去手写 `@Bean` 的过程；properties 只提供参数值
 
-→ [回答历史](/series/答题历史/框架/springboot-答题记录.md#spring-boot-自动配置原理是什么)
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#spring-boot-自动配置原理是什么)
 
 ## `@SpringBootApplication` 包含哪几个注解？
 
@@ -262,4 +262,4 @@ Spring Boot 启动流程 = **创建 SpringApplication → 准备环境 → 创�
 - **`@EnableAutoConfiguration`** — 自动配置核心
 - **`@ComponentScan`** — 组件扫描
 
-→ [回答历史](/series/答题历史/框架/springboot-答题记录.md#springbootapplication-包含哪几个注解)
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#springbootapplication-包含哪几个注解)

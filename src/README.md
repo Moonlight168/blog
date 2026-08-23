@@ -10,15 +10,6 @@ heroText: Hi，Welcome~
 heroFullScreen: true
 #tagline: 热爱编码与技术探索,记录实践项目与开发心得,分享高效工具与 AI 编程技巧
 projects:
-  - icon: /assets/icon/cloud_flow.png
-    name: FlowMind
-    desc: 基于 RuoYi-Cloud + Flowable 的智能审批工作流系统，集成 LangGraph AI 智能设计与 ReAct Agent，支持自然语言生成流程与表单
-    link: series/myprojects/FlowMind/
-
-  - icon: /imges/OilGuard/OilGuard.png
-    name: OilGuard · 油品质量智能分析平台
-    desc: 基于 Dify + Spring AI 的工业油品检测数据分析平台，提供自然语言问答与智能报告生成
-    link: series/myprojects/OilGuard/
 
 footer:
   startYear: 2025

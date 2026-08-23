@@ -80,7 +80,7 @@ JVM GC从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 - `-XX:+PrintGCDetails` 查看 GC 详细日志
 - 调优目标：让大多数对象在 Minor GC 时被回收，尽量减少 Full GC
 
-→ [回答历史](/series/答题历史/Java/java-答题记录.md#jvm-minor-gc-和-full-gc-区别什么时候触发-full-gc)
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#jvm-minor-gc-和-full-gc-区别什么时候触发-full-gc)
 
 ## JVM常用命令有哪些？
 
@@ -160,7 +160,7 @@ JVM运行时数据区分为线程私有和（线程共享）。
 - 堆 = 年轻代（Eden + S0 + S1） + 老年代。
 - 新对象放 **Eden**；大对象直接进老年代。
 
-→ [回答历史](/series/答题历史/Java/java-答题记录.md#堆内存分几块对象刚创建放哪)
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#堆内存分几块对象刚创建放哪)
 
 ## 类加载的完整过程是什么？
 
@@ -232,7 +232,7 @@ G1（Garbage-First）是面向服务端的收集器，将堆划分为多个大�
   - **堆**：对象实例。分 Eden → Survivor0 → Survivor1 → 老年代
   - **方法区**：类信息、常量、静态变量、JIT 编译代码缓存
 
-→ [回答历史](/series/答题历史/Java/java-答题记录.md#jvm-运行时内存区域是怎么划分的)
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#jvm-运行时内存区域是怎么划分的)
 
 ## JDK 8 以后 JVM 内存区域有什么变化？
 
@@ -240,4 +240,4 @@ G1（Garbage-First）是面向服务端的收集器，将堆划分为多个大�
 - **String 常量池移到堆中**
 - 好处：不再受 `-XX:MaxPermSize` 限制，不容易 OOM
 
-→ [回答历史](/series/答题历史/Java/java-答题记录.md#jdk-8-以后-jvm-内存区域有什么变化)
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#jdk-8-以后-jvm-内存区域有什么变化)

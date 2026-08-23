@@ -12,8 +12,8 @@
     "docs:clean-dev": "vuepress-vite dev src --clean-cache",
     "docs:dev": "vuepress-vite dev src",
     "docs:update-package": "npx vp-update",
-    "db:init": "node data/init-db.mjs",
-    "jobs:cli": "node scripts/jobs-cli.mjs",
+    "db:init": "node src/private/data/init-db.mjs",
+    "jobs:cli": "node src/private/scripts/jobs-cli.mjs",
     "fetch:jobs": "node src/private/hires/offer/fetch.mjs",
     "verify:jobs": "node src/private/hires/offer/verify-jobs.mjs",
     "enrich:jobs": "node src/private/hires/offer/enrich-jobs.mjs"

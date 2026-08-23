@@ -295,7 +295,7 @@ FROM employees;
    - 深度分页改用游标分页
    - 子查询改JOIN，大表考虑分库分表
 
-→ [回答历史](/series/答题历史/数据库/mysql-答题记录.md#sql-慢查询怎么定位和优化)
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#sql-慢查询怎么定位和优化)
 
 ## 聚簇索引和回表是什么意思？
 
@@ -303,7 +303,7 @@ FROM employees;
 - **回表**：普通索引（二级索引）叶子节点只存主键 ID，查到 ID 后还要去聚簇索引里**再查一次**才能拿到完整行。多一次随机 IO。
 - **覆盖索引**：查询的列全在索引里，不用回表，EXPLAIN Extra 显示 `Using index`。
 
-→ [回答历史](/series/答题历史/数据库/mysql-答题记录.md#聚簇索引和回表是什么意思)
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#聚簇索引和回表是什么意思)
 
 ## 什么是覆盖索引？为什么能优化查询？
 
@@ -311,7 +311,7 @@ FROM employees;
 - 少一次 IO，所以快。
 - 做法：SELECT 只查需要的列，建联合索引覆盖这些列。
 
-→ [回答历史](/series/答题历史/数据库/mysql-答题记录.md#什么是覆盖索引为什么能优化查询)
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#什么是覆盖索引为什么能优化查询)
 
 ## redo log 和 binlog 有什么区别？
 
@@ -322,4 +322,4 @@ FROM employees;
 - **落盘时机** — 事务提交时 redo log 通过 fsync 强制刷盘后才返回"成功"；binlog 同样在事务提交时刷盘
 - **两阶段提交** — redo log prepare → 写 binlog → redo log commit，保证两份日志一致，崩溃后能判断该回滚还是提交
 
-→ [回答历史](/series/答题历史/数据库/mysql-答题记录.md#redo-log-和-binlog-有什么区别)
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#redo-log-和-binlog-有什么区别)
