@@ -7,18 +7,22 @@ export const zhNavbar = navbar([
     icon: "/assets/icon/首页.png", // 主页图标
     link: "/",
   },
-  // 我的项目（本地开发显示，主页右侧第一个）
-  ...(process.env.NODE_ENV === "development"
-      ? [{
-          text: "我的项目",
-          icon: "/assets/icon/project.png",
-          prefix: "/private/series/myprojects/",
-          children: [
-            { text: "项目总览", icon: "/assets/icon/myprojects.png", link: "/private/series/myprojects/" },
-            { text: "FlowMind", icon: "/assets/icon/cloud_flow.png", link: "/private/series/myprojects/FlowMind/" },
-          ],
-        }]
-      : []),
+  // 我的项目（主页右侧第一个）
+  {
+    text: "我的项目",
+    icon: "/assets/icon/project.png",
+    prefix: "/series/myprojects/",
+    children: [
+      { text: "FlowMind", icon: "/assets/icon/cloud_flow.png", link: "/series/myprojects/FlowMind/" },
+      // 本地开发额外显示其他项目（私有）
+      ...(process.env.NODE_ENV === "development"
+          ? [
+              { text: "淘票票", icon: "/assets/icon/淘票票icon.png", link: "/private/series/myprojects/淘票票/" },
+              { text: "OilGuard", icon: "/assets/icon/cloud.png", link: "/private/series/myprojects/OilGuard/" },
+            ]
+          : []),
+    ],
+  },
   // 博客（一级导航，按分类组织）
   {
     text: "博客",

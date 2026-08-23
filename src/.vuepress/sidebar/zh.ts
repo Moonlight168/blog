@@ -15,6 +15,8 @@ export const zhSidebar = sidebar({
     //"/blogs/": "structure",
     // 关键：将 /blogs/ 的侧边栏改为按时间排序的动态生成结果
     "/blogs/": "structure",
+    // 我的项目（FlowMind 主仓公开，其他项目私有本地显示）
+    "/series/myprojects/": "structure",
     // 面试宝典：structure 自动扫描 knowledge 下所有分类，
     // "答题历史"已搬到 series/ 下而非 knowledge/ 下，自动排除
     "/series/knowledge/": "structure",
