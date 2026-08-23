@@ -1,57 +1,62 @@
 ---
 title: LangGraph
+date: 2026-08-22
+categories: ["Agent 开发"]
 ---
+
 # LangGraph 面试题
-
-## LangGraph 是什么？
-
-LangGraph 是 LangChain 团队推出的基于图的状态管理库，用于构建有状态、多参与者的 LLM 应用。
-
-核心特点：
-
-1. **循环支持** - 支持循环和分支的工作流
-2. **状态管理** - 明确定义和传递状态
-3. **持久化** - 支持检查点和时间旅行
-4. **人类介入** - 支持人工审核和干预
-
-## LangGraph 与 LangChain 的关系？
-
-| LangChain  | LangGraph  |
-| ---------- | ---------- |
-| 组件库     | 编排引擎   |
-| 线性 Chain | 循环图结构 |
-| 简单流程   | 复杂状态机 |
-
-LangGraph 是 LangChain 的补充，专注于复杂工作流编排。
-
-## LangGraph 的核心概念有哪些？
-
-1. **State（状态）** - 应用的状态结构定义
-2. **Nodes（节点）** - 执行具体逻辑的函数
-3. **Edges（边）** - 节点间的流转逻辑
-4. **Graph** - 由节点和边组成的有向图
-5. **Checkpoint** - 状态持久化检查点
 
 ## LangGraph 核心概念？和直接调 LLM 的区别？
 
-- LangGraph：LLM 调用组织成**有状态的图**，开发者定义节点/边，LLM 运行时决定路由。支持 human-in-loop。
-- 直接调 LLM：应用代码决定每一步，不是 LLM 自己决策。
+LangGraph 是把 LLM 应用组织成**有状态、可循环的图**——开发者定义节点、边和状态，模型在运行的时候决定往哪走。核心我记四点：
 
-→ [回答历史](/series/答题历史/Agent 开发/langgraph-答题记录.md#langgraph-核心概念和直接调-llm-的区别)
+1. **State（状态）**：整张图的共享记忆，所有节点读写它，是整个图的中枢。
+2. **Nodes（节点）**：执行具体逻辑的函数，每个节点读状态、处理、写回状态。
+3. **Edges（边）**：节点怎么流转，分固定边和条件边。
+4. **Checkpoint / human-in-loop**：支持状态持久化、断点续跑、人工介入审核。
+
+和直接调 LLM 的区别，一句话：**直接调 LLM 是单次对话，应用代码决定每一步；LangGraph 是让模型在定义好的图里自主路由，还支持循环和人工介入**。
+
+→ [回答历史](/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-核心概念-和直接调-llm-的区别)
+
+---
 
 ## LangGraph 的 state 是什么？和普通 dict 的区别？
 
-- State 是 LangGraph 图的**共享记忆**，用 TypedDict 定义 schema。
-- 每个节点读 state → 做决策 → 写回 state，流转到下一节点。
-- 和普通 dict 区别：有 **schema 约束**（类型安全）、支持 **reducer**（如 `operator.add` 合并消息列表）、保证并发挥节点数据安全合并。
-- 你项目里可能存：消息历史、用户意图、生成的审批流程 JSON、校验状态、下一步路由。
+State 是 LangGraph 图的**共享记忆**，每个节点读它、做决策、写回它，然后流转到下一个节点。
 
-→ [回答历史](/series/答题历史/Agent 开发/langgraph-答题记录.md#langgraph-的-state-是什么和普通-dict-的区别)
+和普通 dict 的区别主要是三点：
+
+1. **有 schema 约束**：State 用 TypedDict 定义，类型安全，不像普通 dict 想塞啥塞啥。
+2. **支持 reducer**：多个节点要同时写同一个字段时，reducer 定义怎么合并（比如 `operator.add` 把消息列表累加），保证并发安全，普通 dict 可没有这个。
+3. **跨节点传递**：它不只是存数据，还是节点之间通信的通道，承载了图的状态流转。
+
+你项目里可能存：消息历史、用户意图、生成的审批流程 JSON、校验状态、下一步路由这些。
+
+→ [回答历史](/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-的-state-是什么-和普通-dict-的区别)
+
+---
 
 ## LangGraph 节点之间怎么路由？条件边是什么？
 
-- **条件边**（conditional edge）：节点执行完后，根据返回值判断走哪个分支（类似 if-else）。
-- 图定义时需要声明：`builder.add_conditional_edges("node_a", router_func, {"path_a": "node_b", "path_b": "node_c"})`
-- 和普通边区别：普通边固定流转，条件边是 LLM/逻辑决定下一步。
+**条件边**（conditional edge）是 LangGraph 最核心的路由机制：一个节点执行完后，根据它的返回值判断走哪条分支，类似 if-else。
 
-→ [回答历史](/series/答题历史/Agent 开发/langgraph-答题记录.md#langgraph-节点之间怎么路由条件边是什么)
+- **普通边**：固定流转，A 完一定去 B。
+- **条件边**：A 完根据条件去 B 还是去 C，判断逻辑可以是代码，也可以让 LLM 来决定。
+
+图定义时这样声明：`builder.add_conditional_edges("node_a", router_func, {"path_a": "node_b", "path_b": "node_c"})`——`router_func` 返回哪个 key 就走哪条边。
+
+实际用的时候，条件边是最能体现"图编排"价值的地方：把"是否继续循环""走人审还是自动通过"这种决策点做成条件边，整个流程就活了。
+
+---
+
+## 你用 LangGraph 搭 Agent 时，为什么选它而不是自己手写循环？
+
+这个我实际对比过，选 LangGraph 主要看中三点：
+
+1. **循环和状态不用自己管**：Agent 本质是"规划→执行→观察→再规划"的循环，手写要自己维护状态、自己控制跳出条件，很容易乱。LangGraph 把循环建在图上，状态自动流转。
+2. **条件路由清晰**：什么时候调工具、什么时候该问人、什么时候结束，用条件边写得很直观，比一堆 if-else 好维护。
+3. **可观测和恢复**：它有 checkpoint，能保存中间状态，出问题能断点恢复、回放，排查 Agent 这种不确定系统很重要。
+
+但我也会说实话：**简单的 Agent 用 LangGraph 是杀鸡用牛刀**，一个 ReAct 循环直接写也就几十行。LangGraph 的价值在流程复杂、需要人机协作、需要状态管理的时候才体现出来。
+
