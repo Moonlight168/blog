@@ -17,7 +17,7 @@ LangGraph 是把 LLM 应用组织成**有状态、可循环的图**——开发�
 
 和直接调 LLM 的区别，一句话：**直接调 LLM 是单次对话，应用代码决定每一步；LangGraph 是让模型在定义好的图里自主路由，还支持循环和人工介入**。
 
-→ [回答历史](/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-核心概念-和直接调-llm-的区别)
+→ [回答历史](/private/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-核心概念-和直接调-llm-的区别)
 
 ---
 
@@ -33,7 +33,7 @@ State 是 LangGraph 图的**共享记忆**，每个节点读它、做决策、�
 
 你项目里可能存：消息历史、用户意图、生成的审批流程 JSON、校验状态、下一步路由这些。
 
-→ [回答历史](/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-的-state-是什么-和普通-dict-的区别)
+→ [回答历史](/private/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-的-state-是什么-和普通-dict-的区别)
 
 ---
 

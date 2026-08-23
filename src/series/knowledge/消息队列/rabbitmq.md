@@ -222,14 +222,14 @@ channel.queueDeclare("business_queue", true, false, false, args);
 
 补充：死信队列（DLQ）是消息被拒绝/超时/超出重试次数后的去处，跟防丢是不同概念。
 
-→ [回答历史](/series/答题历史/消息队列/rabbitmq-答题记录.md#消息队列怎么保证消息不丢生产端broker消费端分别怎么做)
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#消息队列怎么保证消息不丢生产端broker消费端分别怎么做)
 
 ## RabbitMQ 交换机是什么？
 
 - 交换机（Exchange）是生产端不直接发队列，先发交换机，交换机按路由规则转发到绑定的队列
 - 跟"队列负载均衡"不同：交换机只看路由规则，消费者之间的负载是多个消费者绑定同一队列时由 Channel 轮询分发
 
-→ [回答历史](/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq-交换机是什么)
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq-交换机是什么)
 
 ## RabbitMQ 交换机有哪几种类型？
 
@@ -238,7 +238,7 @@ channel.queueDeclare("business_queue", true, false, false, args);
 - **Fanout**：广播，绑定的队列全发
 - **Headers**：按消息头匹配（很少用）
 
-→ [回答历史](/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq-交换机有哪几种类型)
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq-交换机有哪几种类型)
 
 ## 消息持久化和队列持久化的区别是什么？
 
@@ -246,4 +246,4 @@ channel.queueDeclare("business_queue", true, false, false, args);
 - **消息持久化** — 设置 `delivery_mode = 2`，单条消息内容落地磁盘。没持久化则重启后消息丢失
 - 两者缺一不可：队列持久化 + 消息不持久化 → 队列在消息空；消息持久化 + 队列不持久化 → 队列消失消息跟着丢
 
-→ [回答历史](/series/答题历史/消息队列/rabbitmq-答题记录.md#消息持久化和队列持久化的区别是什么)
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#消息持久化和队列持久化的区别是什么)

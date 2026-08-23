@@ -46,7 +46,7 @@ Agent 节点里，工具调用的逻辑是这样的：
 
 所以用 Dify 搭 Agent，核心工作量从"写循环"变成了"**把工具定义清楚 + 把 Prompt 调好**"。
 
-→ [回答历史](/series/答题历史/Agent%20开发/dify-答题记录.md#dify-agent-节点怎么编排工具调用-和直接调-llm-的区别)
+→ [回答历史](/private/series/答题历史/Agent%20开发/dify-答题记录.md#dify-agent-节点怎么编排工具调用-和直接调-llm-的区别)
 
 ---
 

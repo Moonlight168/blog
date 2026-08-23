@@ -70,4 +70,4 @@ class Person {
 - Integer 有内部缓存池 **-128 ~ 127**，范围内 `==` 为 true（复用同一对象），范围外每次 new 新对象，`==` 为 false
 - 所以 Integer 比较**一律用 `equals`**，避免缓存范围的坑
 
-→ [回答历史](/series/答题历史/Java/java-答题记录.md#和-equals-区别integer-缓存范围是)
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#和-equals-区别integer-缓存范围是)

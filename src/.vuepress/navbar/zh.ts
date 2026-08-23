@@ -7,29 +7,6 @@ export const zhNavbar = navbar([
     icon: "/assets/icon/首页.png", // 主页图标
     link: "/",
   },
-  // 我的项目（一级导航，可包含子项）
-  {
-    text: "我的项目",
-    icon: "/assets/icon/project.png", // 项目相关图标
-    prefix: "/series/myprojects", // 项目页面存放路径前缀
-    children: [
-      {
-        text: "项目总览",
-        icon: "/assets/icon/myprojects.png",
-        link: "/series/myprojects/",
-      },
-      {
-        text: "FlowMind",
-        icon: "/assets/icon/cloud_flow.png",
-        link: "FlowMind/",
-      },
-      {
-        text: "OilGuard",
-        icon: "/imges/OilGuard/OilGuard.png",
-        link: "OilGuard/",
-      },
-    ],
-  },
   // 博客（一级导航，按分类组织）
   {
     text: "博客",
@@ -82,22 +59,17 @@ export const zhNavbar = navbar([
   ...(process.env.NODE_ENV === "development"
       ? [
           { text: "投资理财", icon: "/assets/icon/finance.png", link: "/private/finance/README.md" }, // 本地显示
-          { 
-            text: "人工智能", 
-            icon: "/assets/icon/ai.png",  
+          {
+            text: "人工智能",
+            icon: "/assets/icon/ai.png",
             prefix: "/private/ai/",
             children: [
               { text: "AI发展历史", link: "/private/ai/AI发展历史.md" }
             ]
-          }
+          },
+          // 关于我（已迁移到 private，仅本地显示）
+          { text: "关于我", icon: "/assets/icon/我.png", link: "/private/about/README.md" },
         ] // 本地显示
       : []), // 构建时不显示
-      
-  // 关于我
-  {
-    text: "关于我",
-    icon: "/assets/icon/我.png", // 个人信息图标
-    link: "/about/", // 对应 /about/README.md
-  },
 
 ]);

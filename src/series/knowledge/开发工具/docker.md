@@ -21,4 +21,4 @@ icon: /assets/icon/docker.png
   ```
 - 阶段 1 有 Maven + JDK + 源码，阶段 2 只有 JRE + jar，中间垃圾全丢掉。
 
-→ [回答历史](/series/答题历史/开发工具/docker-答题记录.md#docker-多阶段构建解决什么怎么写)
+→ [回答历史](/private/series/答题历史/开发工具/docker-答题记录.md#docker-多阶段构建解决什么怎么写)

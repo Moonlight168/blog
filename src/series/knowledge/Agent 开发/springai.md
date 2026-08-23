@@ -16,7 +16,7 @@ categories: ["Agent 开发"]
 
 所以调工具这事的核心工作量，其实在**把每个工具的 description 写好**。
 
-→ [回答历史](/series/答题历史/Agent%20开发/springai-答题记录.md#spring-ai-怎么把自定义工具注册给-agent-调用-agent-怎么知道该调哪个工具)
+→ [回答历史](/private/series/答题历史/Agent%20开发/springai-答题记录.md#spring-ai-怎么把自定义工具注册给-agent-调用-agent-怎么知道该调哪个工具)
 
 ---
 
@@ -32,4 +32,4 @@ categories: ["Agent 开发"]
 
 我的原则就一句话：**工具返回越精简越好，够用就行，别让 Agent 读它不需要的东西**。
 
-→ [回答历史](/series/答题历史/Agent%20开发/springai-答题记录.md#agent-调用工具返回数据太大-怎么防爆上下文)
+→ [回答历史](/private/series/答题历史/Agent%20开发/springai-答题记录.md#agent-调用工具返回数据太大-怎么防爆上下文)
