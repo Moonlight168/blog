@@ -29,7 +29,6 @@ export const zhSidebar = sidebar({
             "/private/hires/": "structure",
             "/private/实习笔记/": "structure",
             "/private/ai/": "structure",
-            "/private/about/": "structure",
             // 我的项目文档（FlowMind/淘票票等）
             "/private/series/myprojects/": "structure",
             // 我的项目面试题分类

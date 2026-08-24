@@ -71,6 +71,12 @@ export const zhNavbar = navbar([
           : []),
     ],
   },
+  // 关于我（公开页面）
+  {
+    text: "关于我",
+    icon: "/assets/icon/我.png",
+    link: "/about/",
+  },
   // 私有导航项（仅本地开发时显示）
   ...(process.env.NODE_ENV === "development"
       ? [
@@ -83,8 +89,6 @@ export const zhNavbar = navbar([
               { text: "AI发展历史", link: "/private/ai/AI发展历史.md" }
             ]
           },
-          // 关于我（已迁移到 private，仅本地显示）
-          { text: "关于我", icon: "/assets/icon/我.png", link: "/private/about/README.md" },
         ] // 本地显示
       : []), // 构建时不显示
 
