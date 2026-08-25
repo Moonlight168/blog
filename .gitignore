@@ -24,3 +24,6 @@ data/logs/
 
 .superpowers/
 docs/
+
+# 忽略候选人简历与项目说明（含个人信息，不上传）
+AGENTS.md
