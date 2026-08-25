@@ -7,528 +7,248 @@ order: 1
 
 ## 什么是 Spring？它有哪些核心模块？
 
+**锚点**：`轻量级 Java 框架：Core(IOC) + AOP + MVC + Data/Security`
+
 Spring 是一个轻量级的 Java 开发框架，核心模块包括：
 
-* Spring Core（IOC 容器）
-* Spring AOP（面向切面编程）
-* Spring MVC（Web 框架）
-* Spring Data、Spring Security 等
+- Spring Core（IOC 容器）
+- Spring AOP（面向切面编程）
+- Spring MVC（Web 框架）
+- Spring Data、Spring Security 等
 
 ## 你对 IoC 和 AOP 的理解
 
-**IoC（控制反转）**
+**锚点**：`IoC 容器管对象（依赖注入），AOP 抽公共逻辑（动态代理）`
 
-* 核心思想：对象的创建和依赖关系由 **Spring 容器** 来管理，而不是由代码主动去 new。
-* 体现形式：**依赖注入（DI）**，通过 `@Autowired`、`@Resource` 等方式将依赖交给容器注入。
-* 优点：降低耦合、提高可维护性和可测试性。
+**IoC（控制反转）**：
 
-**AOP（面向切面编程）**
+- 核心思想：对象创建和依赖关系由 **Spring 容器** 管理，不是代码主动 new
+- 体现形式：**依赖注入（DI）**——`@Autowired`、`@Resource` 交给容器注入
+- 优点：降低耦合、提高可维护性和可测试性
 
-* 核心思想：把通用的、与业务无关的功能（如日志、事务、权限、缓存）从业务逻辑中抽离出来，通过"切面"进行统一处理。
-* 体现形式：Spring 通过 **动态代理（JDK 动态代理 / CGLIB）** 实现，在运行时织入切面逻辑。
-* 优点：提高代码复用性，增强代码的可维护性，让业务代码更简洁。
+**AOP（面向切面编程）**：
+
+- 核心思想：把通用的、与业务无关的功能（日志、事务、权限、缓存）从业务逻辑抽离，通过"切面"统一处理
+- 体现形式：**动态代理（JDK 动态代理 / CGLIB）** 运行时织入切面逻辑
+- 优点：提高代码复用性、可维护性，业务代码更简洁
 
 ## AOP 的常用注解有哪些？实现原理？
 
-1. **常用注解**
+**锚点**：`@Aspect + @Pointcut + 五通知（Before/After/AfterReturning/AfterThrowing/Around）`
 
-   Spring AOP 基于 AspectJ 提供注解式切面编程，主要注解包括：
+1. **常用注解**：
+   - `@Aspect`：声明切面类（配合 `@Component`）
+   - `@Pointcut`：定义切入点表达式，定位哪些方法织入
+   - `@Before` / `@After` / `@AfterReturning` / `@AfterThrowing` / `@Around`：五类通知
+   - `@Order`：切面执行顺序，值越小优先级越高
+2. **实现原理**：**动态代理**——运行时为目标对象生成代理对象，把通知逻辑织入方法前后；JDK 动态代理（接口）或 CGLIB（类）
+3. **关键组件**：`ProxyFactory` 决定代理方式；`Advisor` 封装切入点和通知；`MethodInterceptor` 执行通知；`ProceedingJoinPoint` 在环绕通知中控制目标执行
+4. **Spring AOP vs AspectJ**：
 
-   - `@Aspect`：声明该类是切面类，通常配合 `@Component` 一起使用
-   - `@Pointcut`：定义切入点表达式，用于定位哪些方法需要织入增强逻辑
-   - `@Before`：前置通知，在目标方法执行前执行
-   - `@After`：后置通知，无论方法是否抛异常都会执行
-   - `@AfterReturning`：返回通知，目标方法正常返回后执行
-   - `@AfterThrowing`：异常通知，目标方法抛出异常时执行
-   - `@Around`：环绕通知，包裹目标方法执行，可控制执行前后逻辑
-   - `@Order`：指定切面执行顺序，值越小优先级越高
-
-   **示例代码：**
-
-   ```java
-   @Aspect
-   @Component
-   public class LogAspect {
-       @Pointcut("execution(* com.example.service.*.*(..))")
-       public void serviceMethods() {}
-
-       @Before("serviceMethods()")
-       public void before(JoinPoint jp) {
-           System.out.println("调用方法前：" + jp.getSignature().getName());
-       }
-
-       @Around("serviceMethods()")
-       public Object around(ProceedingJoinPoint pjp) throws Throwable {
-           System.out.println("方法开始");
-           Object res = pjp.proceed();
-           System.out.println("方法结束");
-           return res;
-       }
-   }
-   ```
-
-2. **实现原理**
-
-   Spring AOP 的核心原理是[**动态代理（Proxy）**](../Java/Java基础面试题/代理.html#_2-1-jdk动态代理)，在运行时为目标对象生成代理对象，将通知逻辑织入目标方法的前后。
-
-3. **关键组件说明**
-
-   - `ProxyFactory`：决定使用 JDK 代理或 CGLIB
-   - `Advisor`：包含切入点和通知的封装对象
-   - `MethodInterceptor`：方法拦截器，执行通知逻辑
-   - `JoinPoint`：方法调用等连接点的上下文
-   - `ProceedingJoinPoint`：环绕通知中控制目标方法执行
-
-4. **Spring AOP 与 AspectJ 区别**
-
-   | 特性    | Spring AOP       | AspectJ     |
-   | ----- | ---------------- | ----------- |
-   | 实现方式  | 动态代理（JDK/CGLIB）  | 编译期或加载期织入   |
-   | 支持范围  | 方法级（Spring Bean） | 更广泛（字段、构造器） |
-   | 配置复杂度 | 简单（注解或 XML）      | 略复杂（需编译器支持） |
-   | 性能    | 较低（运行时代理）        | 高（编译期织入）    |
+| 特性 | Spring AOP | AspectJ |
+|------|-----------|---------|
+| 实现方式 | 动态代理（JDK/CGLIB） | 编译期或加载期织入 |
+| 支持范围 | 方法级（Spring Bean） | 更广泛（字段、构造器） |
+| 配置复杂度 | 简单（注解/XML） | 略复杂（需编译器支持） |
+| 性能 | 较低（运行时代理） | 高（编译期织入） |
 
 ## Spring 是如何实现依赖注入的？底层是如何实现的？
 
-Spring 的依赖注入（DI）通过 IoC 容器 + 反射机制，在运行时动态地将 Bean 的依赖注入进去，核心流程如下：
+**锚点**：`IoC 容器 + 反射：BeanDefinition → 反射实例化 → 反射注入 → BeanPostProcessor 处理 @Autowired`
 
-1. **基本概念**
-
-   - **依赖注入（DI）**：由 Spring 容器负责创建对象并注入其依赖，降低耦合
-   - **控制反转（IoC）**：对象不主动获取依赖，而是由容器"推"进来
-
-2. **底层实现流程**
-
-   （1）解析配置，生成 BeanDefinition
-
-   解析注解/XML/配置类，封装为 `BeanDefinition`（包含类名、作用域、依赖等），注册到 `BeanDefinitionRegistry` 中。
-
-   ```java
-   BeanDefinition bd = new RootBeanDefinition(UserServiceImpl.class);
-   registry.registerBeanDefinition("userService", bd);
-   ```
-
-   （2）实例化 Bean（反射创建对象）
-
-   容器根据 `BeanDefinition` 使用反射调用构造函数创建实例。
-
-   ```java
-   Class<?> clazz = Class.forName(beanDefinition.getClassName());
-   Object instance = clazz.getDeclaredConstructor().newInstance();
-   ```
-
-   （3）依赖注入（属性/构造函数/Setter）
-
-   容器根据类型或名称查找依赖 Bean，使用反射注入依赖（字段、Setter、构造方法）。
-
-   ```java
-   Field field = clazz.getDeclaredField("userService");
-   field.setAccessible(true);
-   field.set(beanInstance, userServiceBean);
-   ```
-
-   （4）BeanPostProcessor 处理（如 @Autowired）
-
-   `AutowiredAnnotationBeanPostProcessor` 扫描字段/方法上的 `@Autowired`，查找依赖 Bean 并注入。
-
-3. **注解注入流程（@Autowired）**
-
-   - `@ComponentScan` 扫描 Bean 并注册为 `BeanDefinition`
-   - 实例化 Bean
-   - `AutowiredAnnotationBeanPostProcessor` 处理字段/方法注入
-   - 通过类型匹配查找依赖 Bean 并反射注入
-
-4. **常见注入方式**
-
-   - **构造函数注入（推荐）**：强依赖、不可变、支持 `final` 字段
-
-     ```java
-     public UserController(UserService userService) {
-         this.userService = userService;
-     }
-     ```
-
-   - **Setter 注入**：可选依赖、可变性
-
-     ```java
-     @Autowired
-     public void setUserService(UserService userService) {
-         this.userService = userService;
-     }
-     ```
-
-   - **字段注入**（不推荐）：不利于测试和解耦
-
-     ```java
-     @Autowired
-     private UserService userService;
-     ```
-
-5. **循环依赖解决机制（单例Bean）**
-
-   Spring 使用 **三级缓存** 解决构造器循环依赖（仅限单例Bean & 非构造器注入）：
-
-   - **singletonFactories（三级缓存）**：存放 `ObjectFactory`，用于生成早期代理对象
-   - **earlySingletonObjects（二级缓存）**：存放早期暴露的半成品 Bean（未填充属性）
-   - **singletonObjects（一级缓存）**：存放完全初始化好的 Bean
-
-   流程简要：创建 Bean → 放入三级缓存 → 创建实例 → 移至二级缓存 → 填充属性 → 初始化 → 移至一级缓存
-
-   > 构造器注入无法提前暴露对象，无法参与三级缓存，不支持构造器循环依赖
+1. **基本概念**：DI 由容器创建对象并注入依赖；IoC 对象不主动获取，容器"推"进来
+2. **底层流程**：
+   - 解析配置生成 `BeanDefinition`（类名、作用域、依赖），注册到 `BeanDefinitionRegistry`
+   - 按 BeanDefinition 用反射调构造器创建实例
+   - 按类型/名称找依赖 Bean，反射注入（字段/Setter/构造器）
+   - `AutowiredAnnotationBeanPostProcessor` 扫描 `@Autowired`，查依赖并注入
+3. **三种注入方式**：构造器（推荐，强依赖不可变 final）；Setter（可选依赖）；字段（不推荐，不利测试）
+4. **循环依赖**：三级缓存解决（仅限单例 + 非构造器注入）
 
 ## Spring 循环依赖如何解决？
 
-1. **三级缓存详解**
+**锚点**：`三级缓存：singletonFactories 存工厂 → earlySingletonObjects 存半成品 → singletonObjects 存成品`
 
-   （1）**singletonObjects（一级缓存）**
-   - 存储 **完全初始化好的单例 Bean**
-   - 直接返回给调用者，无需任何处理
-
-   （2）**earlySingletonObjects（二级缓存）**
-   - 存储 **早期暴露的半成品 Bean**
-   - Bean 已实例化，但未填充属性和执行初始化方法
-   - 用于解决循环依赖时的直接引用
-
-   （3）**singletonFactories（三级缓存）**
-   - 存储 **Bean 工厂对象**（`ObjectFactory`）
-   - 用于生成早期代理对象或原始对象
-   - 核心方法：`getObject()` 可返回早期对象
-
-2. **循环依赖解决流程**
-
-   以 A → B → A 为例：
-
-   （1）**创建 A**：调用 `getBean(A)`
-   - 检查三级缓存，均无 A
-   - 实例化 A（调用构造器）
-   - 将 A 包装为 `ObjectFactory` 放入 `singletonFactories`
-
-   （2）**A 依赖 B**：填充 A 的属性时发现依赖 B
-   - 调用 `getBean(B)`
-
-   （3）**创建 B**：
-   - 检查三级缓存，均无 B
-   - 实例化 B（调用构造器）
-   - 将 B 包装为 `ObjectFactory` 放入 `singletonFactories`
-
-   （4）**B 依赖 A**：填充 B 的属性时发现依赖 A
-   - 调用 `getBean(A)`
-   - 检查 `singletonObjects`：无
-   - 检查 `earlySingletonObjects`：无
-   - 检查 `singletonFactories`：有 A 的 `ObjectFactory`
-   - 调用 `getObject()` 获取 A 的早期对象
-   - 将 A 从 `singletonFactories` 移至 `earlySingletonObjects`
-   - 将 A 注入 B
-
-   （5）**B 初始化完成**：
-   - B 填充属性完成
-   - B 执行初始化方法
-   - 将 B 从 `singletonFactories` 移至 `singletonObjects`
-   - 返回 B 给 A
-
-   （6）**A 初始化完成**：
-   - A 填充属性完成（注入了 B）
-   - A 执行初始化方法
-   - 将 A 从 `earlySingletonObjects` 移至 `singletonObjects`
-   - 返回 A 给调用者
-
-3. **为什么需要三级缓存？**
-
-   - **一级缓存**：存储完全初始化的 Bean，直接返回
-   - **二级缓存**：存储早期对象，避免重复创建
-   - **三级缓存**：处理 AOP 代理场景，确保循环依赖时返回的是代理对象
-
-4. **不支持构造器循环依赖的原因**
-
-   - 构造器注入时，Bean 实例化和依赖注入是同一过程
-   - 无法在构造器调用前提前暴露对象
-   - 三级缓存机制无法介入构造器调用过程
-
-5. **原型 Bean 不支持循环依赖的原因**
-
-   - 原型 Bean 每次请求都会创建新实例
-   - 无法通过缓存机制复用对象
-   - 会导致无限递归创建，最终栈溢出
+1. **三级缓存**：
+   - **singletonObjects（一级）**：完全初始化好的单例 Bean，直接返回
+   - **earlySingletonObjects（二级）**：早期暴露的半成品 Bean（已实例化未填充属性）
+   - **singletonFactories（三级）**：`ObjectFactory` 工厂，用于生成早期代理对象或原始对象
+2. **流程（A → B → A）**：创建 A 实例化后放三级缓存 → 填充属性发现依赖 B → 创建 B 实例化放三级缓存 → B 填充发现依赖 A → 从三级缓存取 A 的 ObjectFactory 调 getObject() 得早期对象，移入二级缓存注入 B → B 完成移一级 → A 完成移一级
+3. **为什么三级**：一级存成品；二级存早期对象避免重复创建；**三级处理 AOP 代理场景**——循环依赖时返回的是代理对象（没有三级缓存，代理会晚于依赖注入生成，注入的就是原始对象）
+4. **不支持的场景**：
+   - 构造器循环依赖：实例化和注入同一过程，无法提前暴露对象
+   - 原型 Bean：每次新建无法缓存复用，无限递归栈溢出
 
 → [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-循环依赖怎么解决)
 
 ## Spring 注入 Bean 的方式
 
-1. **构造器注入（推荐）**：适合必需依赖，保证对象创建时依赖完整
+**锚点**：`构造器（推荐）/ Setter / 字段 / @Resource 按名 / @Inject 按类型`
 
-   ```java
-   @Component
-   public class AService {
-       private final BService bService;
-       public AService(BService bService) {
-           this.bService = bService;
-       }
-   }
-   ```
-
+1. **构造器注入（推荐）**：适合必需依赖，对象创建时依赖完整，支持 final
 2. **Setter 注入**：适合可选依赖
+3. **字段注入（不推荐）**：简洁但不易测试
+4. **@Resource 注入**：JSR-250，按名称匹配，找不到再按类型
+5. **@Inject 注入**：JSR-330，按类型匹配
 
-   ```java
-   @Autowired
-   public void setBService(BService bService) {
-       this.bService = bService;
-   }
-   ```
-
-3. **字段注入**（不推荐）：简洁但不易测试
-
-   ```java
-   @Autowired
-   private BService bService;
-   ```
-
-4. **`@Resource` 注入**：按名称匹配，找不到再按类型（JSR-250）
-
-5. **`@Inject` 注入**：Java 标准（JSR-330），按类型匹配
-
-**`@Autowired` 匹配规则**
-
-- 按类型（byType）：先匹配类型相同的 Bean
-- 按名称或 `@Qualifier`（byName）：类型冲突时使用字段名或指定 Bean 名称
-- `required=true`（默认）必须找到 Bean，`required=false` 可选注入
+**@Autowired 匹配规则**：先按类型（byType）；类型冲突按字段名或 `@Qualifier`（byName）；`required=true` 默认必须找到，`false` 可选注入。
 
 ## 第三方的 Bean 如何交给 Spring 管理？
 
-1. **使用 `@Bean` 注解**：在配置类中手动创建
+**锚点**：`@Bean 手动创建 / @Import 导入配置 / FactoryBean 复杂逻辑`
 
-   ```java
-   @Configuration
-   public class AppConfig {
-       @Bean
-       public RestTemplate restTemplate() {
-           return new RestTemplate();
-       }
-   }
-   ```
+1. **@Bean 注解**：配置类中手动创建
 
-2. **使用 `@Import` 导入配置类**
+```java
+@Configuration
+public class AppConfig {
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
+}
+```
 
-   ```java
-   @Import(ThirdPartyConfig.class)
-   public class AppConfig {}
-   ```
-
-3. **使用 `FactoryBean`**：适用于复杂实例化逻辑
-
-   ```java
-   public class MyFactoryBean implements FactoryBean<ThirdPartyBean> {
-       @Override
-       public ThirdPartyBean getObject() {
-           return new ThirdPartyBean(...);
-       }
-   }
-   ```
-
+2. **@Import 导入配置类**：`@Import(ThirdPartyConfig.class)`
+3. **FactoryBean**：适用于复杂实例化逻辑，实现 `getObject()`
 4. **XML 配置**（不常用）
 
 ## Bean 的生命周期
 
-Spring Bean 的生命周期主要分为以下几个阶段：
+**锚点**：`实例化 → 属性赋值 → 初始化前 → 初始化 → 初始化后 → 使用 → 销毁`
 
-1. **实例化（Instantiation）**
-
-   Spring 容器通过反射创建 Bean 对象。
-
-2. **属性赋值（Populate）**
-
-   依赖注入（DI），为 Bean 设置属性。
-
-3. **初始化前（BeanPostProcessor.before）**
-
-   调用 `BeanPostProcessor` 的 `postProcessBeforeInitialization`。
-
-4. **初始化（Initialization）**
-
-   执行 `InitializingBean.afterPropertiesSet()`。
-   或调用配置的 `init-method` 方法。
-
-5. **初始化后（BeanPostProcessor.after）**
-
-   调用 `BeanPostProcessor` 的 `postProcessAfterInitialization`。
-
-6. **使用中（In use）**
-
-   Bean 被应用程序使用。
-
-7. **销毁（Destroy）**
-
-   容器关闭时，调用 `DisposableBean.destroy()`。
-   或调用配置的 `destroy-method` 方法。
-
-👉 **总结：**
-Bean 生命周期 = **实例化 → 属性赋值 → 初始化前处理 → 初始化 → 初始化后处理 → 使用 → 销毁**。
+1. **实例化**：反射创建 Bean 对象
+2. **属性赋值**：依赖注入（DI）
+3. **初始化前**：`BeanPostProcessor.postProcessBeforeInitialization`
+4. **初始化**：`InitializingBean.afterPropertiesSet()` 或配置的 `init-method`
+5. **初始化后**：`BeanPostProcessor.postProcessAfterInitialization`
+6. **使用中**：Bean 被应用程序使用
+7. **销毁**：容器关闭时 `DisposableBean.destroy()` 或 `destroy-method`
 
 ## @Autowired 和 @Resource 的区别
 
-1. **来源不同**
+**锚点**：`@Autowired 按类型（Spring 专用，有 required）；@Resource 按名称（JDK 标准）`
 
-   - `@Autowired`：Spring 提供，属于 **Spring 框架注解**。
-   - `@Resource`：JDK 提供，属于 **JSR-250 规范注解**。
-
-2. **注入方式**
-
-   - `@Autowired`：默认按 **类型（byType）** 注入，如果存在多个同类型 Bean，则需要配合 `@Qualifier` 或 `@Primary` 指定。
-   - `@Resource`：默认按 **名称（byName）** 注入，如果找不到同名 Bean，才会按类型注入。
-
-3. **required 属性**
-
-   - `@Autowired`：有 `required` 属性，默认为 `true`，如果没有匹配的 Bean 会报错，可以设置 `required = false`。
-   - `@Resource`：没有 `required` 属性，如果没有找到 Bean 也会直接报错。
-
-4. **使用场景**
-
-   - `@Autowired`：更适合在 Spring 项目中使用，配合 Spring 的 IoC 和 AOP 特性。
-   - `@Resource`：在需要兼容 JDK 规范或更关注名称匹配时使用。
-
-👉 **总结**：
-
-- `@Autowired`：**按类型注入**，Spring 专用，支持 `required`
-- `@Resource`：**按名称注入**，JDK 标准，更通用
+1. **来源**：`@Autowired` Spring 提供；`@Resource` JDK 提供（JSR-250）
+2. **注入方式**：`@Autowired` 默认按类型，多同类型 Bean 配 `@Qualifier`/`@Primary`；`@Resource` 默认按名称，找不到再按类型
+3. **required**：`@Autowired` 有 required 属性（默认 true，可设 false）；`@Resource` 没有
+4. **场景**：`@Autowired` 适合 Spring 项目配合 IoC/AOP；`@Resource` 需兼容 JDK 规范或重名称匹配时
 
 ## Spring 常用注解有哪些？
 
-1. **核心组件注解**
+**锚点**：`组件（@Component/@Service/@Repository）+ 注入（@Autowired/@Qualifier/@Value）+ AOP + 事务`
 
-   - `@Component`：通用组件，注入 Spring 容器
-   - `@Service`：业务层组件
-   - `@Repository`：持久层组件，支持异常转换
-   - `@Configuration`：配置类
-   - `@Bean`：方法定义 Bean，常配合 `@Configuration` 使用
-   - `@ComponentScan`：指定扫描路径
-   - `@Import`：导入配置类或组件
-
-2. **依赖注入相关**
-
-   - `@Autowired`：按类型注入
-   - `@Qualifier`：配合 `@Autowired` 指定 Bean 名称
-   - `@Resource`：JSR 标准注解，默认按名称注入
-   - `@Value`：注入配置值
-   - `@Scope`：指定作用域（singleton、prototype）
-   - `@Lazy`：延迟加载
-   - `@PostConstruct`：初始化后执行
-   - `@PreDestroy`：销毁前执行
-
-3. **AOP 注解**
-
-   - `@Aspect`：声明切面类
-   - `@Pointcut`：定义切入点
-   - `@Before / @After / @Around`：通知类型（前置、后置、环绕等）
-   - `@Order`：切面优先级
-
-4. **事务管理**
-
-   - `@Transactional`：声明事务
-   - `@EnableTransactionManagement`：开启事务注解支持
+1. **核心组件**：`@Component`、`@Service`（业务层）、`@Repository`（持久层，异常转换）、`@Configuration`、`@Bean`、`@ComponentScan`、`@Import`
+2. **依赖注入**：`@Autowired`、`@Qualifier`、`@Resource`、`@Value`、`@Scope`、`@Lazy`、`@PostConstruct`、`@PreDestroy`
+3. **AOP**：`@Aspect`、`@Pointcut`、`@Before/@After/@Around`、`@Order`
+4. **事务**：`@Transactional`、`@EnableTransactionManagement`
 
 ## Spring Bean 的作用域有哪些？一般项目中用什么？
 
-Spring Bean 支持 6 种作用域：
+**锚点**：`singleton 默认 90% 场景，prototype 有状态，request/session/application/websocket Web 环境`
 
 | 作用域 | 描述 | 适用环境 |
 |--------|------|----------|
-| **singleton** | 容器中只存在一个实例（默认） | 所有环境 |
-| **prototype** | 每次请求创建新实例 | 所有环境 |
-| **request** | 每个HTTP请求一个实例 | Web环境 |
-| **session** | 每个HTTP会话一个实例 | Web环境 |
-| **application** | ServletContext生命周期内一个实例 | Web环境 |
-| **websocket** | 每个WebSocket会话一个实例 | WebSocket环境 |
+| singleton | 容器中一个实例（默认） | 所有环境 |
+| prototype | 每次请求新实例 | 所有环境 |
+| request | 每个 HTTP 请求一个实例 | Web |
+| session | 每个 HTTP 会话一个实例 | Web |
+| application | ServletContext 生命周期一个实例 | Web |
+| websocket | 每个 WebSocket 会话一个实例 | WebSocket |
 
-**常用**：singleton（90%场景，无状态服务类）、prototype（有状态对象）、request/session（Web请求数据）
+**常用**：singleton（90% 场景，无状态服务类）、prototype（有状态对象）、request/session（Web 请求数据）。
 
-⚠️ **singleton依赖prototype问题**：singleton Bean初始化时其依赖的prototype Bean只创建一次，解决：使用 `@Lookup` 或 `ObjectProvider`
+⚠️ **singleton 依赖 prototype 问题**：singleton 初始化时 prototype 依赖只创建一次——用 `@Lookup` 或 `ObjectProvider` 解决。
 
 ## @Transactional 注解四种机制有哪些？
 
-@Transactional注解通过四种机制控制事务行为：
+**锚点**：`传播机制 + 隔离级别 + 只读属性 + 回滚规则`
 
-### `@Transactional` 失效的常见原因？
+1. **传播机制（Propagation）**：控制事务方法间调用关系——REQUIRED（默认，有则加入无则创建）、REQUIRES_NEW（总是新建，不受调用方影响）等
+2. **隔离级别（Isolation）**：控制数据可见性——READ_UNCOMMITTED（允许脏读/不可重复读/幻读）→ READ_COMMITTED（避免脏读）→ REPEATABLE_READ（避免脏读+不可重复读）→ SERIALIZABLE（避免所有并发问题）
+3. **只读属性（ReadOnly）**：`readOnly=true` 告诉数据库这是查询操作，优化性能
+4. **回滚规则（Rollback For）**：默认 RuntimeException 和 Error 自动回滚；可 `rollbackFor`/`noRollbackFor` 自定义
 
-1. **类内部调用**——不经过 AOP 代理。
-2. **非 public 方法**——Spring 默认只代理 public。
-3. **异常被吞**——try-catch 没往外抛；默认只回滚 RuntimeException。
-4. **数据库引擎不支持**——如 MyISAM。
+> 📖 详细说明：[@Transactional注解四种机制详解](/blogs/框架/spring/transactional-annotation.md)
+
+## @Transactional 失效的常见原因？
+
+**锚点**：`四个：内部调用 / 非 public / 异常被吞 / 引擎不支持`
+
+1. **类内部调用**：不经过 AOP 代理
+2. **非 public 方法**：Spring 默认只代理 public
+3. **异常被吞**：try-catch 没往外抛；默认只回滚 RuntimeException
+4. **数据库引擎不支持**：如 MyISAM
 
 → [回答历史](/private/series/答题历史/框架/spring-答题记录.md#transactional-失效的常见原因)
 
-1. **传播机制（Propagation）**
-
-   控制事务方法之间的调用关系
-   - **REQUIRED**（默认）：有事务就加入，没有就创建新事务
-   - **REQUIRES_NEW**：总是创建新事务，不受调用方影响
-
-2. **隔离级别（Isolation）**
-
-   控制事务之间的数据可见性，解决并发问题
-   - **READ_UNCOMMITTED**：最低隔离级别，允许脏读、不可重复读和幻读
-   - **READ_COMMITTED**：避免脏读，允许不可重复读和幻读
-   - **REPEATABLE_READ**：避免脏读和不可重复读，允许幻读
-   - **SERIALIZABLE**：最高隔离级别，避免所有并发问题
-
-3. **只读属性（ReadOnly）**
-
-   标记事务为只读，优化查询性能
-   - `readOnly=true`：告诉数据库这是查询操作
-
-4. **回滚规则（Rollback For）**
-
-   指定哪些异常会触发事务回滚
-   - **默认**：RuntimeException和Error自动回滚
-   - **自定义**：可通过rollbackFor和noRollbackFor指定
-
-> 📖 **详细说明**：[@Transactional注解四种机制详解](/blogs/框架/spring/transactional-annotation.md) - 包含完整示例、并发问题解析和最佳实践
-
 ## Spring中的ApplicationContext 原理是什么，它与BeanFactory区别？
 
-ApplicationContext 的原理是：**以 BeanFactory 为核心，通过统一的 refresh() 启动流程，完成 BeanDefinition 的加载与注册，在此基础上通过各种 PostProcessor 机制扩展容器能力，最终在启动阶段完成单例 Bean 的实例化、依赖注入和生命周期管理。**
+**锚点**：`BeanFactory 只管建 Bean；ApplicationContext 加事件/AOP/资源加载，启动即初始化单例`
 
-相比之下，**BeanFactory 只负责最基础的 Bean 创建和依赖注入，而 ApplicationContext 在这个流程之上引入了事件机制、AOP、资源加载等应用级能力，并默认在启动时完成单例 Bean 初始化。**
+1. **ApplicationContext 原理**：以 BeanFactory 为核心，通过统一的 `refresh()` 启动流程完成 BeanDefinition 加载注册，靠各种 PostProcessor 扩展容器能力，启动阶段完成单例 Bean 实例化、注入和生命周期管理
+2. **区别**：BeanFactory 只负责基础 Bean 创建和依赖注入；ApplicationContext 引入事件机制、AOP、资源加载等应用级能力，默认启动时初始化单例 Bean
 
 ## 实际应用中你怎么使用 ApplicationContext ？
 
-在实际项目中我主要通过注解方式使用 ApplicationContext，由容器在启动时统一管理 Bean。
-**其中一个典型用法就是 AOP**，比如通过 `@Aspect` + `@Around` 实现日志、鉴权和事务控制。
-**Spring 会在 ApplicationContext 启动过程中，通过 BeanPostProcessor 对目标 Bean 进行代理增强**，我只需要声明切面即可，不需要手动干预对象创建逻辑。
+**锚点**：`注解方式为主，典型用法是 AOP：@Aspect + @Around 做日志/鉴权/事务`
+
+1. 实际项目主要通过注解使用，容器启动时统一管理 Bean
+2. 典型用法是 AOP：`@Aspect` + `@Around` 实现日志、鉴权和事务控制
+3. Spring 在容器启动过程中通过 BeanPostProcessor 对目标 Bean 代理增强，只需声明切面，不用手动干预对象创建
 
 ## JWT 认证流程？token 里能放敏感信息吗？
 
-1. 登录 → 后端校验 → 生成 JWT（Header + Payload + Signature）→ 返回前端
-2. 前端每次请求带 `Authorization: Bearer <token>`
-3. 过滤器拦截 → 验签 → 解析用户信息 → 放入 SecurityContext
+**锚点**：`登录发 JWT → 请求带 Bearer → 过滤器验签解析；不能放敏感信息（Base64 非加密）`
 
-**不能放敏感信息**——JWT 是 Base64 编码不是加密，任何人解码可见 payload。另外需要配合：短 TTL + refresh token、生产换掉默认密钥。
+1. **流程**：登录 → 后端校验 → 生成 JWT（Header + Payload + Signature）→ 返回前端；前端每次请求带 `Authorization: Bearer <token>`；过滤器拦截 → 验签 → 解析用户信息 → 放入 SecurityContext
+2. **不能放敏感信息**：JWT 是 Base64 编码不是加密，任何人解码可见 payload
+3. **配合**：短 TTL + refresh token、生产换掉默认密钥
 
 → [回答历史](/private/series/答题历史/框架/spring-答题记录.md#jwt-认证流程token-里能放敏感信息吗)
 
+## JWT token 过期了怎么办？Refresh Token 怎么续期？
+
+**锚点**：`双 token：Access 短过期静默续，Refresh 长过期存服务端可吊销`
+
+1. Access Token 短过期（15-30min），Refresh Token 长过期（7-30 天）
+2. Access 过期 → 客户端拿 Refresh 静默换新 Access，用户无感知
+3. Refresh 也过期才需要重新登录
+4. Refresh 存服务端（Redis）可主动吊销；Access 不存，靠短 TTL 降低泄露风险
+
+→ [回答历史](/private/series/答题历史/基础知识/非技术面试问答-答题记录.md#jwt-token-过期了怎么办refresh-token-怎么续期)
+
 ## Spring Bean 默认单例，多线程并发会有安全问题吗？怎么处理？
 
-- 看 Bean **有没有共享可变状态**（成员变量）。Controller/Service 只调方法不存成员变量 → 天然线程安全。
-- 有状态时：`ThreadLocal`、加锁（synchronized/Lock）、或改用 prototype 作用域。
-- 能用无状态就无状态，最优解是不持有状态。
+**锚点**：`看有没有共享可变状态；无状态天然安全，有状态用 ThreadLocal/加锁/prototype`
+
+1. 看 Bean 有没有**共享可变状态**（成员变量）；Controller/Service 只调方法不存成员变量 → 天然线程安全
+2. 有状态时：`ThreadLocal`、加锁（synchronized/Lock）、或改用 prototype 作用域
+3. 能用无状态就无状态，**最优解是不持有状态**
 
 → [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-bean-默认单例多线程并发会有安全问题吗怎么处理)
 
 ## Spring IoC 容器启动过程中，Bean 的完整生命周期是怎样的？
 
-1. **实例化** — 反射调用构造器创建对象
-2. **属性填充** — 注入 `@Autowired`、`@Value` 等依赖
-3. **Aware 回调** — `BeanNameAware`、`BeanFactoryAware`、`ApplicationContextAware` 等，Spring 把容器元信息塞给 Bean
-4. **BeanPostProcessor 前置处理** — `postProcessBeforeInitialization`
-5. **初始化** — `@PostConstruct` → `InitializingBean.afterPropertiesSet()` → `init-method`
-6. **BeanPostProcessor 后置处理** — `postProcessAfterInitialization`，**AOP 代理在这一步生成**
-7. **就绪** — 放入单例池
-8. **销毁** — 容器关闭时 `@PreDestroy` → `DisposableBean.destroy()` → `destroy-method`
+**锚点**：`实例化 → 注入 → Aware → 前置 → 初始化 → 后置(AOP) → 就绪 → 销毁`
+
+1. **实例化**：反射调用构造器创建对象
+2. **属性填充**：注入 `@Autowired`、`@Value` 等依赖
+3. **Aware 回调**：`BeanNameAware`、`BeanFactoryAware`、`ApplicationContextAware` 等，容器把元信息塞给 Bean
+4. **BeanPostProcessor 前置处理**：`postProcessBeforeInitialization`
+5. **初始化**：`@PostConstruct` → `InitializingBean.afterPropertiesSet()` → `init-method`
+6. **BeanPostProcessor 后置处理**：`postProcessAfterInitialization`——**AOP 代理在这一步生成**
+7. **就绪**：放入单例池
+8. **销毁**：`@PreDestroy` → `DisposableBean.destroy()` → `destroy-method`
 
 - 简记：**实例化 → 注入 → Aware → 前置 → 初始化 → 后置(AOP) → 就绪 → 销毁**
-- 三级缓存（`singletonFactories` / `earlySingletonObjects` / `singletonObjects`）是解决**循环依赖**的机制，不是生命周期本身，发生在步骤 2 之后
+- 三级缓存是解决**循环依赖**的机制，不是生命周期本身，发生在步骤 2 之后
 
 → [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-ioc-容器启动过程中bean-的完整生命周期是怎样的)
 
 ## Spring Aware 接口是什么？
+
+**锚点**：`回调接口：Spring 发现 Bean 实现了 Aware，就把容器底层信息塞给它`
 
 - Aware 是一组**回调接口**，Spring 创建 Bean 时若发现它实现了某个 Aware 接口，就把容器底层信息主动塞给它
 - `ApplicationContextAware` 塞上下文，`BeanNameAware` 塞名字，`EnvironmentAware` 塞环境配置等
@@ -538,9 +258,11 @@ ApplicationContext 的原理是：**以 BeanFactory 为核心，通过统一的 
 
 ## Spring Aware 接口实际开发中还有用吗？
 
-- **业务代码很少直接用** — `@Autowired`、`@Value`、构造器注入已覆盖 99% 场景
-- **框架/基础设施仍依赖它** — 工具类拿 Bean（如 `SpringUtils`）、Spring 内部 Bean 获取容器能力
-- **Spring 4.3+ 可直接注入替代** — `@Autowired private ApplicationContext context;`，因为 Spring 把自己注册成了 Bean
+**锚点**：`业务代码很少用（@Autowired 覆盖 99%），框架/基础设施仍依赖`
+
+- **业务代码很少直接用**：`@Autowired`、`@Value`、构造器注入已覆盖 99% 场景
+- **框架/基础设施仍依赖**：工具类拿 Bean（如 `SpringUtils`）、Spring 内部 Bean 获取容器能力
+- **Spring 4.3+ 可直接注入替代**：`@Autowired private ApplicationContext context;`，Spring 把自己注册成了 Bean
 - 面试考点不在实用性，在它在生命周期链上的位置和扩展点意义
 
 → [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-aware-接口实际开发中还有用吗)

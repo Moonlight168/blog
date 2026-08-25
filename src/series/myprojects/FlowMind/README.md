@@ -10,7 +10,7 @@ dir:
 
 # FlowMind
 
-**基于 RuoYi-Cloud + Flowable 的智能工作流管理系统，集成 AI 智能设计与审批能力**
+**基于 RuoYi-Cloud + Flowable 的智能工作流管理系统 v2.1.0，集成 AI 智能设计与审批能力**
 
 ## 🧠项目简介
 
@@ -37,6 +37,8 @@ FlowMind 是一款基于 **RuoYi-Cloud** 扩展的 **智能流程审批系统**�
 | **AI 设计分类** | 自然语言描述 → 自动生成流程分类 |
 | **AI 设计流程** | 业务需求描述 → 自动生成 BPMN 2.0 流程 |
 | **AI 设计表单** | 表单内容描述 → 自动生成 v-form-designer 表单 |
+| **React 模式** | 基于 ReAct 架构的智能 Agent，支持多轮追问 |
+| **追问优化** | AI 主动询问细节，持续优化设计结果直到满意 |
 
 ### 🧠 ReAct 模式 Agent
 
@@ -46,7 +48,17 @@ FlowMind 是一款基于 **RuoYi-Cloud** 扩展的 **智能流程审批系统**�
 - **工具调用**：动态调用 BPMN 设计、表单生成等工具
 - **追问机制**：主动询问缺失信息，确保设计完整
 - **结果验证**：自动验证生成结果的正确性
-- **多轮优化**：基于反馈持续优化设计结果，直到用户满意
+
+### 🛡️ 四层校验架构
+
+AI 生成结果经过四层校验 + 分阶段写库，确保产出可靠：
+
+| 校验层 | 说明 |
+| --- | --- |
+| **字段锁定** | LLM 只输出扁平骨架，assignee/data_type 等运行时属性由程序注入 |
+| **节点/连线校验** | 在 JSON 层校验节点与连线结构，生成 BPMN 前拦截错误 |
+| **BPMN 校验** | 校验 BPMN XML，失败可反馈重试 |
+| **部署回流** | 部署失败时错误反馈驱动 LLM 自我修正，防死循环兜底 |
 
 ### 💬 全局 AI 助手
 
@@ -155,7 +167,12 @@ flowmind-ui → flowmind-cloud → Flowable 流程引擎
     - 基于 ReAct 架构的智能 Agent，支持多轮追问
     - 主动询问细节，持续优化设计结果直到满意
 
-21. **全局 AI 助手**：
+21. **四层校验架构**：
+    - 字段锁定：运行时属性由程序注入，LLM 不乱造字段
+    - 节点/连线/BPMN 校验：JSON 层与 XML 层双重校验
+    - 部署回流：部署失败反馈驱动 AI 自我修正，防死循环
+
+22. **全局 AI 助手**：
     - 悬浮式全局 AI 助手
     - 对话历史管理与一键跳转
 
@@ -226,6 +243,17 @@ poetry install
 poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### 服务端口
+
+| 服务 | 端口 | 访问地址 |
+| --- | --- | --- |
+| 前端 | 5173 / 80 | http://localhost:5173 |
+| API 网关 | 8080 | http://localhost:8080 |
+| AI 服务 | 8000 | http://localhost:8000 |
+| Nacos | 8848 | http://localhost:8848/nacos |
+| MySQL | 3306 | localhost:3306 |
+| Redis | 6379 | localhost:6379 |
+
 ---
 
 ## 🌐 在线体验
@@ -280,8 +308,18 @@ poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 📄 项目仓库
 
-- **GitHub**：https://github.com/Moonlight168/flowmind
-- **Gitee**：https://gitee.com/wish168/flowmind
+| 平台 | 地址 |
+| --- | --- |
+| **GitHub** | https://github.com/Moonlight168/flowmind |
+| **Gitee** | https://gitee.com/wish168/flowmind |
+
+### 子项目详情
+
+| 项目 | 描述 |
+| --- | --- |
+| [flowmind-ui](https://github.com/Moonlight168/flowmind/tree/main/flowmind-ui) | 前端项目，Vue 3 + Element Plus |
+| [flowmind-cloud](https://github.com/Moonlight168/flowmind/tree/main/flowmind-cloud) | 后端项目，Spring Cloud + Flowable |
+| [flowmind-ai-flow](https://github.com/Moonlight168/flowmind/tree/main/flowmind-ai-flow) | AI 服务，FastAPI + LangGraph |
 
 ## 📚 相关教程
 
