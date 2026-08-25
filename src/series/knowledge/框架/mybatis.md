@@ -7,140 +7,83 @@ order: 4
 
 ## Hibernate 和 MyBatis 有什么区别？
 
-* **SQL编写：**
+**锚点**：`手写 SQL vs 自动生成：MyBatis 灵活控 SQL，Hibernate 快速开发`
 
-    * Hibernate：自动生成SQL，无需手写SQL，适合快速开发。
-    * MyBatis：需要手写SQL，灵活性高，适合复杂查询和性能优化。
+| 维度 | Hibernate | MyBatis |
+|------|-----------|---------|
+| SQL 编写 | 自动生成，无需手写，适合快速开发 | 手写 SQL，灵活，适合复杂查询和性能优化 |
+| 映射方式 | 全自动 ORM 映射 | 半自动映射，手动配置映射关系 |
+| 缓存 | 内置强一级、二级缓存 | 一级缓存，二级需手动配置 |
+| 适用场景 | 需求变化小、数据结构稳定 | 对 SQL 控制要求高、业务逻辑复杂 |
 
-* **映射方式：**
-
-    * Hibernate：全自动ORM映射。
-    * MyBatis：半自动映射，需要手动配置映射关系。
-
-* **缓存机制：**
-
-    * Hibernate：内置强大的一级、二级缓存机制。
-    * MyBatis：提供一级缓存，二级缓存需手动配置。
-
-* **事务管理：**
-
-    * 都支持JDBC和Spring事务管理。
-
-* **适用场景：**
-
-    * Hibernate：适合开发需求变化小、数据结构稳定的项目。
-    * MyBatis：适合对SQL控制要求高、业务逻辑复杂的项目。
+事务管理：两者都支持 JDBC 和 Spring 事务管理。
 
 ## MyBatis 是如何进行分页的？
 
-- **MyBatis 本身不支持分页**语法，但可以通过以下三种方式实现分页：
-    1. **手动分页**
-      **原生SQL分页：** 在 SQL 语句中直接使用数据库的分页语法（如 MySQL 的 `LIMIT offset, size`）进行分页。
-    2. **PageHelper 插件（第三方）**
-    3. **MyBatis-Plus 内置分页**
-      - [PageHelper 与 MyBatis-Plus 分页](/blogs/数据库/pagehelper与mybatis-plus分页.html)
+**锚点**：`三种：手动 SQL 分页 / PageHelper 插件 / MyBatis-Plus 内置`
+
+MyBatis 本身不支持分页语法，三种实现方式：
+
+1. **手动分页**：SQL 中直接使用数据库分页语法（如 MySQL `LIMIT offset, size`）
+2. **PageHelper 插件（第三方）**
+3. **MyBatis-Plus 内置分页**
+
+- [PageHelper 与 MyBatis-Plus 分页](/blogs/数据库/pagehelper与mybatis-plus分页.html)
 
 ## MyBatis 字段名与数据库列名不一致时的映射方式总结
 
-1. **原生 MyBatis 的处理方式：**
+**锚点**：`四选一：SQL 别名 / @Results / resultMap / 驼峰自动映射`
 
-   - 方式一：使用 SQL 别名
+1. **原生 MyBatis**：
+   - SQL 别名：`SELECT user_name AS userName FROM user`
+   - `@Results` 注解：
 
-     ```sql
-     SELECT user_name AS userName FROM user
-     ```
+```java
+@Select("SELECT user_id, user_name FROM user")
+@Results({
+    @Result(property = "userId", column = "user_id"),
+    @Result(property = "userName", column = "user_name")
+})
+List<User> getAllUsers();
+```
 
-   - 方式二：使用 `@Results` 注解
+   - `<resultMap>` 映射：
 
-     ```java
-     @Select("SELECT user_id, user_name FROM user")
-     @Results({
-         @Result(property = "userId", column = "user_id"),
-         @Result(property = "userName", column = "user_name")
-     })
-     List<User> getAllUsers();
-     ```
+```xml
+<resultMap id="userMap" type="User">
+  <result property="userId" column="user_id"/>
+  <result property="userName" column="user_name"/>
+</resultMap>
+```
 
-   - 方式三：使用 `<resultMap>` 映射
-
-     ```xml
-     <resultMap id="userMap" type="User">
-       <result property="userId" column="user_id"/>
-       <result property="userName" column="user_name"/>
-     </resultMap>
-     ```
-
-   - 方式四：配置驼峰命名自动映射
-
-     ```yaml
-     mybatis:
-       configuration:
-         map-underscore-to-camel-case: true
-     ```
-
-     实体字段使用驼峰命名，如 `userName`，可自动映射 `user_name`。
-
-2. **MyBatis-Plus 的处理方式：**
-
-   - 使用 `@TableName` 指定表名
-
-     ```java
-     @TableName("user")
-     public class User { ... }
-     ```
-
-   - 使用 `@TableField` 指定字段映射
-
-     ```java
-     @TableField("user_name")
-     private String userName;
-     ```
+   - 驼峰自动映射：`map-underscore-to-camel-case: true`，实体 `userName` 自动映射 `user_name`
+2. **MyBatis-Plus**：`@TableName` 指定表名、`@TableField("user_name")` 指定字段映射
 
 ## MyBatis 的缓存机制？
 
-MyBatis 提供两级缓存机制：
+**锚点**：`一级缓存 SqlSession 内默认开；二级缓存 Mapper 级默认关需 <cache/>`
 
-* **一级缓存（本地缓存）：**
+1. **一级缓存（本地缓存）**：默认开启，作用范围同一个 `SqlSession`；相同查询第二次从缓存读；`SqlSession` 关闭后失效
+2. **二级缓存（全局缓存）**：默认关闭，`mapper.xml` 中 `<cache/>` 显式开启；作用范围同一个 Mapper 的多个 SqlSession 共享；可配实现类、过期时间、大小、清除策略
+3. **注意事项**：更新操作清空相关缓存；二级缓存对象必须实现 `Serializable`；与 Spring 集成推荐第三方缓存（EhCache、Redis）配合
 
-  * 默认开启，作用范围是同一个 `SqlSession`。
-  * 相同查询在同一个 `SqlSession` 中执行多次时，第二次会从缓存中读取。
-  * `SqlSession` 关闭后，一级缓存失效。
-
-* **二级缓存（全局缓存）：**
-
-  * 默认关闭，需要在 `mapper.xml` 中通过 `<cache/>` 显式开启。
-  * 作用范围是同一个 Mapper 的多个 `SqlSession` 之间共享。
-  * 可配置缓存实现类、过期时间、大小、清除策略等。
-
-* **使用示例（开启二级缓存）：**
-
-  ```xml
-  <mapper namespace="com.example.mapper.UserMapper">
-    <cache/>
-  </mapper>
-  ```
-
-* **注意事项：**
-
-  * 更新操作会清空相关缓存。
-  * 二级缓存中的对象必须实现 `Serializable` 接口。
-  * 与 Spring 集成时，推荐使用第三方缓存（如 EhCache、Redis）配合二级缓存使用。
+```xml
+<mapper namespace="com.example.mapper.UserMapper">
+  <cache/>
+</mapper>
+```
 
 ## MP中的selectOne()方法和selectList()方法的区别？
 
-* **返回结果：**
-    * `selectOne()`：返回单个实体对象，查询结果必须为1条或0条记录。
-    * `selectList()`：返回List集合，查询结果可以是0条、1条或多条记录。
+**锚点**：`selectOne 单条（超 1 条抛异常），selectList 多条集合`
 
-* **异常处理：**
-    * `selectOne()`：当查询结果超过1条时抛出`TooManyResultsException`异常。
-    * `selectList()`：不会抛出异常，返回所有匹配的记录。
-
-* **使用场景：**
-    * `selectOne()`：用于确定唯一结果的查询，如根据主键查询。
-    * `selectList()`：用于可能返回多条记录的查询，如条件查询、列表查询。
+1. **返回结果**：`selectOne()` 返回单个实体，结果必须 1 条或 0 条；`selectList()` 返回 List，0/1/多条都行
+2. **异常处理**：`selectOne()` 结果超 1 条抛 `TooManyResultsException`；`selectList()` 不抛，返回全部匹配
+3. **使用场景**：`selectOne()` 唯一结果（按主键查）；`selectList()` 条件查询、列表查询
 
 ## MyBatis `#{}` 和 `${}` 的区别？
+
+**锚点**：`#{} 预编译占位符防注入，${} 字符串拼接有风险`
 
 | `#{}` | `${}` |
 |-------|-------|
@@ -150,4 +93,3 @@ MyBatis 提供两级缓存机制：
 必须用 `${}`：动态表名/列名/ORDER BY，**必须配合白名单校验**。
 
 → [回答历史](/private/series/答题历史/框架/mybatis-答题记录.md#mybatis-和-的区别)
-
