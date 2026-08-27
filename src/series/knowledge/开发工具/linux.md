@@ -5,6 +5,26 @@ categories: ["开发工具"]
 icon: /assets/icon/linux.png
 ---
 
+## Linux 有哪些常用命令？
+
+**锚点**：`文件/进程/网络/磁盘/权限/日志——按类记，覆盖 90% 日常场景`
+
+| 分类 | 常用命令 | 作用 |
+|------|---------|------|
+| 文件 | ls / cd / cp / mv / rm / mkdir | 查看、切换、复制、移动、删除、建目录 |
+| 查找 | find / grep / which | 按条件找文件 / 搜文件内容 / 找命令路径 |
+| 进程 | ps / top / kill | 查进程 / 实时监控 / 杀进程 |
+| 网络 | netstat / ss / curl / ping | 端口与连接 / 发请求 / 测连通性 |
+| 磁盘 | df / du | 磁盘剩余空间 / 目录占用大小 |
+| 权限 | chmod / chown | 改文件权限 / 改属主 |
+| 压缩 | tar / zip | 打包压缩 / 解压 |
+| 日志 | tail -f / grep / less | 实时跟随 / 搜关键词 / 分页查看 |
+| 服务 | systemctl / crontab | 启停服务与开机自启 / 定时任务 |
+
+**面试要点**：不用背全部参数，记住"每个分类有什么命令、能干什么"，具体参数面试时再说（如 `top` 看负载、`netstat -tulpn` 看端口、`kill -9` 强杀）。后面的题逐个展开各分类的高频用法。
+
+---
+
 ## 如何查看服务器负载和 CPU 使用率？
 
 **锚点**：`top 实时 / htop 可视化 / uptime 看负载均值`
@@ -132,15 +152,6 @@ sudo hostname <新主机名>              # 临时修改，重启后失效
 sudo hostnamectl set-hostname <新主机名>  # 永久生效
 ```
 
-## 如何设置开机自启动？
-
-**锚点**：`crontab @reboot 即可`
-
-```bash
-crontab -e                   # 编辑cron任务
-@reboot /path/to/script.sh   # 添加开机自启动脚本
-```
-
 ## 如何排查 Java 应用的内存泄漏？
 
 **锚点**：`jmap 转储 → MAT/VisualVM 分析大对象和 GC Roots`
@@ -150,21 +161,3 @@ crontab -e                   # 编辑cron任务
 jmap -dump:format=b,file=heap.hprof <PID>
 ```
 2. 使用 MAT 或 VisualVM 分析堆转储文件，关注大对象和 GC Roots 中的长生命周期引用
-
-## 如何优化 Linux 上的 Java 应用性能？
-
-**锚点**：`JVM 参数定内存 GC，ulimit 调文件描述符`
-
-**JVM 参数优化：**
-
-```bash
-java -Xms512m -Xmx512m -XX:MetaspaceSize=128m \
-     -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
-     -jar your-app.jar
-```
-
-**系统层面优化：**
-
-```bash
-ulimit -n 65535             # 调整文件描述符限制
-```
