@@ -5,6 +5,17 @@ updated: 2026-03-31
 categories: ["前端开发"]
 ---
 
+## Vue2 和 Vue3 有什么区别？
+
+**锚点**：`Proxy 响应式 + 组合式 API + TS 更好 + 多根节点体积小`
+
+1. **性能更好**：响应式从 `Object.defineProperty` 改成 `Proxy`，可监听更复杂变化、更快
+2. **组合式 API**：`setup()` 写法更灵活、方便逻辑复用；Vue2 是 data/methods/computed 分散写法
+3. **TypeScript 支持更好**：适合企业级开发
+4. **其他**：支持多个根节点、体积更小
+
+---
+
 ## Vue 的响应式原理是怎么实现的？
 
 **锚点**：`Vue2 劫持属性（defineProperty），Vue3 代理对象（Proxy）`
@@ -101,20 +112,14 @@ export default {
 - **ref**：用于基本类型，访问自动解包，修改用 `.value`；也可以包装对象
 - **reactive**：用于对象/数组，直接访问属性不需要 `.value`，但不能直接替换整个对象
 
-## Vue Router 有哪些导航守卫？
-
-**锚点**：`全局（beforeEach 等）/ 路由独享 beforeEnter / 组件内三个`
-
-1. **全局**：`beforeEach`、`afterEach`、`beforeResolve`
-2. **路由独享**：`beforeEnter`
-3. **组件内**：`beforeRouteEnter`、`beforeRouteUpdate`、`beforeRouteLeave`
-
 ## Vue Router 的 hash 和 history 模式有什么区别？
 
 **锚点**：`hash 带 # 兼容好免配置；history 干净但刷新 404 需服务器配置`
 
 - **hash 模式**：URL 带 `#`，如 `localhost:8080/#/home`——兼容性好，不依赖服务器配置
 - **history 模式**：URL 正常，如 `localhost:8080/home`——需要服务器配置支持，否则刷新会 404
+
+---
 
 ## Pinia 相比 Vuex 有什么优势？
 
@@ -133,6 +138,8 @@ export const useCounterStore = defineStore('counter', {
 });
 ```
 
+---
+
 ## Vue 项目有哪些性能优化手段？
 
 **锚点**：`懒加载（路由/组件/图片）+ keep-alive + 虚拟列表 + 减少响应式数据`
@@ -146,28 +153,10 @@ export const useCounterStore = defineStore('counter', {
 7. computed 缓存：模板里避免写复杂表达式
 8. key 用稳定值：不要用 index 作为 key
 
+---
+
 ## Vue 的单向数据流是什么？
 
 **锚点**：`数据只能父→子，子不能直接改 props，要改就 emit`
 
 数据只能从父组件流向子组件。子组件不能直接修改 props，需要修改的话通过 emit 触发父组件的方法。
-
-## Vue3 的 teleport 是干什么的？
-
-**锚点**：`把组件 DOM 移到指定位置——弹窗放 body 下常用`
-
-把组件的 DOM 移动到指定位置，常用于将弹窗放到 body 下：
-
-```vue
-<Teleport to="body">
-  <div class="modal">弹窗内容</div>
-</Teleport>
-```
-
-## mixin 有什么问题？Vue3 推荐用什么替代？
-
-**锚点**：`来源不清晰 + 命名冲突 + 隐式依赖；替代：composables`
-
-mixin 有三个明显问题：属性方法来源不清晰、可能有命名冲突、隐式依赖关系难维护。
-
-Vue3 推荐用 <HoverComment text="composables" comment="组合式函数，将相关逻辑抽取到独立函数中，可复用、来源清晰。" /> 替代，逻辑来源清晰，也不存在命名冲突问题。
