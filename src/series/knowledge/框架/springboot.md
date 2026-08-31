@@ -25,16 +25,6 @@ order: 5
 5. **调用运行器**：执行 `ApplicationRunner` / `CommandLineRunner` 的自定义启动逻辑
 6. **应用就绪**：监听端口，接受请求
 
-## SpringBoot 常用注解有哪些？
-
-**锚点**：`@SpringBootApplication 启动三合一 / @ConfigurationProperties 绑定配置 / 测试三件套`
-
-1. **@SpringBootApplication**：启动类注解 = `@Configuration` + `@EnableAutoConfiguration` + `@ComponentScan`
-2. **@ConfigurationProperties**：配置文件属性绑定到 Bean，配合 `@EnableConfigurationProperties` 启用
-3. **@SpringBootTest**：测试类注解，跑单元测试
-4. **@MockBean**：测试时 mock 掉某个 Bean
-5. **@TestConfiguration**：测试用配置类，不走自动扫描
-
 ## Spring Boot 自动配置和组件扫描有什么区别？
 
 **锚点**：`组件扫描注册业务组件（无条件），自动配置做框架集成（条件化）`
