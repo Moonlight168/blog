@@ -134,14 +134,15 @@ public class AppConfig {
 3. **required**：`@Autowired` 有 required 属性（默认 true，可设 false）；`@Resource` 没有
 4. **场景**：`@Autowired` 适合 Spring 项目配合 IoC/AOP；`@Resource` 需兼容 JDK 规范或重名称匹配时
 
-## Spring 常用注解有哪些？
+## Spring 和 SpringBoot 常用注解有哪些？
 
-**锚点**：`组件（@Component/@Service/@Repository）+ 注入（@Autowired/@Qualifier/@Value）+ AOP + 事务`
+**锚点**：`Spring 四类（组件/注入/AOP/事务）+ Boot 特有（启动三合一/配置绑定/测试）`
 
 1. **核心组件**：`@Component`、`@Service`（业务层）、`@Repository`（持久层，异常转换）、`@Configuration`、`@Bean`、`@ComponentScan`、`@Import`
 2. **依赖注入**：`@Autowired`、`@Qualifier`、`@Resource`、`@Value`、`@Scope`、`@Lazy`、`@PostConstruct`、`@PreDestroy`
 3. **AOP**：`@Aspect`、`@Pointcut`、`@Before/@After/@Around`、`@Order`
 4. **事务**：`@Transactional`、`@EnableTransactionManagement`
+5. **SpringBoot 特有**：`@SpringBootApplication`（启动三合一，见下题）、`@ConfigurationProperties`（配置绑定）、测试三件套 `@SpringBootTest` / `@MockBean` / `@TestConfiguration`
 
 ## Spring Bean 的作用域有哪些？一般项目中用什么？
 
@@ -217,6 +218,20 @@ public class AppConfig {
 4. Refresh 存服务端（Redis）可主动吊销；Access 不存，靠短 TTL 降低泄露风险
 
 → [回答历史](/private/series/答题历史/基础知识/非技术面试问答-答题记录.md#jwt-token-过期了怎么办refresh-token-怎么续期)
+
+---
+
+## Spring Security 认证授权原理是什么？过滤器链怎么工作的？
+
+**锚点**：`一条过滤器链：认证过滤器验身份 → 授权过滤器判权限 → SecurityContext 存上下文`
+
+1. **过滤器链（Filter Chain）**：Spring Security 用一条 Servlet 过滤器链拦截所有请求，核心过滤器按序执行——认证过滤器（UsernamePasswordAuthenticationFilter / JwtAuthenticationFilter）、授权过滤器（AuthorizationFilter）
+2. **认证流程**：请求带凭证 → 认证过滤器解析并调 AuthenticationManager 验证 → 成功生成 Authentication 放入 SecurityContextHolder → 后续过滤器从上下文取身份
+3. **授权**：AuthorizationFilter 按 @PreAuthorize / authorizeHttpRequests 路径规则判断权限，无权限抛 403
+4. **无状态适配（JWT）**：不存 session，每次请求从 token 解析用户塞进 SecurityContextHolder（ThreadLocal），请求结束清理，防止串用户
+5. **常见配置**：SecurityFilterChain Bean 定义放行规则（白名单 /login、/health）+ 自定义认证过滤器插入链中
+
+---
 
 ## Spring Bean 默认单例，多线程并发会有安全问题吗？怎么处理？
 
