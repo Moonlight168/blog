@@ -1,5 +1,6 @@
 ---
 title: Dify
+order: 7
 date: 2026-08-22
 categories: ["Agent 开发"]
 ---
