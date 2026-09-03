@@ -1,5 +1,6 @@
 ---
 title: LangGraph
+order: 5
 date: 2026-08-22
 categories: ["Agent 开发"]
 ---
