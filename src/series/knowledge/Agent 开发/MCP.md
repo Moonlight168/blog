@@ -1,5 +1,6 @@
 ---
 title: MCP
+order: 8
 date: 2026-08-24
 categories: ["Agent 开发"]
 ---

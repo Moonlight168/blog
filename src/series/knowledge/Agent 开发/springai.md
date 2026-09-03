@@ -1,5 +1,6 @@
 ---
 title: Spring AI
+order: 6
 date: 2026-08-22
 categories: ["Agent 开发"]
 ---
