@@ -15,6 +15,7 @@ main { height: calc(100vh - 72px); }
 .eyebrow { color: #b17c25; font-size: 10px; font-weight: 800; letter-spacing: .18em; }
 .muted { margin: 0 0 28px; color: #79827f; line-height: 1.65; }
 .form-stack { display: flex; flex-direction: column; gap: 10px; }.form-stack label { margin-top: 8px; color: #48534f; font-size: 12px; font-weight: 700; }
+.field-note { color: #929a97; line-height: 1.5; }
 .inline { display: grid; grid-template-columns: 1fr auto; gap: 8px; }.two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.two-cols > div { display: flex; flex-direction: column; gap: 10px; }
 .chat-panel { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; background: rgba(255,255,253,.64); }
 .chat-head { padding: 24px 34px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e6e2d8; }.chat-head h2 { margin: 5px 0 0; font-size: 18px; }.session-meta { display: flex; align-items: center; gap: 14px; }.timer { font: 600 18px ui-monospace, monospace; color: #173f36; }

@@ -20,7 +20,8 @@ export function openDatabase(file) {
       mode TEXT NOT NULL, duration_minutes INTEGER NOT NULL, status TEXT NOT NULL,
       started_at TEXT NOT NULL, ended_at TEXT, current_question TEXT,
       answer_fragments TEXT NOT NULL DEFAULT '[]', completed_count INTEGER NOT NULL DEFAULT 0,
-      skill_snapshot TEXT NOT NULL, resume_excerpt TEXT NOT NULL
+      skill_snapshot TEXT NOT NULL, resume_excerpt TEXT NOT NULL,
+      paper_questions TEXT NOT NULL DEFAULT '[]', paper_index INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL,
@@ -28,9 +29,15 @@ export function openDatabase(file) {
     );
     CREATE TABLE IF NOT EXISTS attempts (
       id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, question_title TEXT NOT NULL,
-      raw_answer TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL
+      raw_answer TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL, attempt_key TEXT
     );
   `);
+  const columns = new Set(db.prepare("PRAGMA table_info(sessions)").all().map((row) => row.name));
+  if (!columns.has("paper_questions")) db.exec("ALTER TABLE sessions ADD COLUMN paper_questions TEXT NOT NULL DEFAULT '[]'");
+  if (!columns.has("paper_index")) db.exec("ALTER TABLE sessions ADD COLUMN paper_index INTEGER NOT NULL DEFAULT 0");
+  const attemptColumns = new Set(db.prepare("PRAGMA table_info(attempts)").all().map((row) => row.name));
+  if (!attemptColumns.has("attempt_key")) db.exec("ALTER TABLE attempts ADD COLUMN attempt_key TEXT");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS attempts_attempt_key ON attempts(attempt_key) WHERE attempt_key IS NOT NULL");
   return db;
 }
 
@@ -43,18 +50,20 @@ export function rowToSession(row) {
     currentQuestion: row.current_question ? JSON.parse(row.current_question) : null,
     answerFragments: JSON.parse(row.answer_fragments || "[]"), completedCount: row.completed_count,
     skillSnapshot: row.skill_snapshot, resumeExcerpt: row.resume_excerpt,
+    paperQuestions: JSON.parse(row.paper_questions || "[]"), paperIndex: row.paper_index ?? 0,
   };
 }
 
 export function saveSession(db, session) {
   db.prepare(`INSERT INTO sessions
-    (id,resume_path,series,chapter_path,mode,duration_minutes,status,started_at,ended_at,current_question,answer_fragments,completed_count,skill_snapshot,resume_excerpt)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    (id,resume_path,series,chapter_path,mode,duration_minutes,status,started_at,ended_at,current_question,answer_fragments,completed_count,skill_snapshot,resume_excerpt,paper_questions,paper_index)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET status=excluded.status,ended_at=excluded.ended_at,current_question=excluded.current_question,
-      answer_fragments=excluded.answer_fragments,completed_count=excluded.completed_count`)
+      answer_fragments=excluded.answer_fragments,completed_count=excluded.completed_count,paper_index=excluded.paper_index`)
     .run(session.id, session.resumePath, session.series, session.chapterPath, session.mode, session.durationMinutes,
       session.status, session.startedAt, session.endedAt ?? null, JSON.stringify(session.currentQuestion),
-      JSON.stringify(session.answerFragments), session.completedCount ?? 0, session.skillSnapshot, session.resumeExcerpt);
+      JSON.stringify(session.answerFragments), session.completedCount ?? 0, session.skillSnapshot, session.resumeExcerpt,
+      JSON.stringify(session.paperQuestions ?? []), session.paperIndex ?? 0);
 }
 
 export function addMessage(db, sessionId, message) {

@@ -24,6 +24,7 @@ fs.watch(config.knowledgeRoot, { recursive: true }, (_event, filename) => {
 const agent = new InterviewAgent({ config: config.chat, questionIndex });
 const archive = createArchive({ questionIndex, agent, knowledgeRoot: config.knowledgeRoot, privateHistoryRoot: config.privateHistoryRoot, db });
 const engine = new InterviewEngine({ agent, archive });
+const sessionLocks = new Set();
 
 function json(response, status, value) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -51,6 +52,21 @@ function listResumes(root) {
   return visit(resolved);
 }
 
+function isAllowedResume(file) {
+  const root = path.resolve(config.resumeDir);
+  const resolved = path.resolve(file);
+  const relative = path.relative(root, resolved);
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+    && [".md", ".txt"].includes(path.extname(resolved).toLowerCase());
+}
+
+function ruleSnapshot() {
+  const skill = fs.readFileSync(path.join(config.appRoot, "skill", "SKILL.md"), "utf8");
+  const handbook = fs.readFileSync(path.join(config.blogRoot, "面试宝典文章格式规范.md"), "utf8");
+  const keyRules = handbook.split(/\r?\n/).filter((line) => /^\d+\. \*\*|^- \[ \]/u.test(line)).join("\n");
+  return `${skill}\n\n# 面试宝典关键规则快照\n${keyRules}`;
+}
+
 function messagesFor(sessionId) {
   return db.prepare("SELECT id,role,kind,content,payload,created_at AS createdAt FROM messages WHERE session_id=? ORDER BY id").all(sessionId)
     .map((row) => ({ ...row, payload: row.payload ? JSON.parse(row.payload) : null }));
@@ -63,29 +79,40 @@ function expired(session) {
 async function api(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/bootstrap") {
     await questionIndex.refresh();
-    const resumeDir = url.searchParams.get("resumeDir") || config.resumeDir;
+    const resumeDir = config.resumeDir;
     return json(response, 200, { resumeDir, resumes: listResumes(resumeDir), topics: questionIndex.topics(), embeddingEnabled: embeddingClient.enabled });
   }
   if (request.method === "POST" && url.pathname === "/api/sessions") {
     const input = await body(request);
-    if (!fs.existsSync(input.resumePath) || !fs.statSync(input.resumePath).isFile()) return json(response, 400, { error: "请选择存在的简历文件" });
+    if (!isAllowedResume(input.resumePath) || !fs.existsSync(input.resumePath) || !fs.statSync(input.resumePath).isFile()) {
+      return json(response, 400, { error: "只能选择 INTERVIEW_RESUME_DIR 下的 Markdown / TXT 简历" });
+    }
     const validTopic = questionIndex.topics().some((series) => series.name === input.series && series.chapters.some((chapter) => chapter.path === input.chapterPath));
     if (!validTopic) return json(response, 400, { error: "请选择有效的 Series 章节" });
-    const skillPath = path.join(config.appRoot, "skill", "SKILL.md");
     const session = {
       id: randomUUID(), resumePath: input.resumePath, series: input.series, chapterPath: input.chapterPath,
       mode: ["interview", "coding", "written"].includes(input.mode) ? input.mode : "interview",
       durationMinutes: Math.min(180, Math.max(5, Number(input.durationMinutes) || 30)), status: "active",
       startedAt: new Date().toISOString(), endedAt: null, currentQuestion: null, answerFragments: [], completedCount: 0,
-      skillSnapshot: fs.readFileSync(skillPath, "utf8"), resumeExcerpt: fs.readFileSync(input.resumePath, "utf8").slice(0, 12_000),
+      skillSnapshot: ruleSnapshot(), resumeExcerpt: fs.readFileSync(input.resumePath, "utf8").slice(0, 12_000),
+      paperQuestions: [], paperIndex: 0,
     };
-    session.currentQuestion = await agent.generateQuestion({ session });
+    if (session.mode === "written") {
+      const count = Math.min(10, Math.max(3, Math.floor(session.durationMinutes / 6)));
+      session.paperQuestions = await agent.generatePaper({ session, count });
+      session.currentQuestion = session.paperQuestions[0];
+    } else {
+      session.currentQuestion = await agent.generateQuestion({ session });
+    }
     saveSession(db, session);
     addMessage(db, session.id, { role: "assistant", kind: "question", content: session.currentQuestion.prompt ?? session.currentQuestion.title });
     return json(response, 201, { session, messages: messagesFor(session.id) });
   }
   const messageMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
   if (request.method === "POST" && messageMatch) {
+    if (sessionLocks.has(messageMatch[1])) return json(response, 409, { error: "当前会话正在处理上一条消息，请稍后重试" });
+    sessionLocks.add(messageMatch[1]);
+    try {
     const session = rowToSession(db.prepare("SELECT * FROM sessions WHERE id=?").get(messageMatch[1]));
     if (!session) return json(response, 404, { error: "面试记录不存在" });
     const input = await body(request);
@@ -96,6 +123,7 @@ async function api(request, response, url) {
     saveSession(db, result.session);
     result.messages.forEach((message) => addMessage(db, session.id, message));
     return json(response, 200, { session: result.session, messages: messagesFor(session.id) });
+    } finally { sessionLocks.delete(messageMatch[1]); }
   }
   const sessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
   if (request.method === "GET" && sessionMatch) {
@@ -141,5 +169,21 @@ const server = http.createServer(async (request, response) => {
     json(response, 500, { error: error.message || "服务器错误" });
   }
 });
+
+setInterval(async () => {
+  const rows = db.prepare("SELECT * FROM sessions WHERE status='active'").all();
+  for (const row of rows) {
+    const session = rowToSession(row);
+    if (!expired(session) || sessionLocks.has(session.id)) continue;
+    sessionLocks.add(session.id);
+    try {
+      const result = await engine.handle(session, "结束");
+      saveSession(db, result.session);
+      result.messages.forEach((message) => addMessage(db, session.id, message));
+    } catch (error) {
+      console.error(`会话 ${session.id} 自动结束失败`, error);
+    } finally { sessionLocks.delete(session.id); }
+  }
+}, 5_000).unref();
 
 server.listen(config.port, config.host, () => console.log(`面试助手：http://${config.host}:${config.port}`));

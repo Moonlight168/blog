@@ -37,3 +37,21 @@ test("archive failure prevents advancing", async () => {
   await assert.rejects(() => engine.handle(session, "下一题"), /write failed/);
   assert.equal(session.currentQuestion.title, "当前题？");
 });
+
+test("written assessment advances through its pre-generated fixed paper", async () => {
+  const engine = new InterviewEngine({
+    agent: {
+      async evaluate() { return { score: 75, comment: "完成" }; },
+      async summarize() { return "测评结束"; },
+      async generateQuestion() { throw new Error("written mode must not generate a live question"); },
+    },
+    archive: async () => {},
+  });
+  const paper = [{ title: "第一题？", prompt: "第一题？" }, { title: "第二题？", prompt: "第二题？" }];
+  const session = { status: "active", mode: "written", currentQuestion: paper[0], paperQuestions: paper, paperIndex: 0, answerFragments: ["回答一"] };
+  const next = await engine.handle(session, "下一题");
+  assert.equal(next.session.currentQuestion.title, "第二题？");
+  next.session.answerFragments.push("回答二");
+  const finished = await engine.handle(next.session, "下一题");
+  assert.equal(finished.session.status, "completed");
+});

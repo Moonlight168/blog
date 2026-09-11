@@ -19,11 +19,12 @@ test("parses H2 questions and omits the answer-history link from the answer", ()
 test("builds a question block that follows the interview handbook", () => {
   const block = buildQuestionBlock({
     title: "为什么需要状态机？",
-    answer: "1. **边界清晰**：用状态约束流程\n   - 非法迁移会被拒绝",
+    answer: "记忆锚点：状态定义边界，事件驱动迁移。\n\n1. **边界清晰**：用状态约束流程\n   - 非法迁移会被拒绝",
     historyUrl: "/private/series/答题历史/Java/topic-答题记录.md#为什么需要状态机",
   });
   assert.deepEqual(validateQuestionBlock(block), []);
   assert.match(block, /^## 为什么需要状态机？/);
+  assert.match(block, /^## 为什么需要状态机？\n\n→ \[回答历史\]/);
 });
 
 test("rejects headings, stars and overlong answer cards", () => {
