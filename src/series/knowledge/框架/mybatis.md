@@ -18,6 +18,8 @@ order: 4
 
 事务管理：两者都支持 JDBC 和 Spring 事务管理。
 
+→ [回答历史](/private/series/答题历史/框架/mybatis-答题记录.md#hibernate-和-mybatis-有什么区别)
+
 ## MyBatis 是如何进行分页的？
 
 **锚点**：`三种：手动 SQL 分页 / PageHelper 插件 / MyBatis-Plus 内置`
@@ -29,6 +31,8 @@ MyBatis 本身不支持分页语法，三种实现方式：
 3. **MyBatis-Plus 内置分页**
 
 - [PageHelper 与 MyBatis-Plus 分页](/blogs/数据库/pagehelper与mybatis-plus分页.html)
+
+→ [回答历史](/private/series/答题历史/框架/mybatis-答题记录.md#mybatis-是如何进行分页的)
 
 ## MyBatis 字段名与数据库列名不一致时的映射方式总结
 
@@ -73,6 +77,8 @@ List<User> getAllUsers();
 </mapper>
 ```
 
+→ [回答历史](/private/series/答题历史/框架/mybatis-答题记录.md#mybatis-的缓存机制)
+
 ## MP中的selectOne()方法和selectList()方法的区别？
 
 **锚点**：`selectOne 单条（超 1 条抛异常），selectList 多条集合`
@@ -80,6 +86,8 @@ List<User> getAllUsers();
 1. **返回结果**：`selectOne()` 返回单个实体，结果必须 1 条或 0 条；`selectList()` 返回 List，0/1/多条都行
 2. **异常处理**：`selectOne()` 结果超 1 条抛 `TooManyResultsException`；`selectList()` 不抛，返回全部匹配
 3. **使用场景**：`selectOne()` 唯一结果（按主键查）；`selectList()` 条件查询、列表查询
+
+→ [回答历史](/private/series/答题历史/框架/mybatis-答题记录.md#mp中的selectone-方法和selectlist-方法的区别)
 
 ## MyBatis `#{}` 和 `${}` 的区别？
 

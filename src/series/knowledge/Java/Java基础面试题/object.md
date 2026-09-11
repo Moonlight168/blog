@@ -21,6 +21,8 @@ order: 9
 
 **垃圾回收**：`finalize()` 已废弃。
 
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#object-类有哪些方法)
+
 ## == 与 equals 有什么区别？
 
 **锚点**：`== 基本类型比值、引用类型比地址；equals 默认比地址、重写后比内容`
@@ -40,6 +42,8 @@ s1.equals(s2);  // true（String 重写了 equals）
 
 **自定义类需同时重写 equals 和 hashCode**。
 
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#与-equals-有什么区别)
+
 ## 为什么重写 equals 必须重写 hashCode？
 
 **锚点**：`约定：equals 相等 ⇒ hashCode 必须相等，否则哈希表结构异常`
@@ -48,6 +52,8 @@ s1.equals(s2);  // true（String 重写了 equals）
 
 1. 两个"相等"对象被视为不同元素
 2. HashSet 的 contains()、remove() 等方法行为错误
+
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#为什么重写-equals-必须重写-hashcode)
 
 ## `==` 和 `equals` 区别？Integer 缓存范围是？
 

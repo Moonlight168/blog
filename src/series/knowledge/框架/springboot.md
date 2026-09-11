@@ -14,6 +14,8 @@ order: 5
 4. **Starter 依赖**：`spring-boot-starter-web` 等一组 POM，引入即自动装配相关功能
 5. **配置管理**：`application.properties/yml` + 环境变量，`@ConfigurationProperties` / `@Value` 注入
 
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#什么是spring-boot-说一下它的原理)
+
 ## Spring Boot 的启动流程
 
 **锚点**：`创建 SpringApplication → 准备环境 → 创建容器 → 自动配置 → 启动 Web 服务器 → 调用运行器 → 就绪`
@@ -34,6 +36,8 @@ order: 5
 3. **实现机制**：`@ComponentScan` vs `@EnableAutoConfiguration`
 4. **控制粒度**：组件扫描按包路径；自动配置粒度更细（基于类、Bean、配置属性）
 
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#spring-boot-自动配置和组件扫描有什么区别)
+
 ## 什么场景下应该使用自动配置而不是简单的 @Component？
 
 **锚点**：`第三方集成、可选模块、默认实现可覆盖、环境差异`
@@ -43,6 +47,8 @@ order: 5
 3. 提供默认实现但允许用户覆盖
 4. 根据环境差异提供不同配置（开发/生产）
 
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#什么场景下应该使用自动配置而不是简单的-component)
+
 ## @ConditionalOnMissingBean 有什么作用？
 
 **锚点**：`用户已定义则跳过默认 Bean——默认实现 + 保留自定义空间`
@@ -50,6 +56,8 @@ order: 5
 1. 避免重复注册 Bean
 2. 用户已定义相同类型 Bean 时跳过默认 Bean
 3. 提供默认实现的同时保留用户自定义空间
+
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#conditionalonmissingbean-有什么作用)
 
 ## Spring Boot 2.4 为什么引入 AutoConfiguration.imports 替代 spring.factories？
 
@@ -60,6 +68,8 @@ order: 5
 3. 性能更优：避免 Properties 解析，直接逐行读取
 4. 更符合单一职责原则
 
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#spring-boot-2-4-为什么引入-autoconfiguration-imports-替代-spring-factories)
+
 ## 如何排查某个自动配置类是否生效？
 
 **锚点**：`--debug 条件报告 / Actuator conditions 端点 / 逐个查条件`
@@ -68,6 +78,8 @@ order: 5
 2. 用 `@ConditionalOn...` 注解逐一排查条件是否满足
 3. 查看 `META-INF/spring` 下配置文件是否正确声明
 4. 用 Actuator 的 `conditions` 端点查看自动配置报告
+
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#如何排查某个自动配置类是否生效)
 
 ## bootstrap.yml 和 application.yml 的区别
 
@@ -87,6 +99,8 @@ order: 5
 3. **底层框架**：Boot 3 基于 Spring Framework 6；Boot 2 基于 Framework 5
 4. **其他**：3.x 原生镜像支持更好、观测性指标更完善、依赖版本升级
 
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#spring-boot-2-和-3-有什么区别)
+
 ## Spring Boot 的 starter 是干什么的？
 
 **锚点**：`一个 starter 搞定一组依赖 + 自动装配`
@@ -94,6 +108,8 @@ order: 5
 1. **简化依赖引入**：不用自己配一堆依赖，一个 starter 搞定
 2. **常用 starter**：`spring-boot-starter-web`（Web + Tomcat）、`spring-boot-starter-data-jpa`（数据库）、`spring-boot-starter-data-redis`（Redis）
 3. **自动装配**：引入后 Spring Boot 自动配好相关功能
+
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#spring-boot-的-starter-是干什么的)
 
 ## Spring Boot 怎么实现热部署？
 
@@ -108,6 +124,8 @@ order: 5
 
 原理：代码改动后自动重启，不用手动停再启动。
 
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#spring-boot-怎么实现热部署)
+
 ## 怎么读配置文件？
 
 **锚点**：`@Value 单个 / @ConfigurationProperties 批量 / Environment 动态`
@@ -115,6 +133,8 @@ order: 5
 1. **@Value 单个读取**：`@Value("${app.name}")`
 2. **@ConfigurationProperties 批量绑定**：`@ConfigurationProperties(prefix = "app")` + `@Data` 类
 3. **Environment 动态读取**：`env.getProperty("app.name")`
+
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#怎么读配置文件)
 
 ## Spring Boot 自动配置原理是什么？
 

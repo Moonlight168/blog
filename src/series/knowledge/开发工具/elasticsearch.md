@@ -16,6 +16,8 @@ icon: /assets/icon/elasticsearch.png
 
 **常见场景**：日志检索（ELK）、搜索引擎、电商商品检索、监控报警、实时数据分析。
 
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#说一下你对-elasticsearch-的理解)
+
 ## 你是如何在项目中使用 Elasticsearch 的？
 
 **锚点**：`集成 → 建模 → 同步 → 查询 → 优化；DB 存核心，ES 做检索`
@@ -28,6 +30,8 @@ icon: /assets/icon/elasticsearch.png
 
 **总结**：数据库存储核心数据，ES 负责快速检索和统计分析。
 
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#你是如何在项目中使用-elasticsearch-的)
+
 ## Elasticsearch 的倒排索引了解吗？
 
 **锚点**：`分词建词条→文档映射，搜索按词条 O(1) 定位`
@@ -37,6 +41,8 @@ icon: /assets/icon/elasticsearch.png
    - 文档1：`Elasticsearch 是搜索引擎`；文档2：`搜索引擎很有用`
    - 词条表：elasticsearch→1、搜索引擎→1,2、有用→2
 3. **优点**：搜索时间复杂度接近 O(1)，适合全文检索
+
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#elasticsearch-的倒排索引了解吗)
 
 ## ES 和 MySQL 有什么区别？各适合什么场景？
 
@@ -52,6 +58,8 @@ icon: /assets/icon/elasticsearch.png
 
 **最佳实践**：MySQL 存核心数据，ES 做搜索加速，通过同步保持一致。
 
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#es-和-mysql-有什么区别-各适合什么场景)
+
 ## Elasticsearch 的分片和副本是什么？
 
 **锚点**：`分片横向扩展（创建后不可改），副本高可用 + 分担读`
@@ -59,6 +67,8 @@ icon: /assets/icon/elasticsearch.png
 1. **分片**：索引数据拆成小块存储，分散到多节点提升性能；分片数创建后不可修改
 2. **副本**：分片的复制，故障时可提升为主分片；可分担读请求提升查询性能
 3. **建议**：单分片 10-50GB（避免过多小分片）；生产环境至少 1 个副本
+
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#elasticsearch-的分片和副本是什么)
 
 ## ES 写入数据的过程是怎样的？
 
@@ -73,6 +83,8 @@ icon: /assets/icon/elasticsearch.png
 
 **关键参数**：`refresh_interval` 默认 1 秒，写入量大时可适当调大提升性能。
 
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#es-写入数据的过程是怎样的)
+
 ## ES 查询数据的过程是怎样的？
 
 **锚点**：`协调节点广播 → 各分片查 → 合并排序 → 取完整文档`
@@ -85,6 +97,8 @@ icon: /assets/icon/elasticsearch.png
 6. 返回结果给客户端
 
 **优化点**：filter 不计算分数可缓存；避免深度分页（from + size 过大）。
+
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#es-查询数据的过程是怎样的)
 
 ## ES 如何解决深度分页问题？
 
@@ -103,6 +117,8 @@ icon: /assets/icon/elasticsearch.png
 }
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#es-如何解决深度分页问题)
+
 ## Elasticsearch 的文本分析器是什么？
 
 **锚点**：`字符过滤器 → 分词器 → 词条过滤器；中文用 ik`
@@ -114,6 +130,8 @@ icon: /assets/icon/elasticsearch.png
    - `ik_max_word`：中文分词，细粒度
    - `ik_smart`：中文分词，粗粒度
 
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#elasticsearch-的文本分析器是什么)
+
 ## 如何保证 ES 和数据库的数据一致性？
 
 **锚点**：`推荐 MQ 异步双写或 Canal 监听 binlog`
@@ -122,6 +140,8 @@ icon: /assets/icon/elasticsearch.png
 2. **异步双写**：写库后发 MQ 异步写 ES——最终一致，推荐
 3. **定时任务**：定期同步增量——延迟较高
 4. **Binlog 同步**：Canal 监听 MySQL binlog 实时同步——推荐
+
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#如何保证-es-和数据库的数据一致性)
 
 ## ES 集群的脑裂问题是什么？如何解决？
 
@@ -134,6 +154,8 @@ icon: /assets/icon/elasticsearch.png
    - ES 7.0+ 自动计算该值，无需手动配置
    - 合理设置网络超时参数
    - 部署至少 3 个主节点候选
+
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#es-集群的脑裂问题是什么-如何解决)
 
 ## ES 的聚合有哪些类型？
 
@@ -157,3 +179,5 @@ icon: /assets/icon/elasticsearch.png
   }
 }
 ```
+
+→ [回答历史](/private/series/答题历史/开发工具/elasticsearch-答题记录.md#es-的聚合有哪些类型)

@@ -19,6 +19,8 @@ order: 3
    - FastAPI：卡在中间——轻量又有现代工程化能力（校验、文档、异步、依赖注入），做 API 服务最顺手
 4. **选型经验**：纯 API 服务优先 FastAPI；要内置 Admin/ORM 全家桶才考虑 Django；极简脚本服务用 Flask
 
+→ [回答历史](/private/series/答题历史/Python/FastAPI-答题记录.md#你用过-fastapi-吗-它跟-flask、django-比有什么不一样)
+
 ---
 
 ## FastAPI 的依赖注入（Depends）是干嘛的？你怎么用的？
@@ -44,6 +46,8 @@ def list_users(db: Session = Depends(get_db)):
 
 最大感受：**把每个接口都要的连接/鉴权从业务代码里抽出去了**，接口函数只关心自己的逻辑。
 
+→ [回答历史](/private/series/答题历史/Python/FastAPI-答题记录.md#fastapi-的依赖注入-depends-是干嘛的-你怎么用的)
+
 ---
 
 ## FastAPI 里 async def 和普通 def 有什么区别？什么时候用哪个？
@@ -54,6 +58,8 @@ def list_users(db: Session = Depends(get_db)):
 2. **接口写普通 def**：同步代码（requests、pymysql、CPU 密集）由 FastAPI 自动丢线程池跑，不阻塞事件循环
 3. **怎么选**：IO 密集且生态支持异步 → async def；同步库、CPU 密集或操作简单 → 普通 def
 4. **坑**：把同步库硬套 async def 会阻塞整个事件循环；async 函数里别写 `time.sleep`，要用 `await asyncio.sleep`
+
+→ [回答历史](/private/series/答题历史/Python/FastAPI-答题记录.md#fastapi-里-async-def-和普通-def-有什么区别-什么时候用哪个)
 
 ---
 
@@ -78,6 +84,8 @@ def create(order: Order):
 
 最大感受：**类型注解即文档即校验**，省掉的校验代码量很可观。
 
+→ [回答历史](/private/series/答题历史/Python/FastAPI-答题记录.md#fastapi-怎么校验请求参数-校验失败会怎样)
+
 ---
 
 ## FastAPI 性能为什么好？生产部署要注意什么？
@@ -91,3 +99,5 @@ def create(order: Order):
    - 前面挂 Nginx 做静态资源和限流；数据库连接池、慢查询才是大头
 
 一句话：**FastAPI 性能下限很高，但生产能不能扛住，取决于部署和依赖，不取决于框架。**
+
+→ [回答历史](/private/series/答题历史/Python/FastAPI-答题记录.md#fastapi-性能为什么好-生产部署要注意什么)

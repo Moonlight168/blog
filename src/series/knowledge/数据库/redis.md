@@ -59,6 +59,8 @@ public String getData(String key) {
 6. **HyperLogLog**：基数统计内存小——UV 统计
 7. **Bitmap**：位图支持位运算——签到、在线状态
 
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-有哪些数据类型)
+
 ## 用 Redis 怎么实现消息队列？
 
 **锚点**：`List 简单队列 / 多 List 优先级 / ZSet 延迟 / Stream 可靠（5.0+）`
@@ -70,6 +72,8 @@ public String getData(String key) {
 
 **方案对比**：List 简单高效但消息即删；ZSet 支持延迟；Stream 功能最完善适合可靠队列。
 
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#用-redis-怎么实现消息队列)
+
 ## 如何保证缓存与数据库的一致性？
 
 **锚点**：`先更 DB 后删缓存 / 延迟双删 / MQ 异步，miss 瞬间用 DCL`
@@ -80,6 +84,8 @@ public String getData(String key) {
    - 延迟双删：更新 DB → 删缓存 → 延迟 → 再删缓存
    - MQ 异步更新，保证最终一致性
 3. **缓存 miss 瞬间大量请求**：双重检查锁（DCL），同一时刻只有一个线程查库
+
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#如何保证缓存与数据库的一致性)
 
 ## Redis 怎么保证数据不丢失？
 
@@ -93,6 +99,8 @@ public String getData(String key) {
 
 **核心方案**：混合持久化 + 主从复制 + 哨兵监控。
 
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-怎么保证数据不丢失)
+
 ## Redis 的过期删除策略是什么？
 
 **锚点**：`惰性删除（省 CPU 占内存）+ 定期删除（防溢出可能漏删）+ 内存淘汰`
@@ -105,6 +113,8 @@ public String getData(String key) {
    - `allkeys-lru`：所有键中删最近最少使用
    - `volatile-ttl`：过期键中删剩余时间最短
 
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-的过期删除策略是什么)
+
 ## Redis 是单线程还是多线程？为什么快？
 
 **锚点**：`6.0 前全单线程，6.0+ 网络 I/O 多线程但命令执行仍单线程`
@@ -115,6 +125,8 @@ public String getData(String key) {
 2. 单线程无上下文切换、无锁竞争
 3. I/O 多路复用（epoll）高效处理大量连接
 4. 精心设计的数据结构（SDS、压缩列表、跳表等）
+
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-是单线程还是多线程-为什么快)
 
 ## Redis 的持久化机制 RDB 和 AOF 有什么区别？
 
@@ -130,6 +142,8 @@ public String getData(String key) {
 
 **生产推荐**：开启混合持久化，RDB 做 baseline，AOF 追加增量命令。
 
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-的持久化机制-rdb-和-aof-有什么区别)
+
 ## Redis 如何实现分布式锁？
 
 **锚点**：`SET NX PX 加锁 + Lua 脚本验值释放 + 看门狗续期，集群用 Redisson`
@@ -138,6 +152,9 @@ public String getData(String key) {
 
 ```bash
 SET lock:resource unique_value NX PX 30000
+
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-如何实现分布式锁)
+
 # NX 不存在才设置，PX 过期时间
 ```
 
@@ -163,12 +180,16 @@ end
 
 **Cluster 原理**：16384 个槽位均匀分配到各节点；客户端重定向（MOVED/ASK）；Gossip 协议节点通信。
 
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-集群方案有哪些)
+
 ## 什么是缓存预热？缓存热点 Key？
 
 **锚点**：`预热：启动前提前加载热点；热点 Key：发现 + 拆分 + 多级缓存`
 
 1. **缓存预热**：系统启动前提前加载热点数据，避免启动时大量请求穿透到 DB
 2. **热点 Key 处理**：监控访问频率自动发现；加随机后缀拆分散到多个 Key；本地缓存 + Redis 多级缓存
+
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#什么是缓存预热-缓存热点-key)
 
 ## Redis 事务了解吗？
 
@@ -186,6 +207,8 @@ INCR counter
 EXEC               # 执行事务（或 DISCARD 取消）
 ```
 
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-事务了解吗)
+
 ## Redis 如何处理大 Key？
 
 **锚点**：`危害：阻塞/网络慢/内存不均/删除久；方案：拆分、压缩、本地缓存、UNLINK`
@@ -193,6 +216,8 @@ EXEC               # 执行事务（或 DISCARD 取消）
 1. **大 Key 定义**：Value 过大（1MB+）、集合元素过多（百万级）
 2. **危害**：网络传输慢阻塞请求、内存不均匀影响分片、过期删除耗时长
 3. **解决**：大集合拆小集合；压缩算法减小体积；不频繁变化的大 Key 放本地缓存；`UNLINK` 异步删除
+
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-如何处理大-key)
 
 ## Redis 为什么用跳表不用 B+ 树？
 
@@ -204,6 +229,8 @@ EXEC               # 执行事务（或 DISCARD 取消）
 4. 比 B+ 树更容易实现和维护
 
 B+ 树更适合磁盘存储，跳表更适合内存存储。
+
+→ [回答历史](/private/series/答题历史/数据库/redis-答题记录.md#redis-为什么用跳表不用-b-树)
 
 ## Redis 持久化有哪两种方式？
 

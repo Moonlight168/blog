@@ -12,6 +12,8 @@ order: 3
 2. **加载链**：启动类加载器（Bootstrap，JDK 核心类）→ 扩展类加载器（Extension，`lib/ext`）→ 应用类加载器（AppClassLoader，classpath）→ 自定义加载器
 3. **流程**：自定义加载器先委托父加载器，父加载失败才自己加载
 
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#了解java的双亲委派机制吗)
+
 ## Java对象底层存储结构是什么？
 
 **锚点**：`对象头(16B) + 实例数据 + 对齐填充`
@@ -21,6 +23,8 @@ order: 3
 3. **对齐填充**：让对象大小变成 8 字节整数倍，避免 CPU 访问异常
 
 详细：[Java 对象结构](/blogs/java/Java对象存储结构详解.md)
+
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#java对象底层存储结构是什么)
 
 ## JVM GC（垃圾回收）有了解吗？
 
@@ -34,6 +38,8 @@ order: 3
 3. **调优口诀**：Xms=Xmx 防抖动，新生代占 1/3，用 G1/ZGC 减停顿
 
 JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进阶.md)
+
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#jvm-gc-垃圾回收-有了解吗)
 
 ## JVM Minor GC 和 Full GC 区别？什么时候触发 Full GC？
 
@@ -69,6 +75,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 
 **参数速记**：`-X` 基础调优，`-XX` 高级特性，`-Xlog` 诊断日志。
 
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#jvm常用命令有哪些)
+
 ## 如何优化JVM的FullGC问题？
 
 **锚点**：`参数调优 + 减少对象创建 + 代码优化 + 监控分析`
@@ -77,6 +85,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 2. **减少对象创建**：避免大对象、对象池复用；减少反射（缓存反射结果）；对象懒加载
 3. **代码优化**：减少内存泄漏及时关资源；缓存用软引用/弱引用；高效数据结构减内存
 4. **监控分析**：看 GC 日志分析 Full GC 原因；MAT/JProfiler 分析内存泄漏；监控内存趋势设告警
+
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#如何优化jvm的fullgc问题)
 
 ## 应用占用内存持续增长，但是堆内存、元空间都没变化，可能是什么原因?
 
@@ -90,6 +100,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
    - JVM 自身：JIT 编译缓存、GC 数据结构、类加载器
 2. **诊断命令**：`jcmd <pid> VM.native_memory detail` 看 Native 内存；`jstack <pid> | grep "State" | wc -l` 看线程数
 3. **解决**：`-XX:MaxDirectMemorySize=2G` 限直接内存；线程池代替频繁建线程；try-with-resources 自动关资源；Prometheus+Grafana 监控告警
+
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#应用占用内存持续增长-但是堆内存、元空间都没变化-可能是什么原因)
 
 ## JVM内存结构有哪些？
 
@@ -106,6 +118,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 1. **堆**：存放对象实例，GC 主要管理区域，分新生代和老年代
 2. **方法区**：类信息、常量池、静态变量（JDK8+ 叫元空间 Metaspace）
 3. **直接内存**：堆外内存，NIO 使用，通过 Unsafe 分配
+
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#jvm内存结构有哪些)
 
 ---
 
@@ -128,6 +142,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 4. **解析**：符号引用（类名、方法名）转直接引用（内存地址），被动触发
 5. **初始化**：执行类构造器 `<clinit>()`，按代码顺序执行 static 赋值和 static 块，父类先初始化
 
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#类加载的完整过程是什么)
+
 ## 常见的OOM有哪些？怎么排查？
 
 **锚点**：`五类 OOM（堆/元空间/GC 效率/直接内存/栈溢出）；转储 → MAT 分析支配树`
@@ -142,6 +158,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 
 **排查步骤**：`-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/path/dump.hprof` 自动转储 → MAT 分析 dump 文件，看 Dominator Tree 找最大对象 → 看 GC 日志确认触发原因。
 
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#常见的oom有哪些-怎么排查)
+
 ## JVM调优的常用参数有哪些？
 
 **锚点**：`内存：-Xms=-Xmx；GC：UseG1GC；比例：SurvivorRatio、TenuringThreshold`
@@ -154,6 +172,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 
 **日志参数**：`-Xlog:gc*:file=gc.log`（JDK9+）
 
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#jvm调优的常用参数有哪些)
+
 ## G1收集器的工作原理是什么？
 
 **锚点**：`Region 化 + 可预测停顿 + 无碎片；Young GC + Mixed GC`
@@ -161,6 +181,8 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 1. **核心特点**：堆分成多个相等 Region（默认 2048 个），不再分固定新生代/老年代；可指定最大停顿时间，优先回收垃圾多的 Region；标记-整理无碎片
 2. **工作模式**：Young GC 只回收年轻代 Region；Mixed GC 回收年轻代 + 部分老年代 Region（老年代垃圾比例超阈值触发）
 3. **回收过程**：并发标记（找存活对象）→ 最终标记（处理 SATB 缓冲区）→ 筛选回收（按收益排序选 Region）
+
+→ [回答历史](/private/series/答题历史/Java/java-答题记录.md#g1收集器的工作原理是什么)
 
 ## JVM 运行时内存区域是怎么划分的？
 

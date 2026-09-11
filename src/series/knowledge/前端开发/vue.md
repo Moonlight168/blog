@@ -14,6 +14,8 @@ categories: ["前端开发"]
 3. **TypeScript 更好**：类型推导友好，适合企业级
 4. **其他**：支持多根节点、体积更小
 
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#vue2-和-vue3-有什么区别)
+
 ---
 
 ## Vue 的生命周期钩子有哪些？
@@ -25,12 +27,16 @@ categories: ["前端开发"]
 3. 更新：`beforeUpdate` → `updated`
 4. 销毁：`beforeUnmount` → `unmounted`（Vue2 叫 `beforeDestroy`/`destroyed`）
 
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#vue-的生命周期钩子有哪些)
+
 ## created 和 mounted 的区别是什么？
 
 **锚点**：`created 数据就绪无 DOM，mounted DOM 可操作`
 
 - **created**：data/computed/watch 已就绪，但 DOM 没挂载，不能操作 `$el`、`$refs`
 - **mounted**：DOM 挂载完毕，适合发请求、初始化第三方库
+
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#created-和-mounted-的区别是什么)
 
 ## 组件之间有哪些通信方式？
 
@@ -42,12 +48,16 @@ categories: ["前端开发"]
 4. **$attrs / $refs**：$attrs 收未声明的父属性，$refs 拿子实例或 DOM
 5. **localStorage**：跨页面持久化
 
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#组件之间有哪些通信方式)
+
 ## v-if 和 v-show 有什么区别？
 
 **锚点**：`v-if 不渲染不创建，v-show 始终渲染只 display:none`
 
 - **v-if**：false 时不渲染（不创建），适合不频繁切换
 - **v-show**：始终渲染，只是隐藏，适合频繁切换
+
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#v-if-和-v-show-有什么区别)
 
 ## v-for 为什么要加 key？
 
@@ -60,12 +70,16 @@ categories: ["前端开发"]
    - 例：第一行"张三"被打勾 → 删掉张三，李四顶上来，`index=0` 复用旧 DOM → 数据显示李四，勾选框却还打着勾
 4. **结论**：key 用业务唯一 id（用户/记录 id），别用 index
 
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#v-for-为什么要加-key)
+
 ## computed 和 watch 的区别是什么？
 
 **锚点**：`computed 有缓存适合派生数据，watch 无缓存适合异步/开销大`
 
 - **computed**：基于响应式数据自动计算，有缓存、值不变不重算——派生数据
 - **watch**：监听数据变化执行回调、无缓存——异步操作或开销大的操作
+
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#computed-和-watch-的区别是什么)
 
 ## Vue3 组合式 API 和选项式 API 有什么区别？
 
@@ -78,12 +92,16 @@ categories: ["前端开发"]
 4. **写法**：组合式用 `<script setup>` + ref/reactive/computed；选项式是 `export default { data(){}, methods:{} }`
 5. **怎么选**：新项目推荐组合式；简单小组件、老项目继续选项式也够
 
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#vue3-组合式-api-和选项式-api-有什么区别)
+
 ## Vue Router 的 hash 和 history 模式有什么区别？
 
 **锚点**：`hash 带 # 兼容好免配置；history 干净但刷新 404 需服务器配置`
 
 - **hash**：URL 带 `#`，不依赖服务器，兼容好
 - **history**：URL 干净，刷新会请求后端路径，需服务器回退到 index.html，否则 404
+
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#vue-router-的-hash-和-history-模式有什么区别)
 
 ## Pinia 相比 Vuex 有什么优势？
 
@@ -94,8 +112,12 @@ categories: ["前端开发"]
 3. 直接调用 store，不需要 map 系列辅助函数
 4. 模块化更简单，不需要 namespaced 配置
 
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#pinia-相比-vuex-有什么优势)
+
 ## Vue 的单向数据流是什么？
 
 **锚点**：`数据只能父→子，子不能直接改 props，要改就 emit`
 
 数据从父组件流向子组件；子组件不能直接修改 props，需要变更时通过 emit 触发父组件的方法改。
+
+→ [回答历史](/private/series/答题历史/前端开发/vue-答题记录.md#vue-的单向数据流是什么)

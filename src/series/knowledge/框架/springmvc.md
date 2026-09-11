@@ -11,6 +11,8 @@ order: 2
 
 Spring MVC 是 Spring 框架内基于 Java 实现 Web MVC 模式的轻量级 Web 框架。它解耦了模型、视图、控制器，让开发者能清晰、便捷地构建 Web 应用。像开发电商网站，可分离商品展示与订单处理等功能，提升代码维护与复用性。
 
+→ [回答历史](/private/series/答题历史/框架/springmvc-答题记录.md#spring-mvc是什么)
+
 ## Spring MVC的核心组件有哪些，各自的作用是什么？
 
 **锚点**：`DispatcherServlet 入口 + HandlerMapping 找处理器 + HandlerAdapter 调方法 + ViewResolver 解析视图`
@@ -21,6 +23,8 @@ Spring MVC 是 Spring 框架内基于 Java 实现 Web MVC 模式的轻量级 Web
 4. **Controller**：处理具体业务逻辑，`@Controller` + `@RequestMapping` 标记
 5. **ViewResolver**：把视图名解析为视图对象，如 `InternalResourceViewResolver` 解析 JSP
 6. **View**：渲染模型数据给用户（JSP、FreeMarker、Thymeleaf）
+
+→ [回答历史](/private/series/答题历史/框架/springmvc-答题记录.md#spring-mvc的核心组件有哪些-各自的作用是什么)
 
 ## 请阐述Spring MVC的工作流程。
 
@@ -43,3 +47,5 @@ Spring MVC 是 Spring 框架内基于 Java 实现 Web MVC 模式的轻量级 Web
 4. **@PathVariable**：获取 URL 路径参数，如 `/user/{id}` 取 id
 5. **@RequestParam**：获取查询参数，如 `/user?name=John` 取 name
 6. **@RequestBody**：把请求体（JSON/XML）绑定到方法参数
+
+→ [回答历史](/private/series/答题历史/框架/springmvc-答题记录.md#spring-mvc有哪些常用注解-分别有什么作用)

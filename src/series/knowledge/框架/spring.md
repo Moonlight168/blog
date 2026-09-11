@@ -16,6 +16,8 @@ Spring 是一个轻量级的 Java 开发框架，核心模块包括：
 - Spring MVC（Web 框架）
 - Spring Data、Spring Security 等
 
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#什么是-spring-它有哪些核心模块)
+
 ## 你对 IoC 和 AOP 的理解
 
 **锚点**：`IoC 容器管对象（依赖注入），AOP 抽公共逻辑（动态代理）`
@@ -52,6 +54,8 @@ Spring 是一个轻量级的 Java 开发框架，核心模块包括：
 | 配置复杂度 | 简单（注解/XML） | 略复杂（需编译器支持） |
 | 性能 | 较低（运行时代理） | 高（编译期织入） |
 
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#aop-的常用注解有哪些-实现原理)
+
 ## Spring 是如何实现依赖注入的？底层是如何实现的？
 
 **锚点**：`IoC 容器 + 反射：BeanDefinition → 反射实例化 → 反射注入 → BeanPostProcessor 处理 @Autowired`
@@ -64,6 +68,8 @@ Spring 是一个轻量级的 Java 开发框架，核心模块包括：
    - `AutowiredAnnotationBeanPostProcessor` 扫描 `@Autowired`，查依赖并注入
 3. **三种注入方式**：构造器（推荐，强依赖不可变 final）；Setter（可选依赖）；字段（不推荐，不利测试）
 4. **循环依赖**：三级缓存解决（仅限单例 + 非构造器注入）
+
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-是如何实现依赖注入的-底层是如何实现的)
 
 ## Spring 循环依赖如何解决？
 
@@ -113,6 +119,8 @@ public class AppConfig {
 3. **FactoryBean**：适用于复杂实例化逻辑，实现 `getObject()`
 4. **XML 配置**（不常用）
 
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#第三方的-bean-如何交给-spring-管理)
+
 ## Bean 的生命周期
 
 **锚点**：`实例化 → 属性赋值 → 初始化前 → 初始化 → 初始化后 → 使用 → 销毁`
@@ -144,6 +152,8 @@ public class AppConfig {
 4. **事务**：`@Transactional`、`@EnableTransactionManagement`
 5. **SpringBoot 特有**：`@SpringBootApplication`（启动三合一，见下题）、`@ConfigurationProperties`（配置绑定）、测试三件套 `@SpringBootTest` / `@MockBean` / `@TestConfiguration`
 
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-和-springboot-常用注解有哪些)
+
 ## Spring Bean 的作用域有哪些？一般项目中用什么？
 
 **锚点**：`singleton 默认 90% 场景，prototype 有状态，request/session/application/websocket Web 环境`
@@ -161,6 +171,8 @@ public class AppConfig {
 
 ⚠️ **singleton 依赖 prototype 问题**：singleton 初始化时 prototype 依赖只创建一次——用 `@Lookup` 或 `ObjectProvider` 解决。
 
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-bean-的作用域有哪些-一般项目中用什么)
+
 ## @Transactional 注解四种机制有哪些？
 
 **锚点**：`传播机制 + 隔离级别 + 只读属性 + 回滚规则`
@@ -171,6 +183,8 @@ public class AppConfig {
 4. **回滚规则（Rollback For）**：默认 RuntimeException 和 Error 自动回滚；可 `rollbackFor`/`noRollbackFor` 自定义
 
 > 📖 详细说明：[@Transactional注解四种机制详解](/blogs/框架/spring/transactional-annotation.md)
+
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#transactional-注解四种机制有哪些)
 
 ## @Transactional 失效的常见原因？
 
@@ -190,6 +204,8 @@ public class AppConfig {
 1. **ApplicationContext 原理**：以 BeanFactory 为核心，通过统一的 `refresh()` 启动流程完成 BeanDefinition 加载注册，靠各种 PostProcessor 扩展容器能力，启动阶段完成单例 Bean 实例化、注入和生命周期管理
 2. **区别**：BeanFactory 只负责基础 Bean 创建和依赖注入；ApplicationContext 引入事件机制、AOP、资源加载等应用级能力，默认启动时初始化单例 Bean
 
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring中的applicationcontext-原理是什么-它与beanfactory区别)
+
 ## 实际应用中你怎么使用 ApplicationContext ？
 
 **锚点**：`注解方式为主，典型用法是 AOP：@Aspect + @Around 做日志/鉴权/事务`
@@ -197,6 +213,8 @@ public class AppConfig {
 1. 实际项目主要通过注解使用，容器启动时统一管理 Bean
 2. 典型用法是 AOP：`@Aspect` + `@Around` 实现日志、鉴权和事务控制
 3. Spring 在容器启动过程中通过 BeanPostProcessor 对目标 Bean 代理增强，只需声明切面，不用手动干预对象创建
+
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#实际应用中你怎么使用-applicationcontext)
 
 ## JWT 认证流程？token 里能放敏感信息吗？
 
@@ -230,6 +248,8 @@ public class AppConfig {
 3. **授权**：AuthorizationFilter 按 @PreAuthorize / authorizeHttpRequests 路径规则判断权限，无权限抛 403
 4. **无状态适配（JWT）**：不存 session，每次请求从 token 解析用户塞进 SecurityContextHolder（ThreadLocal），请求结束清理，防止串用户
 5. **常见配置**：SecurityFilterChain Bean 定义放行规则（白名单 /login、/health）+ 自定义认证过滤器插入链中
+
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-security-认证授权原理是什么-过滤器链怎么工作的)
 
 ---
 

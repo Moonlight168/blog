@@ -14,12 +14,16 @@ order: 3
 - **优点**：开发独立、部署灵活、可按需扩展
 - **缺点**：系统复杂、测试困难、运维成本高、接口通信开销大
 
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#什么是微服务-有哪些优缺点)
+
 ## 每个微服务之间如何通信？
 
 **锚点**：`同步（HTTP/RPC）强一致实时；异步（MQ）解耦削峰`
 
 1. **同步通信**：HTTP 或 RPC——OpenFeign、RestTemplate、Dubbo、gRPC；实时响应，适合强一致性场景
 2. **异步通信**：消息队列——Kafka、RabbitMQ、RocketMQ；解耦、削峰填谷，适合异步处理
+
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#每个微服务之间如何通信)
 
 ## ⭐微服务四大件都有哪些？
 
@@ -30,6 +34,8 @@ order: 3
 3. **服务网关**：统一入口，路由转发、权限校验、限流熔断——Gateway、Zuul、Kong、Nginx
 4. **服务通信与容错**：服务间调用 + 熔断限流重试——OpenFeign、Dubbo、gRPC（通信）；Sentinel、Resilience4j、Hystrix（容错）
 
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#⭐微服务四大件都有哪些)
+
 ## Nacos 如何实现配置热更新？
 
 **锚点**：`长轮询监听 + 服务端推送 + @RefreshScope 刷新`
@@ -39,12 +45,16 @@ order: 3
 3. **@RefreshScope**：Spring Cloud 中该注解让 Bean 在配置更新时动态刷新
 4. **配置绑定**：`@Value` 或 `@ConfigurationProperties` 绑定属性，配合 `@RefreshScope` 实现热更新
 
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#nacos-如何实现配置热更新)
+
 ## Hystrix 和 Sentinel 有什么区别？
 
 **锚点**：`Hystrix 已停维护只管熔断降级；Sentinel 功能全：限流+熔断+降级+控制台`
 
 - **Hystrix**：Netflix 断路器组件，服务熔断、降级、隔离——已停止维护
 - **Sentinel**：阿里开源流量防护，功能更全——限流、熔断、降级、热点参数限流、系统自适应保护，提供控制台可视化管理
+
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#hystrix-和-sentinel-有什么区别)
 
 ## 如何监控微服务中的负载均衡状态？
 
@@ -55,6 +65,8 @@ order: 3
 3. **注册中心**：Nacos/Eureka 控制台看实例健康状态和权重
 4. **链路追踪**：Sleuth + Zipkin / SkyWalking 监控请求分布和耗时
 5. **指标监控**：Prometheus + Grafana 采集调用指标，直观展示负载均衡效果
+
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#如何监控微服务中的负载均衡状态)
 
 ## Spring Boot Admin的作用是什么？
 
@@ -67,6 +79,8 @@ order: 3
 - 告警通知：服务异常时发送告警
 - 统一界面：管理多个微服务实例
 
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#spring-boot-admin的作用是什么)
+
 ## 为什么需要微服务监控中心？
 
 **锚点**：`全局视图 + 快速定位 + 性能优化 + 容量规划 + 自动化运维`
@@ -77,6 +91,8 @@ order: 3
 - 容量规划：根据历史数据预测容量
 - 自动化运维：结合告警系统自动化运维
 - 服务治理：监控服务间调用关系和依赖
+
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#为什么需要微服务监控中心)
 
 ## 如何实现服务状态变更的告警？
 
@@ -89,11 +105,15 @@ order: 3
 - **告警去重**：避免重复告警
 - **告警升级**：持续未处理的告警升级处理
 
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#如何实现服务状态变更的告警)
+
 ## 在微服务中，为什么业务配置放在配置中心，而配置中心的连接信息放在本地 bootstrap.yml 中？
 
 **锚点**：`先连得上配置中心，才能读业务配置——引导配置必须本地`
 
 你必须先能连上"配置中心"，才能从配置中心读取业务配置。所以连接配置中心的最小启动配置 bootstrap.yml 必须放本地。
+
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#在微服务中-为什么业务配置放在配置中心-而配置中心的连接信息放在本地-bootstrap-yml-中)
 
 ## 为什么 Nacos 配置表的 context 字段用 LONGTEXT 而不是 JSON？
 
@@ -103,6 +123,8 @@ order: 3
 2. 要兼容多种数据库（MySQL、MariaDB、PostgreSQL），各库 JSON 类型实现不一致
 3. LONGTEXT 全库支持、无校验、兼容性最好、写入性能更高
 
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#为什么-nacos-配置表的-context-字段用-longtext-而不是-json)
+
 ## `debug: true` 为什么不能放在 bootstrap.yml 中？必须放在 application.yml 中才能生效？
 
 **锚点**：`debug 要启动早期生效，而远程配置加载太晚`
@@ -110,6 +132,8 @@ order: 3
 1. **时机问题**：debug 需启动早期生效以捕获启动问题；Nacos 远程配置获取需要时间，启动时还没加载到
 2. **加载顺序**：bootstrap.yml 连接配置中心 → 本地 application.yml 立即生效 → 远程 application.yml 后期加载（错过时机）
 3. **结论**：`debug: true` 必须放本地 application.yml
+
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#debug-true-为什么不能放在-bootstrap-yml-中-必须放在-application-yml-中才能生效)
 
 ## Nacos 远程配置变更后，服务需要重启吗？
 
@@ -119,6 +143,8 @@ order: 3
 2. **普通 Bean**：需要重启，配置变更影响不了已创建的 Bean
 3. **连接配置中心的地址变更**：必须重启
 4. **bootstrap.yml 中的配置**：必须重启
+
+→ [回答历史](/private/series/答题历史/框架/springcloud-答题记录.md#nacos-远程配置变更后-服务需要重启吗)
 
 ## 服务 A Feign 调用服务 B，B 挂了怎么发现和兜底？
 

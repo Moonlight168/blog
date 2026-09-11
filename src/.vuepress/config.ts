@@ -5,6 +5,7 @@ import { getDirname, path } from 'vuepress/utils'
 import { registerComponentsPlugin } from "@vuepress/plugin-register-components";
 import { jobs, fetchLog } from '../../data/jobs-store.mjs';
 import { checkin } from '../../data/checkin-store.mjs';
+import { answerHistoryPlugin } from './plugins/answer-history.js';
 
 const __dirname = import.meta.dirname || getDirname(import.meta.url)
 const componentsDir = path.resolve(__dirname, 'components');
@@ -361,6 +362,7 @@ export default defineUserConfig({
         registerComponentsPlugin({
             componentsDir: componentsDir
         }),
+        answerHistoryPlugin(),
     ],
     head: [
         [
