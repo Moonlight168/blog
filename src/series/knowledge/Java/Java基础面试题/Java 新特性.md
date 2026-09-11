@@ -19,6 +19,8 @@ order: 11
 | 接口默认方法 | 接口可定义默认实现 | `default void print() { }` |
 | CompletableFuture | 异步编程增强 | `CompletableFuture.supplyAsync(() -> "result")` |
 
+→ [回答历史](/private/series/答题历史/Java/Java基础面试题/Java%20新特性-答题记录.md#java-8-有什么新特性)
+
 ## Lambda 表达式了解吗？
 
 **锚点**：`更简洁的匿名函数：单表达式自动返回，多语句写 {} + return`
@@ -38,6 +40,8 @@ Thread t = new Thread(() -> System.out.println("Running..."));
 ```
 
 **缺点**：调试困难，Lambda 是匿名的。
+
+→ [回答历史](/private/series/答题历史/Java/Java基础面试题/Java%20新特性-答题记录.md#lambda-表达式了解吗)
 
 ## CompletableFuture 怎么用的？
 
@@ -59,6 +63,8 @@ cf1.thenCombine(cf2, (r1, r2) -> r1 + r2);
 
 支持回调、链式调用、并行任务组合。
 
+→ [回答历史](/private/series/答题历史/Java/Java基础面试题/Java%20新特性-答题记录.md#completablefuture-怎么用的)
+
 ## Java 21 新特性知道哪些？
 
 **锚点**：`Switch 模式匹配 / 虚拟线程 / Scoped Values / 字符串模板`
@@ -67,6 +73,8 @@ cf1.thenCombine(cf2, (r1, r2) -> r1 + r2);
 2. **虚拟线程**：超轻量线程，可创建百万级
 3. **Scoped Values**：安全替代 ThreadLocal，避免内存泄漏
 4. **字符串模板**：字符串拼接更直观
+
+→ [回答历史](/private/series/答题历史/Java/Java基础面试题/Java%20新特性-答题记录.md#java-21-新特性知道哪些)
 
 ## 为什么 Class.newInstance() 被废弃？
 
@@ -81,6 +89,8 @@ cf1.thenCombine(cf2, (r1, r2) -> r1 + r2);
 clazz.getDeclaredConstructor().newInstance();  // 支持任意构造器，异常透明
 ```
 
+→ [回答历史](/private/series/答题历史/Java/Java基础面试题/Java%20新特性-答题记录.md#为什么-class-newinstance-被废弃)
+
 ## Java 常用版本有哪些区别？
 
 **锚点**：`8 奠基 / 11 LTS 性能 / 17 新主流 LTS / 21 虚拟线程时代`
@@ -89,3 +99,5 @@ clazz.getDeclaredConstructor().newInstance();  // 支持任意构造器，异常
 2. **Java 11（LTS）**：长期支持，性能优化，HTTP Client 正式版，var 类型推断
 3. **Java 17（LTS）**：新主流 LTS，Record/sealed/Pattern Matching，Java 8 升级首选
 4. **Java 21（LTS）**：虚拟线程时代，适合高并发、微服务架构
+
+→ [回答历史](/private/series/答题历史/Java/Java基础面试题/Java%20新特性-答题记录.md#java-常用版本有哪些区别)

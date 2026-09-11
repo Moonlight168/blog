@@ -23,6 +23,8 @@ icon: /assets/icon/linux.png
 
 **面试要点**：不用背全部参数，记住"每个分类有什么命令、能干什么"，具体参数面试时再说（如 `top` 看负载、`netstat -tulpn` 看端口、`kill -9` 强杀）。后面的题逐个展开各分类的高频用法。
 
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#linux-有哪些常用命令)
+
 ---
 
 ## 如何查看服务器负载和 CPU 使用率？
@@ -37,6 +39,8 @@ uptime              # 查看系统负载平均值（1min/5min/15min）
 
 关注 `load average` 三个值，若长期超过 CPU 核心数，表明系统过载。
 
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何查看服务器负载和-cpu-使用率)
+
 ## 如何查看系统内存使用情况？
 
 **锚点**：`free -h 人类可读 / vmstat 看动态`
@@ -46,6 +50,8 @@ free -h             # 以人类可读格式显示内存
 free -m             # 以MB为单位显示内存
 vmstat 1 5          # 每秒更新一次，共显示5次
 ```
+
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何查看系统内存使用情况)
 
 ## 如何查看 Java 进程的内存使用情况？
 
@@ -57,6 +63,8 @@ top -Hp <PID>       # 查看Java进程及线程详情
 jstat -gc <PID>     # 查看JVM堆内存使用情况
 jmap -heap <PID>    # 查看堆内存详细信息
 ```
+
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何查看-java-进程的内存使用情况)
 
 ## 如何查看和终止进程？
 
@@ -78,6 +86,8 @@ kill -9 <PID>             # 强制终止进程
 pkill -f <进程名>         # 按名称终止进程
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何查看和终止进程)
+
 ## 如何查看 Java 应用监听的端口？
 
 **锚点**：`netstat 按进程查 / lsof 查监听`
@@ -87,12 +97,16 @@ netstat -tulpn | grep java       # 查看Java进程监听的端口
 lsof -i -P -n | grep LISTEN      # 列出所有监听端口
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何查看-java-应用监听的端口)
+
 ## 如何优雅关闭 Java 进程？
 
 **锚点**：`kill 触发 Shutdown Hook；kill -9 慎用`
 
 1. **推荐方式**：`kill <PID>`——触发 JVM Shutdown Hook，优雅释放资源
 2. **强制终止（慎用）**：`kill -9 <PID>`——可能导致资源泄漏
+
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何优雅关闭-java-进程)
 
 ## 如何查看和搜索日志文件？
 
@@ -114,6 +128,8 @@ grep -n "关键词" logfile          # 显示行号
 grep -c "关键词" logfile          # 统计匹配行数
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何查看和搜索日志文件)
+
 ## grep 常用参数有哪些？
 
 **锚点**：`i 忽略大小写 / r 递归 / v 反选 / E 多模式`
@@ -124,6 +140,8 @@ grep -r "关键词" 目录        # 递归搜索目录
 grep -v "关键词" 文件        # 显示不匹配的行
 grep -E "模式1|模式2" 文件   # 匹配多个模式
 ```
+
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#grep-常用参数有哪些)
 
 ## 如何压缩和解压文件？
 
@@ -143,6 +161,8 @@ zip -r archive.zip /path/to/directory       # 压缩
 unzip archive.zip                            # 解压
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何压缩和解压文件)
+
 ## 如何修改主机名？
 
 **锚点**：`hostname 临时，hostnamectl 永久`
@@ -151,6 +171,8 @@ unzip archive.zip                            # 解压
 sudo hostname <新主机名>              # 临时修改，重启后失效
 sudo hostnamectl set-hostname <新主机名>  # 永久生效
 ```
+
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何修改主机名)
 
 ## 如何排查 Java 应用的内存泄漏？
 
@@ -161,3 +183,5 @@ sudo hostnamectl set-hostname <新主机名>  # 永久生效
 jmap -dump:format=b,file=heap.hprof <PID>
 ```
 2. 使用 MAT 或 VisualVM 分析堆转储文件，关注大对象和 GC Roots 中的长生命周期引用
+
+→ [回答历史](/private/series/答题历史/开发工具/linux-答题记录.md#如何排查-java-应用的内存泄漏)

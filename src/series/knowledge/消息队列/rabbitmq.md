@@ -17,6 +17,8 @@ order: 1
 4. **可靠性保障**：持久化防丢、消息确认、重试、死信队列保证可靠投递
 5. **分布式协调**：发布/订阅一对多通信，用于分布式事务、事件驱动架构
 
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq是什么-在系统架构中有什么作用)
+
 ## RabbitMQ 中有哪些常见的交换器（Exchange）类型，它们有什么区别？
 
 **锚点**：`Direct 精确 / Fanout 广播 / Topic 通配 / Headers 按头`
@@ -25,6 +27,8 @@ order: 1
 - **Fanout**：发给所有绑定队列，忽略 Key——广播、群发通知
 - **Topic**：Routing Key 与 Binding Key 模式匹配（`*.log` 通配）——按规则分发
 - **Headers**：按消息内容 headers 属性匹配——实际较少用
+
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq-中有哪些常见的交换器-exchange-类型-它们有什么区别)
 
 ## RabbitMQ怎么保证消息不丢失？
 
@@ -43,6 +47,8 @@ channel.basicConsume(queue, autoAck, consumer);
 channel.basicAck(deliveryTag, false);  // 手动确认
 ```
 
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq怎么保证消息不丢失)
+
 ## 如何提升RabbitMQ顺序消费性能?
 
 **锚点**：`保序三招：单队列单消费者 / 业务 ID 分组 / 序列号重组`
@@ -54,6 +60,8 @@ channel.basicAck(deliveryTag, false);  // 手动确认
 5. **架构优化**：按业务分片队列、消费端本地缓存、优先级队列
 
 **性能对比**：单队列单消费者顺序 100% 吞吐低；分组队列组内 100% 吞吐高；序列号重组 100% 延迟高但吞吐最高。
+
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#如何提升rabbitmq顺序消费性能)
 
 ## 如何解决重复消息问题？
 
@@ -76,6 +84,8 @@ CREATE TABLE message_dup (
 
 **最佳实践**：核心业务必须幂等，消息 ID 全局唯一，定期清理去重表。
 
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#如何解决重复消息问题)
+
 ## RabbitMQ 延迟队列如何实现？
 
 **锚点**：`TTL+死信（简单但头阻塞）vs 延迟插件（消息级延迟，推荐）`
@@ -87,6 +97,8 @@ CREATE TABLE message_dup (
 
 **应用场景**：订单超时取消、定时提醒、延迟重试。
 
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq-延迟队列如何实现)
+
 ## RabbitMQ 死信队列是什么？
 
 **锚点**：`三种死信：拒绝不重入队 / TTL 过期 / 队列满`
@@ -95,6 +107,8 @@ CREATE TABLE message_dup (
 2. **配置**：业务队列声明 `x-dead-letter-exchange` + `x-dead-letter-routing-key`，死信进 DLX 对应队列
 3. **应用场景**：失败消息人工介入或重试；配合 TTL 做延迟队列；消息兜底防丢、可追溯
 4. **监控建议**：监控死信队列长度超阈值告警；定期分析死信原因优化消费逻辑
+
+→ [回答历史](/private/series/答题历史/消息队列/rabbitmq-答题记录.md#rabbitmq-死信队列是什么)
 
 ## 消息队列怎么保证消息不丢？生产端、Broker、消费端分别怎么做？
 

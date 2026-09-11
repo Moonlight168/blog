@@ -179,3 +179,21 @@ table tbody tr:hover {
   text-align: left;
   border-bottom: 1px solid var(--vp-c-divider, #e5e7eb);
 }
+
+/* === 答题历史：回答次数小计数 + 无记录提示 === */
+.ah-count {
+  margin-left: 6px;
+  font-size: 0.8em;
+  color: var(--vp-c-text-muted, #999);
+  white-space: nowrap;
+}
+
+.ah-count.is-zero {
+  opacity: 0.65;
+}
+
+/* 无记录时：纯文本，不可点击、不跳转，悬浮显示禁止光标 */
+.ah-none {
+  color: var(--vp-c-text-muted, #999);
+  cursor: not-allowed;
+}

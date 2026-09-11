@@ -10,6 +10,8 @@ order: 5
 
 UML（Unified Modeling Language）统一建模语言，是一种用于描述软件系统的语言。
 
+→ [回答历史](/private/series/答题历史/基础知识/uml建模-答题记录.md#什么是uml)
+
 ## UML中有什么图？
 
 **锚点**：`两大类：结构图看静态“有什么”，行为图看动态“做什么”`
@@ -35,6 +37,7 @@ UML（Unified Modeling Language）统一建模语言，是一种用于描述软�
 
 > **简单记忆**：结构图关注"有什么"，行为图关注"做什么"
 
+→ [回答历史](/private/series/答题历史/基础知识/uml建模-答题记录.md#uml中有什么图)
 
 ## 用例图中extend与include的区别
 

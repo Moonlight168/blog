@@ -12,6 +12,8 @@ order: 5
 * Servlet 是运行在服务器上的 Java 小程序，专门处理 HTTP 请求返回响应；继承 HttpServlet 重写 doGet/doPost，部署在 Tomcat 中运行
 * 常用于中小型业务场景，轻量、稳定、开源
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-是什么-作用是什么)
+
 ## Tomcat 架构核心组件有哪些？
 
 **锚点**：`Connector 通信 + Container 处理（Engine→Host→Context→Wrapper）+ Executor 线程池 + ClassLoader + Lifecycle`
@@ -21,6 +23,8 @@ order: 5
 * **Executor（线程池）**：管理 Tomcat 的线程资源
 * **ClassLoader**：支持应用隔离加载
 * **Lifecycle**：统一生命周期管理机制
+
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-架构核心组件有哪些)
 
 ## Tomcat 是如何处理一次请求的？
 
@@ -32,6 +36,8 @@ order: 5
 4. **Servlet.service() 执行业务逻辑**
 5. 返回 Response，通过 Connector 写回浏览器
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-是如何处理一次请求的)
+
 ## Tomcat 使用哪种线程模型？
 
 **锚点**：`NIO 默认（Selector 高并发）；BIO 阻塞差；APR 高性能部署成本高`
@@ -41,6 +47,8 @@ order: 5
 * **APR**：基于本地库，高性能接近 Nginx，但需安装本地库部署成本高
 
 现代生产通常使用 **NIO/NIO2**。
+
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-使用哪种线程模型)
 
 ## Tomcat 的常见配置项有哪些？
 
@@ -53,6 +61,8 @@ order: 5
 * **acceptCount**：拒绝前的等待队列长度
 * **connectionTimeout**：连接超时
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-的常见配置项有哪些)
+
 ## 为什么 Spring Boot 内嵌 Tomcat？
 
 **锚点**：`免安装部署 + Maven 管版本 + jar 一键运行 + 易容器化`
@@ -62,12 +72,16 @@ order: 5
 * 更好的自动化运维：jar 一条命令即可运行
 * 更容易容器化（Docker）
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#为什么-spring-boot-内嵌-tomcat)
+
 ## Tomcat 如何隔离不同 Web 应用的类？
 
 **锚点**：`分级 ClassLoader：Bootstrap/Common/WebApp，应用间 classpath 隔离`
 
 * 使用一套**分级 ClassLoader**：BootstrapClassLoader（JDK 类）、CommonClassLoader（共享类）、WebAppClassLoader（应用私有类）
 * **不同应用之间 classpath 隔离**，相互不影响
+
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-如何隔离不同-web-应用的类)
 
 ## Tomcat 和 Nginx 的区别？
 
@@ -77,6 +91,8 @@ order: 5
 * **Nginx：高性能反向代理服务器**——负载均衡、静态文件、SSL 终端，不执行 Java 代码
 
 大部分架构使用 **Nginx → Tomcat**。
+
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-和-nginx-的区别)
 
 ## 如何提升 Tomcat 性能？
 
@@ -89,11 +105,15 @@ order: 5
 * 减少单实例部署的 Web 应用数量
 * 禁用不必要的 JSP/Session 功能
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#如何提升-tomcat-性能)
+
 ## Tomcat 默认端口是多少？怎么修改？
 
 **锚点**：`8080，conf/server.xml 的 <Connector port>`
 
 默认 **8080**，在 `conf/server.xml` 中修改 `<Connector port="8080">` 即可。
+
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-默认端口是多少-怎么修改)
 
 ## Tomcat 如何实现多线程？
 
@@ -101,11 +121,15 @@ order: 5
 
 使用线程池（Executor），每个请求由线程池中线程处理，提升并发性能。
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-如何实现多线程)
+
 ## Tomcat 如何解析 web.xml？
 
 **锚点**：`启动时解析 WEB-INF/web.xml，注册 Servlet/Filter/Listener`
 
 启动时解析 `WEB-INF/web.xml`，注册 Servlet、Filter、Listener，并按配置初始化加载。
+
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-如何解析-web-xml)
 
 ## Tomcat 如何热部署应用？
 
@@ -113,14 +137,20 @@ order: 5
 
 监听 `webapps` 目录变化，自动部署 `.war` 或解压目录，可实现热部署（支持关闭）。
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-如何热部署应用)
+
 ## Tomcat 如何处理静态资源？
 
 **锚点**：`默认 DefaultServlet 处理 HTML/CSS/JS 静态文件`
 
 由默认的 `DefaultServlet` 处理，如 HTML、CSS、JS 等静态文件。
 
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-如何处理静态资源)
+
 ## Tomcat 是线程安全的吗？
 
 **锚点**：`Tomcat 本身安全，但开发者要保证自己写的 Servlet 安全`
 
 Tomcat 本身线程安全，但开发者需保证自己写的 Servlet 是线程安全的（避免共享可变状态）。
+
+→ [回答历史](/private/series/答题历史/Java/tomcat-答题记录.md#tomcat-是线程安全的吗)

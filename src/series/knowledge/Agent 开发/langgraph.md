@@ -49,6 +49,8 @@ State 是 LangGraph 图的**共享记忆**，每个节点读它、做决策、�
 
 实际用的时候，条件边是最能体现"图编排"价值的地方：把"是否继续循环""走人审还是自动通过"这种决策点做成条件边，整个流程就活了。
 
+→ [回答历史](/private/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-节点之间怎么路由-条件边是什么)
+
 ---
 
 ## 你用 LangGraph 搭 Agent 时，为什么选它而不是自己手写循环？
@@ -60,6 +62,8 @@ State 是 LangGraph 图的**共享记忆**，每个节点读它、做决策、�
 3. **可观测和恢复**：它有 checkpoint，能保存中间状态，出问题能断点恢复、回放，排查 Agent 这种不确定系统很重要。
 
 但我也会说实话：**简单的 Agent 用 LangGraph 是杀鸡用牛刀**，一个 ReAct 循环直接写也就几十行。LangGraph 的价值在流程复杂、需要人机协作、需要状态管理的时候才体现出来。
+
+→ [回答历史](/private/series/答题历史/Agent%20开发/langgraph-答题记录.md#你用-langgraph-搭-agent-时-为什么选它而不是自己手写循环)
 
 ---
 
@@ -74,6 +78,8 @@ State 是 LangGraph 图的**共享记忆**，每个节点读它、做决策、�
 
 所以答案是：**光靠 recursion_limit 不够，它只能止损、不能防错；状态机才是让流程不乱的根本。**
 
+→ [回答历史](/private/series/答题历史/Agent%20开发/langgraph-答题记录.md#langgraph-里-ai-多轮对话怎么防死循环-光靠-recursion-limit-够吗)
+
 ---
 
 ## 怎么保证 LLM 输出的 JSON 一定符合你定义的结构？
@@ -86,6 +92,8 @@ State 是 LangGraph 图的**共享记忆**，每个节点读它、做决策、�
 4. **失败路径明确**：校验不过就返回“我没理解，请换个说法”或者带修复提示重新生成，而不是静默吞掉。
 
 说白了，**结构化输出把“可能出错”变成“出错也能发现”，剩下交给校验兜底。**
+
+→ [回答历史](/private/series/答题历史/Agent%20开发/langgraph-答题记录.md#怎么保证-llm-输出的-json-一定符合你定义的结构)
 
 ---
 
@@ -100,3 +108,4 @@ State 是 LangGraph 图的**共享记忆**，每个节点读它、做决策、�
 
 我的倾向是：**AI 重、变化快的用 LangGraph 这类 Python 方案；AI 轻、嵌在业务里的用 Spring AI**，两边我都实际跑过，各有各的顺。
 
+→ [回答历史](/private/series/答题历史/Agent%20开发/langgraph-答题记录.md#你两个项目一个用-langgraph-一个用-spring-ai-怎么权衡用哪个)

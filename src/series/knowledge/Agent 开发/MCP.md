@@ -21,6 +21,8 @@ categories: ["Agent 开发"]
    - 配置好 endpoint 告诉客户端（如 Claude Code 的 .mcp.json）就能直接调
 3. **体验**：写一次 server，Claude Code、Cursor、自家 Agent 都能用，不用每家写一套适配
 
+→ [回答历史](/private/series/答题历史/Agent%20开发/MCP-答题记录.md#你平时用过哪些-mcp-server-有没有自己动手写过)
+
 ---
 
 ## 如果让你从零设计一个 MCP Server，你会怎么设计？
@@ -35,6 +37,8 @@ categories: ["Agent 开发"]
 
 一句话：**设计重点不在协议本身，而在"工具边界 + 描述质量 + 安全兜底"三件事。**
 
+→ [回答历史](/private/series/答题历史/Agent%20开发/MCP-答题记录.md#如果让你从零设计一个-mcp-server-你会怎么设计)
+
 ---
 
 ## MCP 现在这么火，你觉得它有哪些局限？什么场景其实不该硬上 MCP？
@@ -47,3 +51,5 @@ categories: ["Agent 开发"]
 4. **性能开销**：每次调用多一层网络/进程往返，延迟敏感场景要掂量
 
 判断：**跨系统、要复用的工具接 MCP 很值；单应用内只调一两个内部函数，直接写代码更简单。** MCP 是工具接入的"统一插头"，不是万能方案。
+
+→ [回答历史](/private/series/答题历史/Agent%20开发/MCP-答题记录.md#mcp-现在这么火-你觉得它有哪些局限-什么场景其实不该硬上-mcp)

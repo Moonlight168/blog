@@ -18,6 +18,8 @@ Git 是分布式版本控制系统，用于管理源代码变更历史，支持�
 3. 离线提交
 4. 分布式协作（远程仓库）
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-是什么)
+
 ## Git 中 fetch、pull、merge 的区别？
 
 **锚点**：`fetch 只拉不合，pull = fetch + merge`
@@ -27,6 +29,8 @@ Git 是分布式版本控制系统，用于管理源代码变更历史，支持�
 | `git fetch` | ✅（不改当前分支） | ❌ | 只同步远程分支，供查看或手动合并 |
 | `git pull` | ✅ | ✅ | 相当于 `fetch` + `merge`，快速同步 |
 | `git merge` | ❌ | ✅ | 将指定分支合并到当前分支 |
+
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-中-fetch、pull、merge-的区别)
 
 ## Git 中 push、add、commit 的区别？
 
@@ -43,6 +47,8 @@ Git 是分布式版本控制系统，用于管理源代码变更历史，支持�
 1. 开发阶段：`git add .` → `git commit -m "注释"`
 2. 协作推送：`git push origin 分支名`
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-中-push、add、commit-的区别)
+
 ## 如何创建、切换、删除分支？
 
 **锚点**：`checkout -b 创建并切换；-d 删已合并，-D 强删`
@@ -56,6 +62,8 @@ git branch -D 分支名             # 强制删除（未合并）
 git push origin --delete 分支名  # 删除远程分支
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#如何创建、切换、删除分支)
+
 ## 分支合并冲突如何解决？
 
 **锚点**：`status 找文件 → 编辑标记 → add → commit`
@@ -65,6 +73,8 @@ git push origin --delete 分支名  # 删除远程分支
 3. 手动编辑，保留需要的内容，删除标记
 4. `git add` 标记已解决
 5. `git commit` 完成合并
+
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#分支合并冲突如何解决)
 
 ## git merge 和 git rebase 的区别？
 
@@ -87,6 +97,8 @@ git push origin --delete 分支名  # 删除远程分支
 4. **release**：发布分支（`release/v1.0`）
 5. **hotfix**：紧急修复（`hotfix/xxx`）
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-flow-分支管理策略)
+
 ## git reset、git revert、git checkout 的区别？
 
 **锚点**：`reset 删历史回退，revert 加提交回退，checkout 切换/恢复`
@@ -105,6 +117,8 @@ git reset --mixed HEAD~1  # 默认，代码保留在工作区
 git reset --hard HEAD~1   # 彻底回退，代码不要了
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-reset、git-revert、git-checkout-的区别)
+
 ## 如何回退到指定版本？
 
 **锚点**：`本地 reset，公共分支 revert；已 push 用 revert 安全`
@@ -114,6 +128,8 @@ git log --oneline            # 找到目标 commit hash
 
 git reset --hard 目标 hash    # 本地回退（删除历史）
 git revert 目标 hash..HEAD    # 公共分支回退（保留历史）
+
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#如何回退到指定版本)
 
 # 已 push 到远程
 git revert 目标 hash..HEAD    # 安全方式
@@ -133,6 +149,8 @@ git reset --hard HEAD@{1}     # 回到之前的位置
 git branch 新分支名 commit-hash  # 恢复误删的分支
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-reflog-的作用-误删如何恢复)
+
 ## git stash 的用途？
 
 **锚点**：`临时保存工作现场，切分支修 bug 用`
@@ -145,6 +163,8 @@ git stash apply        # 恢复不删除
 git stash drop         # 删除
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-stash-的用途)
+
 ## git cherry-pick 的作用？
 
 **锚点**：`复制特定提交到当前分支`
@@ -153,6 +173,8 @@ git stash drop         # 删除
 git cherry-pick commit-hash      # 复制单个提交
 git cherry-pick hash1 hash2      # 复制多个
 ```
+
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#git-cherry-pick-的作用)
 
 ## 提交错了如何修改最后一次提交？
 
@@ -165,12 +187,17 @@ git commit --amend                  # 合并修改
 git push origin 分支名 --force      # 已 push 则强制覆盖
 ```
 
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#提交错了如何修改最后一次提交)
+
 ## 如何将多个提交合并为一个？
 
 **锚点**：`rebase -i 把 pick 改 squash`
 
 ```bash
 git rebase -i HEAD~n         # n 是要合并的提交数
+
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#如何将多个提交合并为一个)
+
 # 编辑器中将 pick 改为 squash，保存退出
 git push origin 分支名 --force
 ```
@@ -180,6 +207,9 @@ git push origin 分支名 --force
 **锚点**：`公共分支 revert 保留历史，个人分支 reset --force`
 
 ```bash
+
+→ [回答历史](/private/series/答题历史/开发工具/git-答题记录.md#如何撤销已经-push-到远程的提交)
+
 # 公共分支（推荐）
 git revert HEAD
 git push origin 分支名

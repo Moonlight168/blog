@@ -17,6 +17,8 @@ categories: ["前端开发"]
 4. **别神化**：保证**可维护性和性能下限**，不是一定比手写 DOM 快
    - Vue 和 React 都基于它，机制同源
 
+→ [回答历史](/private/series/答题历史/前端开发/react-答题记录.md#虚拟-dom-是什么)
+
 ---
 
 ## React 和 Vue 有什么区别？
@@ -29,6 +31,8 @@ categories: ["前端开发"]
 | 数据更新 | **自动响应式**，改数据页面自动变 | **手动 setState()** 才更新 |
 | 生态 | Pinia/Vuex、Element Plus、Vue Router | Redux/Zustand、Ant Design、React Router |
 | 上手难度 | 低（模板直观） | 中（JSX 心智） |
+
+→ [回答历史](/private/series/答题历史/前端开发/react-答题记录.md#react-和-vue-有什么区别)
 
 ---
 
@@ -45,6 +49,8 @@ categories: ["前端开发"]
    - 生态：React 的 <HoverComment text="Hooks" comment="React 的函数钩子：以 use 开头的函数（useState / useEffect / useMemo），让函数组件也能拥有状态和副作用。useState 存状态、useEffect 处理挂载/更新/卸载时的副作用、useMemo 缓存计算结果——以前只有 class 组件能做的事，函数组件现在也能做。" /> 和 Vue3 Composition API 思路很像，迁移成本低
 3. **总体感受**：Vue 上手快、适合快速开发；React 复杂交互表达力强，大团队协作更规范
 
+→ [回答历史](/private/series/答题历史/前端开发/react-答题记录.md#你实习的时候用-react-做过什么-跟平时写-vue-比体验有什么不一样)
+
 ---
 
 ## 履保方案编辑页那种"下拉联动 + 资金户选择"的表单交互，你是怎么做的？
@@ -57,6 +63,8 @@ categories: ["前端开发"]
 3. **派生数据现算不另存**：联动选项用 useMemo/selector 从已有状态推出，避免多份状态不同步
 4. **校验时机**：提交统一校验（必填、金额精度、时限），AntD Form 用 rules 声明式配置
    - 联动字段变化时触发相关字段校验
+
+→ [回答历史](/private/series/答题历史/前端开发/react-答题记录.md#履保方案编辑页那种-下拉联动-资金户选择-的表单交互-你是怎么做的)
 
 ---
 
@@ -71,3 +79,5 @@ categories: ["前端开发"]
 3. **数据流自己选**：小项目 useState/useContext 够用，大了用 Redux 或 Zustand
    - 与 Vuex/Pinia 同属 Flux 单向数据流思想
 4. **选型体感**：企业项目"脚手架 + 组件库 + 集中状态"三件套是标配，看生态与团队熟悉度
+
+→ [回答历史](/private/series/答题历史/前端开发/react-答题记录.md#umi-ant-design-这种企业级方案解决什么问题-和-vue-生态-vite-vuex-pinia-比有什么异同)

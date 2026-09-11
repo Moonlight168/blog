@@ -13,6 +13,8 @@ order: 6
 2. **简化开发**：通用 Mapper 和 Service 直接用；条件构造器不用手写 SQL
 3. **代码生成**：代码生成器自动生成 entity、mapper、service
 
+→ [回答历史](/private/series/答题历史/框架/mybatis-plus-答题记录.md#mybatis-plus-和-mybatis-有什么区别)
+
 ## MyBatis-Plus 常用注解有哪些？
 
 **锚点**：`@TableName 表名 / @TableId 主键 / @TableField 字段 / @Version 乐观锁 / @TableLogic 逻辑删除`
@@ -44,6 +46,8 @@ private String tempField;
 4. **@Version**：乐观锁版本号字段
 5. **@TableLogic**：逻辑删除字段，自动处理删除操作
 
+→ [回答历史](/private/series/答题历史/框架/mybatis-plus-答题记录.md#mybatis-plus-常用注解有哪些)
+
 ## MyBatis-Plus 如何实现分页？
 
 **锚点**：`分页插件 + Page 对象，框架自动拼 LIMIT`
@@ -67,6 +71,8 @@ IPage<User> result = userMapper.selectPage(page, null);
 ```
 
 3. **自动拼接 LIMIT**：框架自动在 SQL 后面拼接 `LIMIT offset, size`
+
+→ [回答历史](/private/series/答题历史/框架/mybatis-plus-答题记录.md#mybatis-plus-如何实现分页)
 
 ## MyBatis-Plus 条件构造器怎么用？
 
@@ -100,6 +106,8 @@ wrapper.eq(User::getName, "张三")
        .gt(User::getAge, 18);
 ```
 
+→ [回答历史](/private/series/答题历史/框架/mybatis-plus-答题记录.md#mybatis-plus-条件构造器怎么用)
+
 ## MyBatis-Plus 如何批量插入？
 
 **锚点**：`saveBatch 简单 / insertBatchSomeColumn 高性能；本质仍是循环插入`
@@ -107,6 +115,8 @@ wrapper.eq(User::getName, "张三")
 1. **saveBatch（Service 方法）**：`userService.saveBatch(userList);`
 2. **insertBatchSomeColumn（扩展方法）**：需注入 `SqlInjector`，性能更高
 3. **注意**：批量插入本质还是循环插入，没有真正的批量 SQL；要真正的批量 INSERT 需手写 XML
+
+→ [回答历史](/private/series/答题历史/框架/mybatis-plus-答题记录.md#mybatis-plus-如何批量插入)
 
 ## MyBatis-Plus 主键策略有哪些？
 
@@ -116,3 +126,5 @@ wrapper.eq(User::getName, "张三")
 2. **IdType.ASSIGN_ID**：雪花算法生成 ID（Long 类型），分布式唯一
 3. **IdType.ASSIGN_UUID**：生成 UUID 字符串
 4. **IdType.INPUT**：手动输入 ID
+
+→ [回答历史](/private/series/答题历史/框架/mybatis-plus-答题记录.md#mybatis-plus-主键策略有哪些)

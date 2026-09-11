@@ -14,6 +14,8 @@ order: 1
 3. **生态成熟**：工具丰富，社区支持完善
 4. **成本低**：开源免费
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#说一下你对mysql的理解)
+
 ## MySQL 的事务四大特性（ACID）是什么？
 
 **锚点**：`原子性、一致性、隔离性、持久性`
@@ -22,6 +24,8 @@ order: 1
 2. **一致性（Consistency）**：执行前后数据保持一致
 3. **隔离性（Isolation）**：事务间互不干扰
 4. **持久性（Durability）**：事务提交后数据永久保存
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#mysql-的事务四大特性-acid-是什么)
 
 ## Mysql的索引有哪些类型？什么时候使用？
 
@@ -38,6 +42,8 @@ order: 1
    - 联合索引：多列组合，遵循最左前缀原则
 3. **使用场景**：频繁作 WHERE、JOIN、ORDER BY 条件的字段；避免在频繁更新、低选择性列上建索引
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#mysql的索引有哪些类型-什么时候使用)
+
 ## 怎么知道查询有没有走索引？
 
 **锚点**：`EXPLAIN 看执行计划：type 别是 all，key 是实际索引`
@@ -45,6 +51,8 @@ order: 1
 1. **EXPLAIN**：SQL 前加 EXPLAIN 查看执行计划
 2. **type 列**：ref、range、index、all（all = 全表扫描，未用索引）
 3. **key 列**：实际使用的索引；**possible_keys**：可能使用的索引
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#怎么知道查询有没有走索引)
 
 ## 索引什么时候会失效？
 
@@ -58,6 +66,8 @@ order: 1
 6. LIKE 以 `%` 开头
 7. 条件含 IS NULL / IS NOT NULL
 8. 索引列参与运算（如 `WHERE a+1=10`）
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#索引什么时候会失效)
 
 ## 大量数据应该怎么样查询？
 
@@ -75,6 +85,8 @@ order: 1
 > **覆盖索引**：索引包含查询所需的所有列，直接取数据，无需回表查数据行。
 
 [Mysql索引详解](/blogs/数据库/mysql索引详解.md)
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#大量数据应该怎么样查询)
 
 ## 说一下b+树的索引结构，Mysql为什么选用b+树？
 
@@ -95,6 +107,8 @@ order: 1
 
 **比喻**：B 树像传统图书馆每层书架都有书；B+ 树像现代图书馆，目录层只有索引卡片，书全在一楼按编号连续排列。
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#说一下b-树的索引结构-mysql为什么选用b-树)
+
 ## MySQL 的存储引擎有哪些？默认使用哪个？
 
 **锚点**：`InnoDB 默认（事务+行锁），MyISAM 读多写少，Memory 内存表`
@@ -107,6 +121,8 @@ order: 1
 CREATE TABLE users (id int) ENGINE=InnoDB;
 ```
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#mysql-的存储引擎有哪些-默认使用哪个)
+
 ## InnoDB 是如何存储数据的？
 
 **锚点**：`三层：表空间 → 页(16KB) → 行；主键聚簇、二级索引回表`
@@ -116,6 +132,8 @@ CREATE TABLE users (id int) ENGINE=InnoDB;
    - 主键索引：叶子存**整行数据**
    - 二级索引：叶子存**主键值**，查完整数据要"回表"
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#innodb-是如何存储数据的)
+
 ## MySQL为啥不推荐用text字段？
 
 **锚点**：`检索慢、占空间、索引支持有限、维护成本高`
@@ -124,6 +142,8 @@ CREATE TABLE users (id int) ENGINE=InnoDB;
 
 **替代方案**：VARCHAR、拆分表、存文件路径、用 MongoDB
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#mysql为啥不推荐用text字段)
+
 ## 为什么MySQL用B+树，MongoDB用B树?
 
 **锚点**：`MySQL 重范围查询（链表扫描）；MongoDB 重单键查询（中间节点可取数据）`
@@ -131,12 +151,16 @@ CREATE TABLE users (id int) ENGINE=InnoDB;
 1. **MySQL 选 B+ 树**：范围查询高效（叶子链表）；查询稳定（路径等长）；I/O 少（非叶子只存索引）；关系型数据多范围查询排序
 2. **MongoDB 选 B 树**：文档数据大，节点可直接存完整文档；单键查询更快（中间节点即可命中）；对复杂数据类型更灵活；NoSQL 多为键值查询
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#为什么mysql用b-树-mongodb用b树)
+
 ## MySQL热点数据更新会带来哪些问题，如何优化？
 
 **锚点**：`问题：锁竞争/超时/吞吐降/击穿；方案：分片+缓存+异步+乐观锁+读写分离`
 
 1. **问题**：单行锁竞争、事务超时、吞吐下降、缓存击穿
 2. **解决**：分库分表、多级缓存、MQ 异步化、乐观锁、读写分离
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#mysql热点数据更新会带来哪些问题-如何优化)
 
 ## 如果要存IP地址，用什么数据类型比较好？
 
@@ -151,6 +175,8 @@ SELECT INET_NTOA(ip) FROM users;
 
 IPv6：`VARBINARY(16)` 或 `BINARY(16)`，配合 `INET6_ATON()` / `INET6_NTOA()`。
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#如果要存ip地址-用什么数据类型比较好)
+
 ## 数据库性能瓶颈如何优化？
 
 **锚点**：`查询优化 → 架构优化 → 缓存 → 硬件`
@@ -160,11 +186,15 @@ IPv6：`VARBINARY(16)` 或 `BINARY(16)`，配合 `INET6_ATON()` / `INET6_NTOA()`
 - **缓存优化**：Redis 缓存热点数据
 - **硬件优化**：增加内存、使用 SSD
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#数据库性能瓶颈如何优化)
+
 ## 不停服数据迁移怎么做？
 
 **锚点**：`双写 + 灰度切换：全量 → 双写 → 灰度切读 → 全切 → 清理`
 
 全量迁移 → 双写同步 → 灰度切读 → 完全切换 → 清理旧表
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#不停服数据迁移怎么做)
 
 ## 如何优化 SQL 性能？
 
@@ -175,6 +205,8 @@ IPv6：`VARBINARY(16)` 或 `BINARY(16)`，配合 `INET6_ATON()` / `INET6_NTOA()`
 3. 用 `EXPLAIN` 查看执行计划
 4. 避免子查询，尽量用 JOIN
 5. 控制返回行数，分页加 LIMIT
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#如何优化-sql-性能)
 
 ## `OVER` 与 `GROUP BY` 的区别？
 
@@ -196,12 +228,16 @@ SELECT employee_name, department_id,
 FROM employees;
 ```
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#over-与-group-by-的区别)
+
 ## SQL语句关键字顺序和执行顺序？
 
 **锚点**：`关键字：SELECT→FROM→WHERE→GROUP BY→HAVING→ORDER BY→LIMIT；执行：FROM→WHERE→GROUP BY→HAVING→SELECT→ORDER BY`
 
 1. **关键字顺序**：SELECT → FROM → WHERE → GROUP BY → HAVING → ORDER BY → LIMIT
 2. **执行顺序**：FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#sql语句关键字顺序和执行顺序)
 
 ## 一条 SQL 在 MySQL 中的执行过程？
 
@@ -215,11 +251,15 @@ FROM employees;
 6. **存储引擎**：InnoDB/MyISAM 真正读写数据
 7. **返回结果**：数据逐层返回客户端
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#一条-sql-在-mysql-中的执行过程)
+
 ## 为什么数据库连接很消耗资源？
 
 **锚点**：`TCP 握手 + 认证 + 资源分配，频繁创建销毁开销大`
 
 需要 TCP 握手、身份认证、资源分配，频繁创建/销毁开销大，所以用连接池复用。
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#为什么数据库连接很消耗资源)
 
 ## 什么是数据库连接池？
 
@@ -227,17 +267,23 @@ FROM employees;
 
 预先创建连接并复用，降低连接开销。常见实现：HikariCP（推荐，轻量高效）、Druid（阿里开源，功能全面）、C3P0（较老，配置复杂）。
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#什么是数据库连接池)
+
 ## 连接池如何降低开销？
 
 **锚点**：`复用已有连接，统一管理数量`
 
 避免频繁建立/关闭连接，复用已有连接，统一管理连接数量。
 
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#连接池如何降低开销)
+
 ## 连接池如何实现？
 
 **锚点**：`初始化 → 获取 → 使用 → 归还；核心：最大连接数、空闲检测、保活、等待队列`
 
 初始化创建连接 → 获取连接 → 使用 → 归还连接池。核心机制：最大连接数、空闲检测、连接保活、等待队列。
+
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#连接池如何实现)
 
 ## 如何分析MySQL慢查询？
 
