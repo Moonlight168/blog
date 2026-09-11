@@ -39,7 +39,10 @@ export class QuestionIndex {
         seen.add(question.id);
         const hash = createHash("sha256").update(`${question.title}\0${question.answer}`).digest("hex");
         const old = this.db.prepare("SELECT content_hash,embedding,embedding_model FROM questions WHERE id=?").get(question.id);
-        if (!old || old.content_hash !== hash) changed.push({ ...question, hash, series, chapter, old });
+        const modelChanged = this.embeddingClient.enabled && old?.embedding_model !== this.embeddingClient.config.model;
+        if (!old || old.content_hash !== hash || (this.embeddingClient.enabled && (!old.embedding || modelChanged))) {
+          changed.push({ ...question, hash, series, chapter, old });
+        }
       }
     }
     this.db.exec("BEGIN IMMEDIATE");
@@ -53,10 +56,14 @@ export class QuestionIndex {
       throw error;
     }
     if (this.embeddingClient.enabled && changed.length) {
-      for (let offset = 0; offset < changed.length; offset += 64) {
-        const batch = changed.slice(offset, offset + 64);
-        const vectors = await this.embeddingClient.embed(batch.map((q) => `${q.title}\n${q.answerExcerpt}`));
-        batch.forEach((question, index) => this.#setEmbedding(question.id, vectors[index]));
+      try {
+        for (let offset = 0; offset < changed.length; offset += 64) {
+          const batch = changed.slice(offset, offset + 64);
+          const vectors = await this.embeddingClient.embed(batch.map((q) => `${q.title}\n${q.answerExcerpt}`));
+          batch.forEach((question, index) => this.#setEmbedding(question.id, vectors[index]));
+        }
+      } catch (error) {
+        console.error("Embedding 更新失败，本次使用本地检索", error);
       }
     }
     return { total: seen.size, changed: changed.length };
@@ -65,7 +72,8 @@ export class QuestionIndex {
   #upsert(q, embedding) {
     this.db.prepare(`INSERT INTO questions(id,series,chapter,title,normalized_title,answer_excerpt,source_path,history_url,content_hash,embedding,embedding_model,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,normalized_title=excluded.normalized_title,
-      answer_excerpt=excluded.answer_excerpt,history_url=excluded.history_url,content_hash=excluded.content_hash,updated_at=excluded.updated_at`)
+      answer_excerpt=excluded.answer_excerpt,history_url=excluded.history_url,content_hash=excluded.content_hash,
+      embedding=excluded.embedding,embedding_model=excluded.embedding_model,updated_at=excluded.updated_at`)
       .run(q.id, q.series, q.chapter, q.title, q.normalizedTitle, q.answerExcerpt, q.sourcePath, q.historyUrl,
         q.hash, embedding, null, new Date().toISOString());
     this.db.prepare("DELETE FROM questions_fts WHERE id=?").run(q.id);
@@ -110,12 +118,16 @@ export class QuestionIndex {
     } catch { lexical = []; }
     let semantic = [];
     if (this.embeddingClient.enabled) {
-      const [query] = await this.embeddingClient.embed([title]);
-      semantic = this.db.prepare("SELECT id,embedding FROM questions WHERE embedding IS NOT NULL").all()
-        .map((row) => ({ id: row.id, score: cosineSimilarity(query, JSON.parse(row.embedding)) }))
-        .sort((a, b) => b.score - a.score).slice(0, 10).map((row) => row.id);
+      try {
+        const [query] = await this.embeddingClient.embed([title]);
+        semantic = this.db.prepare("SELECT id,embedding FROM questions WHERE embedding IS NOT NULL").all()
+          .map((row) => ({ id: row.id, score: cosineSimilarity(query, JSON.parse(row.embedding)) }))
+          .sort((a, b) => b.score - a.score).slice(0, 10).map((row) => row.id);
+      } catch (error) {
+        console.error("Embedding 查询失败，本次仅使用精确匹配与 FTS5", error);
+      }
     }
     const ids = reciprocalRankFusion([exact, lexical, semantic]).slice(0, limit).map((row) => row.id);
-    return ids.map((id) => this.db.prepare("SELECT id,title,answer_excerpt,source_path,history_url FROM questions WHERE id=?").get(id));
+    return ids.map((id) => this.db.prepare("SELECT id,title,normalized_title,answer_excerpt,source_path,history_url FROM questions WHERE id=?").get(id));
   }
 }

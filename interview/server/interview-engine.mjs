@@ -37,14 +37,22 @@ export class InterviewEngine {
       messages.push({ role: "assistant", kind: "evaluation", content: evaluation.comment, evaluation });
       session.completedCount = (session.completedCount ?? 0) + 1;
     }
-    if (ending) {
+    const nextPaperIndex = (session.paperIndex ?? 0) + 1;
+    const paperFinished = session.mode === "written" && nextPaperIndex >= (session.paperQuestions?.length ?? 0);
+    if (ending || paperFinished) {
       session.status = "completed";
       session.endedAt = new Date().toISOString();
       session.answerFragments = [];
       messages.push({ role: "assistant", kind: "summary", content: await this.agent.summarize({ session }) });
       return { session, messages };
     }
-    const next = await this.agent.generateQuestion({ session });
+    let next;
+    if (session.mode === "written") {
+      session.paperIndex = nextPaperIndex;
+      next = session.paperQuestions[nextPaperIndex];
+    } else {
+      next = await this.agent.generateQuestion({ session });
+    }
     session.currentQuestion = next;
     session.answerFragments = [];
     messages.push({ role: "assistant", kind: "question", content: next.prompt ?? next.title });

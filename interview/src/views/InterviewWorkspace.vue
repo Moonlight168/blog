@@ -22,6 +22,7 @@ const draft = ref("");
 const chat = ref<HTMLElement>();
 const now = ref(Date.now());
 let timer: number | undefined;
+let lastExpirySync = 0;
 
 const chapters = computed<Chapter[]>(() => topics.value.find((item) => item.name === series.value)?.chapters ?? []);
 const active = computed(() => session.value?.status === "active");
@@ -34,7 +35,7 @@ const timerText = computed(() => `${String(Math.floor(secondsLeft.value / 60)).p
 async function loadBootstrap() {
   loading.value = true;
   try {
-    const data = await api<{ resumeDir: string; resumes: typeof resumes.value; topics: TopicSeries[]; embeddingEnabled: boolean }>(`/api/bootstrap?resumeDir=${encodeURIComponent(resumeDir.value)}`);
+    const data = await api<{ resumeDir: string; resumes: typeof resumes.value; topics: TopicSeries[]; embeddingEnabled: boolean }>("/api/bootstrap");
     resumeDir.value = data.resumeDir; resumes.value = data.resumes; topics.value = data.topics; embeddingEnabled.value = data.embeddingEnabled;
     if (!resumePath.value && resumes.value.length) resumePath.value = resumes.value[0].path;
     if (!series.value && topics.value.length) series.value = topics.value[0].name;
@@ -50,6 +51,16 @@ async function restore() {
     const data = await api<{ session: Session; messages: Message[] }>(`/api/sessions/${id}`);
     session.value = data.session; messages.value = data.messages;
   } catch { localStorage.removeItem("interview-session"); }
+}
+
+async function syncExpiredSession() {
+  if (!session.value || Date.now() - lastExpirySync < 5_000) return;
+  lastExpirySync = Date.now();
+  try {
+    const data = await api<{ session: Session; messages: Message[] }>(`/api/sessions/${session.value.id}`);
+    session.value = data.session; messages.value = data.messages;
+    if (data.session.status !== "active") localStorage.removeItem("interview-session");
+  } catch { /* 下一次轮询重试 */ }
 }
 
 async function start() {
@@ -82,7 +93,10 @@ function newInterview() { session.value = null; messages.value = []; localStorag
 
 onMounted(async () => {
   await Promise.all([loadBootstrap(), restore()]);
-  timer = window.setInterval(() => { now.value = Date.now(); }, 1000);
+  timer = window.setInterval(() => {
+    now.value = Date.now();
+    if (active.value && secondsLeft.value === 0) void syncExpiredSession();
+  }, 1000);
 });
 onBeforeUnmount(() => window.clearInterval(timer));
 </script>
@@ -96,7 +110,8 @@ onBeforeUnmount(() => window.clearInterval(timer));
       <n-spin :show="loading">
         <div class="form-stack">
           <label>简历目录</label>
-          <div class="inline"><n-input v-model:value="resumeDir" :disabled="active" /><n-button :disabled="active" @click="loadBootstrap">刷新</n-button></div>
+          <div class="inline"><n-input v-model:value="resumeDir" disabled /><n-button :disabled="active" @click="loadBootstrap">刷新</n-button></div>
+          <small class="field-note">目录通过 interview/.env 的 INTERVIEW_RESUME_DIR 配置。</small>
           <label>已有简历</label>
           <n-select v-model:value="resumePath" :disabled="active" filterable :options="resumes.map(r => ({ label: r.name, value: r.path }))" />
           <label>Series</label>
