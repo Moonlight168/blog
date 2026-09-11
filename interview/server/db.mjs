@@ -1,0 +1,63 @@
+import fs from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
+export function openDatabase(file) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const db = new DatabaseSync(file);
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA busy_timeout = 5000;
+    CREATE TABLE IF NOT EXISTS questions (
+      id TEXT PRIMARY KEY, series TEXT NOT NULL, chapter TEXT NOT NULL,
+      title TEXT NOT NULL, normalized_title TEXT NOT NULL, answer_excerpt TEXT NOT NULL,
+      source_path TEXT NOT NULL, history_url TEXT, content_hash TEXT NOT NULL,
+      embedding TEXT, embedding_model TEXT, updated_at TEXT NOT NULL
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS questions_fts USING fts5(id UNINDEXED, title, grams, answer);
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY, resume_path TEXT NOT NULL, series TEXT NOT NULL, chapter_path TEXT NOT NULL,
+      mode TEXT NOT NULL, duration_minutes INTEGER NOT NULL, status TEXT NOT NULL,
+      started_at TEXT NOT NULL, ended_at TEXT, current_question TEXT,
+      answer_fragments TEXT NOT NULL DEFAULT '[]', completed_count INTEGER NOT NULL DEFAULT 0,
+      skill_snapshot TEXT NOT NULL, resume_excerpt TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL,
+      kind TEXT NOT NULL, content TEXT NOT NULL, payload TEXT, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, question_title TEXT NOT NULL,
+      raw_answer TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+  `);
+  return db;
+}
+
+export function rowToSession(row) {
+  if (!row) return null;
+  return {
+    id: row.id, resumePath: row.resume_path, series: row.series, chapterPath: row.chapter_path,
+    mode: row.mode, durationMinutes: row.duration_minutes, status: row.status,
+    startedAt: row.started_at, endedAt: row.ended_at,
+    currentQuestion: row.current_question ? JSON.parse(row.current_question) : null,
+    answerFragments: JSON.parse(row.answer_fragments || "[]"), completedCount: row.completed_count,
+    skillSnapshot: row.skill_snapshot, resumeExcerpt: row.resume_excerpt,
+  };
+}
+
+export function saveSession(db, session) {
+  db.prepare(`INSERT INTO sessions
+    (id,resume_path,series,chapter_path,mode,duration_minutes,status,started_at,ended_at,current_question,answer_fragments,completed_count,skill_snapshot,resume_excerpt)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET status=excluded.status,ended_at=excluded.ended_at,current_question=excluded.current_question,
+      answer_fragments=excluded.answer_fragments,completed_count=excluded.completed_count`)
+    .run(session.id, session.resumePath, session.series, session.chapterPath, session.mode, session.durationMinutes,
+      session.status, session.startedAt, session.endedAt ?? null, JSON.stringify(session.currentQuestion),
+      JSON.stringify(session.answerFragments), session.completedCount ?? 0, session.skillSnapshot, session.resumeExcerpt);
+}
+
+export function addMessage(db, sessionId, message) {
+  db.prepare("INSERT INTO messages(session_id,role,kind,content,payload,created_at) VALUES(?,?,?,?,?,?)")
+    .run(sessionId, message.role, message.kind || "text", message.content, JSON.stringify(message.evaluation ?? null), new Date().toISOString());
+}
