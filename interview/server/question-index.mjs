@@ -117,9 +117,10 @@ export class QuestionIndex {
 
   getById(id) { return this.db.prepare("SELECT * FROM questions WHERE id=?").get(id); }
 
-  samples(sourcePath, limit = 5) {
-    return this.db.prepare("SELECT title,answer_excerpt FROM questions WHERE source_path=? ORDER BY updated_at DESC LIMIT ?")
-      .all(sourcePath, limit);
+  /** 某章节已有的题目标题——章节模式的考点表直接由它推出来，不用调模型 */
+  titles(sourcePath, limit = 40) {
+    return this.db.prepare("SELECT title FROM questions WHERE source_path=? ORDER BY updated_at DESC LIMIT ?")
+      .all(sourcePath, limit).map((row) => row.title);
   }
 
   #detail(id) {

@@ -9,6 +9,7 @@ import { asrEnabled, transcribe } from "./asr.mjs";
 import { config } from "./config.mjs";
 import { addMessage, openDatabase, rowToSession, saveSession } from "./db.mjs";
 import { EmbeddingClient } from "./embedding-client.mjs";
+import { ensurePlan, focusPayload, resumeSlice, takeFocuses } from "./focus-plan.mjs";
 import { readHistorySection } from "./history.mjs";
 import { InterviewEngine } from "./interview-engine.mjs";
 import { QuestionIndex } from "./question-index.mjs";
@@ -101,6 +102,44 @@ function ruleSnapshot() {
   return `${skill}\n\n# 面试宝典关键规则快照\n${keyRules}`;
 }
 
+/**
+ * 出题时要避开「已经问过的题」。只取标题、不带答案和摘要（省 token，也足够模型避让）。
+ * 本场：这场答过的 + 当前这题；跨场：同简历（岗位定制时再加同 JD）最近答过的。
+ * 挂在 session 上临时传递，不落库。
+ */
+function askedQuestionTitles(session) {
+  const rows = db.prepare(`
+    SELECT a.question_title AS title
+    FROM attempts a JOIN sessions s ON s.id = a.session_id
+    WHERE a.session_id = ? OR (s.resume_path = ? AND (? = '' OR s.jd_path = ?))
+    ORDER BY a.id DESC LIMIT 40
+  `).all(session.id, session.resumePath, session.jdPath ?? "", session.jdPath ?? "");
+  const titles = [];
+  if (session.currentQuestion?.title) titles.push(session.currentQuestion.title);
+  for (const row of rows) if (row.title && !titles.includes(row.title)) titles.push(row.title);
+  return titles.slice(0, 20);
+}
+
+/** 章节名（章节模式的考点表用章节名兜底第一节） */
+function chapterNameOf(session) {
+  return session.chapterPath ? path.basename(session.chapterPath, ".md") : "";
+}
+
+/**
+ * 出题前的准备：算好「已经问过什么」和「本轮考哪个考点」。
+ * 考点计划按「简历 + JD」（或简历 + 章节）缓存、游标跨场共享，所以这里每题只多一次 SQL 读，
+ * 不会重复调模型。计划生成失败时留空，出题自动退回「整篇简历」的老路。
+ */
+async function prepareGeneration(session, count = 1) {
+  session.askedQuestions = askedQuestionTitles(session);
+  const plan = await ensurePlan({ db, agent, questionIndex, session, chapterName: chapterNameOf(session) });
+  const focuses = takeFocuses(db, plan, count);
+  if (!focuses.length) return;
+  if (count > 1) { session.nextFocuses = focuses; return; }
+  session.nextFocus = focuses[0];
+  session.resumeSnippet = resumeSlice(session.resumeExcerpt, focuses[0]);
+}
+
 function messagesFor(sessionId) {
   return db.prepare("SELECT id,role,kind,content,payload,created_at AS createdAt FROM messages WHERE session_id=? ORDER BY id").all(sessionId)
     .map((row) => ({ ...row, payload: row.payload ? JSON.parse(row.payload) : null }));
@@ -189,13 +228,19 @@ async function api(request, response, url) {
     };
     if (session.mode === "written") {
       const count = Math.min(10, Math.max(3, Math.floor(session.durationMinutes / 6)));
+      await prepareGeneration(session, count);
       session.paperQuestions = await agent.generatePaper({ session, count });
       session.currentQuestion = session.paperQuestions[0];
     } else {
+      await prepareGeneration(session, 1);
       session.currentQuestion = await agent.generateQuestion({ session });
     }
     saveSession(db, session);
-    addMessage(db, session.id, { role: "assistant", kind: "question", content: session.currentQuestion.prompt ?? session.currentQuestion.title });
+    addMessage(db, session.id, {
+      role: "assistant", kind: "question",
+      content: session.currentQuestion.prompt ?? session.currentQuestion.title,
+      payload: focusPayload(session.nextFocus ?? session.nextFocuses?.[0]),
+    });
     return json(response, 201, { session, messages: messagesFor(session.id) });
   }
   const messageMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
@@ -215,6 +260,8 @@ async function api(request, response, url) {
     const content = String(input.content ?? "").trim();
     if (!action && !content) return json(response, 400, { error: "消息不能为空" });
 
+    // 只有「下一题」会出题；出题前把已问过的题和本轮考点挂到 session 上供提示词使用
+    if (action === "next") await prepareGeneration(session, 1);
     const result = action
       ? await engine.advance(session, action === "end")
       : await engine.handle(session, expired(session) ? "结束" : content);

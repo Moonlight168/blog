@@ -14,7 +14,7 @@ async function withStubbedChat(reply, run) {
   try {
     const agent = new InterviewAgent({
       config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" },
-      questionIndex: { samples: () => [], topics: () => [{ name: "Java" }, { name: "框架" }] },
+      questionIndex: { topics: () => [{ name: "Java" }, { name: "框架" }] },
     });
     await run(agent, () => bodies.at(-1));
   } finally { globalThis.fetch = previousFetch; }
@@ -67,17 +67,66 @@ test("选了目标 JD 时，总评的提示词里也要带上它", async () => {
   });
 });
 
-test("evaluation includes the active session rule snapshot", async () => {
+test("规则快照只给真正产出格式化内容的调用，点评/分类不再白带（省 token）", async () => {
+  const bodies = [];
   const previousFetch = globalThis.fetch;
-  let requestBody;
   globalThis.fetch = async (_url, options) => {
-    requestBody = JSON.parse(options.body);
-    return new Response(JSON.stringify({ choices: [{ message: { content: '{"score":88,"comment":"清楚"}' } }] }), { status: 200 });
+    bodies.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"score":88,"comment":"清楚","action":"answer","title":"题？","prompt":"题？","standardAnswer":"1. **要点**：短句"}' } }] }), { status: 200 });
   };
   try {
-    const agent = new InterviewAgent({ config: { baseUrl: "https://example.test/v1", apiKey: "key", model: "model" }, questionIndex: {} });
-    const result = await agent.evaluate({ question: { title: "问题？" }, rawAnswer: "回答", session: { skillSnapshot: "会话规则" } });
-    assert.equal(result.score, 88);
-    assert.match(requestBody.messages[0].content, /会话规则/);
+    const agent = new InterviewAgent({ config: { baseUrl: "https://example.test/v1", apiKey: "key", model: "model" }, questionIndex: { topics: () => [] } });
+    const session = { skillSnapshot: "会话规则快照正文", currentQuestion: { title: "题？" }, series: "Java", chapterPath: "Java/JVM.md", mode: "interview", resumeExcerpt: "简历" };
+    await agent.evaluate({ question: { title: "问题？" }, rawAnswer: "回答", session });
+    assert.doesNotMatch(bodies.at(-1).messages[0].content, /会话规则快照正文/, "点评不需要格式规范");
+    await agent.classify({ session, text: "我不太清楚" });
+    assert.doesNotMatch(bodies.at(-1).messages[0].content, /会话规则快照正文/, "分类不需要格式规范");
+    await agent.generateQuestion({ session });
+    assert.match(bodies.at(-1).messages[0].content, /会话规则快照正文/, "出题仍然需要（格式靠它约束）");
   } finally { globalThis.fetch = previousFetch; }
+});
+
+test("出题用高温、判定类调用用低温", async () => {
+  const bodies = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    bodies.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"score":88,"comment":"清楚","title":"题？","prompt":"题？","standardAnswer":"1. **要点**：短句","standardAnswerAgain":"x"}' } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://example.test/v1", apiKey: "key", model: "model" }, questionIndex: { topics: () => [] } });
+    const session = { skillSnapshot: "", currentQuestion: { title: "题？" }, series: "Java", chapterPath: "Java/JVM.md", mode: "interview", resumeExcerpt: "简历" };
+    await agent.generateQuestion({ session });
+    const creative = bodies.at(-1).temperature;
+    await agent.evaluate({ question: { title: "问题？" }, rawAnswer: "回答", session });
+    const stable = bodies.at(-1).temperature;
+    assert.ok(creative > stable, `出题温度应高于点评：${creative} vs ${stable}`);
+    assert.equal(stable, 0.35);
+  } finally { globalThis.fetch = previousFetch; }
+});
+
+test("出题提示词带上「已问过的题」，只给标题且放在最末尾", async () => {
+  await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句" }, async (agent, lastBody) => {
+    await agent.generateQuestion({
+      session: {
+        series: "Java", chapterPath: "Java/JVM.md", mode: "interview", resumeExcerpt: "简历", skillSnapshot: "",
+        askedQuestions: ["线上 Full GC 怎么排查？", "Redis 缓存穿透怎么防？"],
+      },
+    });
+    const user = lastBody().messages[1].content;
+    assert.match(user, /已经问过的题目/);
+    assert.match(user, /- 线上 Full GC 怎么排查？/);
+    assert.ok(user.trimEnd().endsWith("- Redis 缓存穿透怎么防？"), "变化的部分要放在最后，好让前缀命中缓存");
+    // 已问清单只给标题：没有答案/摘要
+    assert.doesNotMatch(user, /标准答案|answer_excerpt/);
+  });
+});
+
+test("出题不再注入「章节已有题目样例」（该功能已移除）", async () => {
+  await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句" }, async (agent, lastBody) => {
+    await agent.generateQuestion({
+      session: { series: "Java", chapterPath: "Java/JVM.md", mode: "interview", resumeExcerpt: "简历", skillSnapshot: "" },
+    });
+    assert.doesNotMatch(JSON.stringify(lastBody().messages), /样例/);
+  });
 });

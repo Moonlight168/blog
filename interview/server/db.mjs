@@ -34,6 +34,12 @@ export function openDatabase(file) {
       raw_answer TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL, attempt_key TEXT,
       standard_answer TEXT NOT NULL DEFAULT ''
     );
+    -- 考点计划：按「简历 + JD」（或章节）缓存一份有序考点表，cursor 是跨场共享的进度。
+    -- cursor 单调递增，实际考点 = plan[cursor % plan.length]，第几轮 = floor(cursor / plan.length) + 1。
+    CREATE TABLE IF NOT EXISTS focus_plans (
+      key TEXT PRIMARY KEY, kind TEXT NOT NULL, plan TEXT NOT NULL,
+      cursor INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
+    );
   `);
   const columns = new Set(db.prepare("PRAGMA table_info(sessions)").all().map((row) => row.name));
   // 目标 JD：出题与总评都会带上它
@@ -84,5 +90,5 @@ export function saveSession(db, session) {
 
 export function addMessage(db, sessionId, message) {
   db.prepare("INSERT INTO messages(session_id,role,kind,content,payload,created_at) VALUES(?,?,?,?,?,?)")
-    .run(sessionId, message.role, message.kind || "text", message.content, JSON.stringify(message.evaluation ?? null), new Date().toISOString());
+    .run(sessionId, message.role, message.kind || "text", message.content, JSON.stringify(message.payload ?? message.evaluation ?? null), new Date().toISOString());
 }
