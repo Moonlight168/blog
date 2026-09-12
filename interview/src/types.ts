@@ -5,4 +5,6 @@ export interface Session {
   id: string; resumePath: string; series: string; chapterPath: string; mode: string;
   durationMinutes: number; status: string; startedAt: string; endedAt?: string;
   completedCount: number; currentQuestion?: { title: string };
+  /** 目标 JD 的路径；没选则为空串 */
+  jdPath?: string;
 }

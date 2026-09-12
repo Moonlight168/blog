@@ -42,6 +42,40 @@ function historyLocation({ privateHistoryRoot, series, chapter }) {
   return { file, url: `/private/series/答题历史/${encodedSeries}/${encodedChapter}` };
 }
 
+function listMarkdown(dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) listMarkdown(full, out);
+    else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
+  }
+  return out;
+}
+
+/**
+ * 岗位定制模式下没有指定章节，由模型给出的 topic / series 决定归档位置：
+ * 全库已有同名章节就归过去，没有就在它选的分类下新建。
+ */
+function resolveJdTarget({ question, knowledgeRoot }) {
+  const topic = String(question.topic ?? "").trim();
+  const series = String(question.series ?? "").trim();
+  if (!topic) throw new Error("岗位定制模式下缺少题目归属的章节");
+  if (/[\\/]/.test(topic)) throw new Error(`章节名不能包含路径分隔符：${topic}`);
+
+  const wanted = topic.toLowerCase();
+  for (const file of listMarkdown(knowledgeRoot)) {
+    if (path.basename(file, ".md").toLowerCase() === wanted) {
+      return path.relative(knowledgeRoot, file).split(path.sep).join("/");
+    }
+  }
+
+  if (!series || /[\\/]/.test(series)) throw new Error(`新建章节需要合法的知识分类名：${series || "(空)"}`);
+  const target = path.join(knowledgeRoot, series, `${topic}.md`);
+  ensureInside(knowledgeRoot, target);
+  return path.relative(knowledgeRoot, target).split(path.sep).join("/");
+}
+
 /**
  * 把一道题按《格式规范》写进知识库；校验不过时先让模型按规范重写再试。
  * 返回 { ok: true, historyUrl } 或 { ok: false, reason }。
@@ -90,7 +124,9 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
     const exact = candidates.find((candidate) => candidate.normalized_title === normalizeTitle(question.title));
     const decision = exact ? { kind: "existing", questionId: exact.id } : await agent.judgeDuplicate({ title: question.title, candidates });
     const existing = decision.kind === "existing" ? questionIndex.getById(decision.questionId) : null;
-    const sourceRelative = existing?.source_path ?? session.chapterPath;
+    // 岗位定制模式没有指定章节，改由题目自带的 topic/series 决定归档位置
+    const sourceRelative = existing?.source_path
+      ?? (session.mode === "jd" ? resolveJdTarget({ question, knowledgeRoot }) : session.chapterPath);
     const sourceFile = path.join(knowledgeRoot, sourceRelative);
     ensureInside(knowledgeRoot, sourceFile);
     const series = sourceRelative.split("/")[0];

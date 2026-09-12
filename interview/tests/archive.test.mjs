@@ -33,11 +33,60 @@ function makeEnv({ candidates = [], existing = null, reformat = null } = {}) {
   };
   return {
     calls, agent, questionIndex, knowledgeRoot, privateHistoryRoot,
+    // 暴露出来给「新建章节」的断言用
     knowledgeFile: path.join(knowledgeRoot, "Java", "多线程.md"),
     historyFile: path.join(privateHistoryRoot, "Java", "多线程-答题记录.md"),
     archive: createArchive({ questionIndex, agent, knowledgeRoot, privateHistoryRoot, db: openDatabase(path.join(root, "test.sqlite")) }),
   };
 }
+
+const COMPLIANT = "**锚点**：`状态定边界`\n\n1. **边界清晰**：用状态约束流程";
+const JD_SESSION = { id: "session-jd", completedCount: 0, mode: "jd", chapterPath: "" };
+
+test("岗位定制：已有同名章节时归到那个文件", async () => {
+  const env = makeEnv();
+  const result = await env.archive({
+    session: JD_SESSION,
+    question: { title: "为什么需要状态机？", standardAnswer: COMPLIANT, topic: "多线程", series: "Java" },
+    rawAnswer: "回答", evaluation: { score: 80, comment: "清楚" },
+  });
+
+  assert.equal(result?.notice, undefined);
+  assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /## 为什么需要状态机？/, "应归到已有的 多线程.md");
+});
+
+test("岗位定制：没有同名章节时按模型选的分类新建", async () => {
+  const env = makeEnv();
+  const result = await env.archive({
+    session: JD_SESSION,
+    question: { title: "G1 和 CMS 怎么选？", standardAnswer: COMPLIANT, topic: "JVM 调优", series: "Java" },
+    rawAnswer: "回答", evaluation: { score: 70, comment: "还行" },
+  });
+
+  assert.equal(result?.notice, undefined);
+  const created = path.join(env.knowledgeRoot, "Java", "JVM 调优.md");
+  assert.ok(fs.existsSync(created), "应按 topic 新建章节文件");
+  assert.match(fs.readFileSync(created, "utf8"), /## G1 和 CMS 怎么选？/);
+  assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /^# 多线程/, "不该动到别的章节");
+});
+
+test("岗位定制：模型没给 topic 时报错，不静默写错地方", async () => {
+  const env = makeEnv();
+  await assert.rejects(() => env.archive({
+    session: JD_SESSION,
+    question: { title: "题？", standardAnswer: COMPLIANT, series: "Java" },
+    rawAnswer: "回答", evaluation: { score: 60, comment: "凑合" },
+  }), /缺少题目归属的章节/);
+});
+
+test("岗位定制：topic 带路径分隔符时拒绝写入", async () => {
+  const env = makeEnv();
+  await assert.rejects(() => env.archive({
+    session: JD_SESSION,
+    question: { title: "题？", standardAnswer: COMPLIANT, topic: "../../etc/passwd", series: "Java" },
+    rawAnswer: "回答", evaluation: { score: 60, comment: "凑合" },
+  }), /路径分隔符/);
+});
 
 test("答案不合规范时，先让模型按规范重写再入库", async () => {
   const compliant = "**锚点**：`先看频率`\n\n1. **看 GC 频率**：jstat 观察老年代增长\n   - `jstat -gcutil <pid> 1000` 看 O 区与 FGC 增速";

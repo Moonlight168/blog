@@ -2,8 +2,8 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { NButton, NSpin, useMessage } from "naive-ui";
-import MarkdownIt from "markdown-it";
 import { api } from "../api";
+import { renderMarkdown } from "../markdown";
 import { durationLabel, resumeLabel, statLabel, timeLabel, topicLabel } from "../format";
 import type { Message, Session } from "../types";
 
@@ -11,7 +11,6 @@ const route = useRoute(); const loading = ref(true);
 const message = useMessage();
 const refilingId = ref<number | null>(null);
 /** 总评是三行固定格式，breaks:true 让单换行也生效；html:false 已转义原始 HTML */
-const markdown = new MarkdownIt({ html: false, linkify: false, breaks: true });
 interface Attempt {
   id: number; questionTitle: string; rawAnswer: string;
   evaluation: { score: number; comment: string };
@@ -49,6 +48,11 @@ function docsLink(url: string | null) {
   const base = detail.value?.docsBaseUrl;
   return url && base ? `${base}${url.replace(/\.md(?=#|$)/, ".html")}` : "";
 }
+/** JD 的文件名（去掉路径与后缀），和简历的显示口径一致 */
+function jdLabel(jdPath: string) {
+  return (jdPath ?? "").split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ?? "";
+}
+
 /** 服务端已经拼好带锚点的相对 URL（/series/knowledge/…​.html#锚点），这里只补基址 */
 function knowledgeLink(url: string | null) {
   const base = detail.value?.docsBaseUrl;
@@ -69,13 +73,14 @@ onMounted(async () => { try { detail.value = await api(`/api/history/${route.par
             {{ resumeLabel(detail.session.resumePath) }}<span v-if="detail.session.durationMinutes"> · {{ durationLabel(detail.session.durationMinutes) }}</span>
             · {{ timeLabel(detail.session.startedAt) }}
           </p>
+          <p v-if="detail.session.jdPath" class="hero-jd">目标岗位：{{ jdLabel(detail.session.jdPath) }}</p>
         </div>
         <span class="hero-stat">{{ statLabel(detail.averageScore, detail.questionCount, detail.archivedCount) }}</span>
       </div>
       <section v-if="summary" class="review-summary">
         <span class="message-label">本场总评</span>
         <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
-        <div class="summary-body" v-html="markdown.render(summary)" />
+        <div class="summary-body" v-html="renderMarkdown(summary)" />
       </section>
       <div class="attempts">
         <article v-for="(attempt, index) in detail.attempts" :key="index" class="attempt-card">
@@ -98,7 +103,7 @@ onMounted(async () => { try { detail.value = await api(`/api/history/${route.par
             <h4>我的回答</h4><p>{{ attempt.rawAnswer }}</p>
             <h4>面试官点评</h4>
             <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
-            <div class="attempt-comment" v-html="markdown.render(attempt.evaluation.comment)" />
+            <div class="attempt-comment" v-html="renderMarkdown(attempt.evaluation.comment)" />
           </div>
         </article>
       </div>
