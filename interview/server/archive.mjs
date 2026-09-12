@@ -42,6 +42,46 @@ function historyLocation({ privateHistoryRoot, series, chapter }) {
   return { file, url: `/private/series/答题历史/${encodedSeries}/${encodedChapter}` };
 }
 
+/**
+ * 把一道题按《格式规范》写进知识库；校验不过时先让模型按规范重写再试。
+ * 返回 { ok: true, historyUrl } 或 { ok: false, reason }。
+ */
+async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, sourceRelative, title, standardAnswer }) {
+  const series = sourceRelative.split("/")[0];
+  const chapter = path.basename(sourceRelative, ".md");
+  const history = historyLocation({ privateHistoryRoot, series, chapter });
+  const sourceFile = path.join(knowledgeRoot, sourceRelative);
+  ensureInside(knowledgeRoot, sourceFile);
+  ensureInside(privateHistoryRoot, history.file);
+  const historyUrl = `${history.url}#${slugify(title)}`;
+
+  const append = (answer) => appendAtomically(sourceFile, `\n${buildQuestionBlock({ title, answer, historyUrl })}`);
+  try {
+    append(standardAnswer);
+    return { ok: true, historyUrl };
+  } catch (error) {
+    // 模型偶尔写出不合规范的主句。归档时模型就在手边，先让它按规范重写一遍再试，
+    // 好过把整道题丢掉。
+    try {
+      const hint = error.message.replace(/^题目不符合《面试宝典文章格式规范》：/, "");
+      const rewritten = await agent.reformatAnswer({ question: { title, standardAnswer }, errors: [hint] });
+      append(rewritten);
+      return { ok: true, historyUrl };
+    } catch (retryError) {
+      return { ok: false, reason: retryError.message };
+    }
+  }
+}
+
+/** 补录：把归档时被跳过的一道题重新写进知识库（详情页的「再次归档」用）。 */
+export async function refileQuestion({ agent, questionIndex, knowledgeRoot, privateHistoryRoot, chapterPath, title, standardAnswer }) {
+  const written = await writeQuestionBlock({
+    agent, knowledgeRoot, privateHistoryRoot, sourceRelative: chapterPath, title, standardAnswer,
+  });
+  if (written.ok) await questionIndex.refresh();
+  return written;
+}
+
 export function createArchive({ questionIndex, agent, knowledgeRoot, privateHistoryRoot, db }) {
   return async ({ session, question, rawAnswer, evaluation }) => {
     const attemptKey = `${session.id}:${session.completedCount ?? 0}:${normalizeTitle(question.title)}`;
@@ -65,18 +105,25 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
     const historyOriginal = historyExisted ? fs.readFileSync(history.file, "utf8") : "";
     const historyNext = mergeHistory(historyOriginal, { chapter, title: existing?.title ?? question.title, date, rawAnswer });
     let attemptId = null;
+    let notice = null;
     try {
       if (!existing) {
-        const historyUrl = `${history.url}#${slugify(question.title)}`;
-        const block = buildQuestionBlock({ title: question.title, answer: question.standardAnswer, historyUrl });
-        appendAtomically(sourceFile, `\n${block}`);
+        const written = await writeQuestionBlock({
+          agent, knowledgeRoot, privateHistoryRoot, sourceRelative,
+          title: question.title, standardAnswer: question.standardAnswer,
+        });
+        if (!written.ok) {
+          // 重写也救不回来才跳过入库；下面的回答记录照常写入，并把原因回报给调用方。
+          notice = `未写入知识库：${written.reason}`;
+          console.warn(`题目未写入知识库（${sourceRelative}）：${written.reason}`);
+        }
       }
       fs.mkdirSync(path.dirname(history.file), { recursive: true });
       const historyTemp = `${history.file}.${process.pid}.tmp`;
       fs.writeFileSync(historyTemp, historyNext, "utf8");
       fs.renameSync(historyTemp, history.file);
-      const inserted = db.prepare("INSERT INTO attempts(session_id,question_title,raw_answer,evaluation,created_at,attempt_key) VALUES(?,?,?,?,?,?)")
-        .run(session.id, question.title, rawAnswer, JSON.stringify(evaluation), new Date().toISOString(), attemptKey);
+      const inserted = db.prepare("INSERT INTO attempts(session_id,question_title,raw_answer,evaluation,created_at,attempt_key,standard_answer) VALUES(?,?,?,?,?,?,?)")
+        .run(session.id, question.title, rawAnswer, JSON.stringify(evaluation), new Date().toISOString(), attemptKey, question.standardAnswer ?? "");
       attemptId = inserted.lastInsertRowid;
       await questionIndex.refresh();
     } catch (error) {
@@ -86,5 +133,6 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
       await questionIndex.refresh().catch(() => {});
       throw error;
     }
+    return notice ? { notice } : {};
   };
 }

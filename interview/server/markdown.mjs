@@ -49,12 +49,15 @@ export function validateQuestionBlock(block) {
   if (/[`#|]/u.test(title.slice(3))) errors.push("题目不能包含反引号、# 或竖线");
   if (/^#{3,}\s/m.test(block)) errors.push("答案只允许两级结构，不能使用三级标题");
 
+  // 回答历史链接放在答案之后（全库现有写法都是这样）。
+  // 答案区间 = 题目之后、链接之前；链接之后只剩 `---` 之类的收尾。
   const historyIndex = lines.findIndex((line) => /^→\s*\[回答历史\]\(\/private\/series\/答题历史\/.+\)$/u.test(line));
   if (historyIndex < 0) errors.push("缺少绝对回答历史链接");
-  if (historyIndex !== 2 || lines[1] !== "") errors.push("回答历史链接必须紧跟题目下方");
-  const answerLines = lines.slice(historyIndex < 0 ? 1 : historyIndex + 1).filter((line) => line.trim() && line.trim() !== "---");
+  const answerLines = lines.slice(1, historyIndex < 0 ? lines.length : historyIndex)
+    .filter((line) => line.trim() && line.trim() !== "---");
   if (answerLines.length > 15) errors.push("答案记忆卡不得超过 15 行");
-  if (!answerLines.length || /^\d+\.|^\s+-|^#/u.test(answerLines[0])) errors.push("答案第一行必须是记忆锚点");
+  if (!answerLines.length) errors.push("题目与回答历史链接之间必须有标准答案");
+  else if (/^\d+\.|^\s+-|^#/u.test(answerLines[0])) errors.push("答案第一行必须是记忆锚点");
   const topLevel = answerLines.filter((line) => /^\d+\.\s+\*\*[^*]+\*\*/u.test(line));
   if (!topLevel.length || topLevel.length > 6) errors.push("答案必须包含 1–6 个编号加粗要点");
   if (topLevel.some((line) => (line.split(/[：:]/u).slice(1).join(":").trim().length > 30))) errors.push("一级要点主句不得超过 30 字");
@@ -71,7 +74,8 @@ export function validateQuestionBlock(block) {
 
 export function buildQuestionBlock({ title, answer, historyUrl }) {
   const normalizedTitle = title.trim().replace(/^#+\s*/, "");
-  const block = `## ${normalizedTitle}\n\n→ [回答历史](${historyUrl})\n\n${answer.trim()}\n\n---\n`;
+  // 不加结尾的 `---`：现有题库的题与题之间只有空行，加 `---` 会多渲染一条 <hr>
+  const block = `## ${normalizedTitle}\n\n${answer.trim()}\n\n→ [回答历史](${historyUrl})\n`;
   const errors = validateQuestionBlock(block);
   if (errors.length) throw new Error(`题目不符合《面试宝典文章格式规范》：${errors.join("；")}`);
   return block;
