@@ -29,7 +29,11 @@ export const config = {
   databasePath: path.join(APP_ROOT, "data", "interview.sqlite"),
   host: process.env.INTERVIEW_HOST || "127.0.0.1",
   port: Number(process.env.INTERVIEW_PORT || 8890),
-  resumeDir: process.env.INTERVIEW_RESUME_DIR || "G:\\handoff\\interview",
+  // 简历默认放在博客仓库的私有目录下（src/private 不进版本库），.env 可覆盖
+  resumeDir: process.env.INTERVIEW_RESUME_DIR || path.join(BLOG_ROOT, "src", "private", "resume"),
+  // 题目里的「回答历史」是 VuePress 文档站的路径，页面里要拼上这个基址才能打开。
+  // 8888 对应 src/.vuepress/config.ts 里的 port；那边改了这里也要跟着改。
+  docsBaseUrl: (process.env.INTERVIEW_DOCS_BASE_URL || "http://127.0.0.1:8888").replace(/\/+$/, ""),
   chat: {
     baseUrl: process.env.INTERVIEW_CHAT_BASE_URL || "",
     apiKey: process.env.INTERVIEW_CHAT_API_KEY || "",

@@ -24,7 +24,10 @@ test("builds a question block that follows the interview handbook", () => {
   });
   assert.deepEqual(validateQuestionBlock(block), []);
   assert.match(block, /^## 为什么需要状态机？/);
-  assert.match(block, /^## 为什么需要状态机？\n\n→ \[回答历史\]/);
+  // 回答历史链接放在「答案之后」——与全库现有写法一致
+  const [beforeLink] = block.split("→ [回答历史]");
+  assert.ok(beforeLink.includes("边界清晰"), "答案要在链接之前");
+  assert.match(block, /\n→ \[回答历史\]\(\/private\/series\/答题历史\/.+\)\n$/);
 });
 
 test("rejects headings, stars and overlong answer cards", () => {

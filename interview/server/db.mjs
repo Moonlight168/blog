@@ -29,7 +29,8 @@ export function openDatabase(file) {
     );
     CREATE TABLE IF NOT EXISTS attempts (
       id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, question_title TEXT NOT NULL,
-      raw_answer TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL, attempt_key TEXT
+      raw_answer TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL, attempt_key TEXT,
+      standard_answer TEXT NOT NULL DEFAULT ''
     );
   `);
   const columns = new Set(db.prepare("PRAGMA table_info(sessions)").all().map((row) => row.name));
@@ -37,6 +38,8 @@ export function openDatabase(file) {
   if (!columns.has("paper_index")) db.exec("ALTER TABLE sessions ADD COLUMN paper_index INTEGER NOT NULL DEFAULT 0");
   const attemptColumns = new Set(db.prepare("PRAGMA table_info(attempts)").all().map((row) => row.name));
   if (!attemptColumns.has("attempt_key")) db.exec("ALTER TABLE attempts ADD COLUMN attempt_key TEXT");
+  // 归档时被跳过的题，之后要靠它补录
+  if (!attemptColumns.has("standard_answer")) db.exec("ALTER TABLE attempts ADD COLUMN standard_answer TEXT NOT NULL DEFAULT ''");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS attempts_attempt_key ON attempts(attempt_key) WHERE attempt_key IS NOT NULL");
   return db;
 }

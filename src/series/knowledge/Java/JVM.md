@@ -202,3 +202,20 @@ JVM GC 从入门到进阶：[JVM GC 垃圾回收](/blogs/java/JVMGC入门到进�
 - 好处：不再受 `-XX:MaxPermSize` 限制，不容易 OOM
 
 → [回答历史](/private/series/答题历史/Java/java-答题记录.md#jdk-8-以后-jvm-内存区域有什么变化)
+
+## 线上服务频繁 Full GC，你如何通过 jstat 和 jmap 定位并解决？
+
+**锚点**：`jstat 看趋势 → jmap 抓快照 → MAT 分析 → 定位大对象/内存泄漏`
+
+1. **jstat 监控 GC 趋势**：观察 O 区使用率与 Full GC 频率。
+   - `jstat -gcutil <pid> 1000`；若 Full GC 后 O 区不降，说明对象长期存活或泄漏。
+2. **jmap 抓取堆快照**：低峰期执行，避免 STW 影响线上。
+   - `jmap -dump:live,format=b,file=heap.hprof <pid>`。
+3. **MAT 分析支配树**：定位占用内存最大的对象及引用链。
+   - 用 Eclipse MAT 打开 hprof，查看 Dominator Tree 和 Leak Suspects。
+4. **常见根因**：缓存未设过期、大对象直接进老年代等。
+   - 还包括 ThreadLocal 未清理、静态集合持续增长。
+5. **解决与验证**：修复代码后调整 JVM 参数，观察 Full GC 频率。
+   - 固定 `-Xms=-Xmx`、调整 `-XX:SurvivorRatio` 或换 G1，再用 jstat 验证。
+
+→ [回答历史](/private/series/答题历史/Java/JVM-%E7%AD%94%E9%A2%98%E8%AE%B0%E5%BD%95.md#线上服务频繁-full-gc-你如何通过-jstat-和-jmap-定位并解决)
