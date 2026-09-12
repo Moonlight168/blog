@@ -494,6 +494,17 @@ watch(() => messages.value.map((item) => item.id ?? 0).join(","), () => {
 // 关掉自动朗读时，正在念的那条也一起停掉
 watch(autoSpeak, (on) => { if (!on) stopSpeak(); });
 
+/**
+ * 题目消息上带的「本轮考点」（出题时随 payload 存下来）。
+ * 老记录没有这个字段，返回空串、不渲染，不影响回看历史。
+ */
+function focusText(message: Message) {
+  const focus = (message.payload as { focus?: { label?: string; index?: number; total?: number; round?: number } } | null)?.focus;
+  if (!focus?.label) return "";
+  const round = focus.round && focus.round > 1 ? ` · 第 ${focus.round} 轮` : "";
+  return `考点 ${focus.index}/${focus.total}${round} · ${focus.label}`;
+}
+
 /** 预览选中简历转换后的 Markdown——即模型实际会看到的内容。 */
 const previewOpen = ref(false);
 const previewText = ref("");
@@ -731,6 +742,8 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
             <span v-if="message.kind === 'evaluation'" class="message-label">本题点评</span>
             <span v-else-if="message.kind === 'answer'" class="message-label">标准答案</span>
             <span v-else-if="message.kind === 'notice'" class="message-label">提示</span>
+            <!-- 题目上的本轮考点（老记录没有 payload，focusText 返回空串就不渲染） -->
+            <span v-if="focusText(message)" class="message-label focus-label">{{ focusText(message) }}</span>
             <span v-else-if="message.kind === 'summary'" class="message-label">本场总评</span>
             <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
             <!-- 模型输出按 markdown 渲染；用户自己打的内容保持原文，免得被当成语法 -->

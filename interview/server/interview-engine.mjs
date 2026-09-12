@@ -1,3 +1,5 @@
+import { focusPayload } from "./focus-plan.mjs";
+
 const NEXT_RE = /^(下一题|下一个|next)$/iu;
 const END_RE = /^(结束|结束面试|到此为止|end)$/iu;
 
@@ -67,7 +69,8 @@ export class InterviewEngine {
       next = await this.agent.generateQuestion({ session });
     }
     session.currentQuestion = next;
-    messages.push({ role: "assistant", kind: "question", content: next.prompt ?? next.title });
+    // 带上本轮考点：前端能显示「考点 3/18」，回看时也知道当时的顺序
+    messages.push({ role: "assistant", kind: "question", content: next.prompt ?? next.title, payload: focusPayload(session.nextFocus) });
     return { session, messages };
   }
 }
