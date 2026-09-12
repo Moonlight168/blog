@@ -107,7 +107,7 @@ test("答案不合规范时，先让模型按规范重写再入库", async () =>
   assert.match(written, /看 GC 频率/, "入库的是重写后的内容");
 });
 
-test("重写也救不回来时才跳过入库，且不阻断整场面试", async () => {
+test("主句超长、重写也失败时，用自动拆分兜底写进知识库（不再整题丢弃）", async () => {
   const env = makeEnv(); // reformat 为 null → 重写抛错
   const overlong = `**锚点**：\`先看频率\`\n\n1. **超长主句**：${"啊".repeat(40)}`;
 
@@ -118,8 +118,27 @@ test("重写也救不回来时才跳过入库，且不阻断整场面试", async
     evaluation: { score: 0, comment: "未作答" },
   });
 
+  assert.equal(result?.notice, undefined, "兜底拆分后不该再跳过入库");
+  const knowledge = fs.readFileSync(env.knowledgeFile, "utf8");
+  assert.match(knowledge, /超长主句/, "题块要写进知识库");
+  assert.match(knowledge, /- 啊{10}$/m, "被拆下来的后半段要留成 3 空格缩进的二级补充");
+  assert.match(fs.readFileSync(env.historyFile, "utf8"), /这个不太清楚/);
+});
+
+test("结构性不合规（拆分也修不了）才跳过入库，且不阻断整场面试", async () => {
+  const env = makeEnv(); // reformat 为 null → 重写抛错
+  // 第一行不是记忆锚点：属于结构问题，自动拆分只处理主句超长，救不了这种
+  const broken = `1. **第一条**：短句\n\n2. **第二条**：短句`;
+
+  const result = await env.archive({
+    session: SESSION,
+    question: { title: "为什么需要状态机？", standardAnswer: broken },
+    rawAnswer: "这个不太清楚",
+    evaluation: { score: 0, comment: "未作答" },
+  });
+
   assert.ok(result?.notice, "要把跳过原因回报出来，不能静默吞掉");
-  assert.match(result.notice, /30 字/);
+  assert.match(result.notice, /记忆锚点/);
   // 知识库保持原样，没有写入不合规的题块
   assert.equal(fs.readFileSync(env.knowledgeFile, "utf8").trim(), "# 多线程");
   // 但这次回答必须留下来
@@ -164,15 +183,26 @@ test("补录：把归档时被跳过的题重新写进知识库", async () => {
   assert.ok(env.calls.includes("refresh"), "补录后要重建索引");
 });
 
+test("补录：主句超长时走自动拆分兜底，成功写入", async () => {
+  const env = makeEnv(); // reformat 为 null → 重写失败
+  const result = await refileQuestion({
+    agent: env.agent, questionIndex: env.questionIndex,
+    knowledgeRoot: env.knowledgeRoot, privateHistoryRoot: env.privateHistoryRoot,
+    chapterPath: "Java/多线程.md", title: "题？", standardAnswer: `记忆锚点：先看频率。\n\n1. **超长**：${"啊".repeat(40)}`,
+  });
+  assert.equal(result.ok, true);
+  assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /- 啊{10}$/m);
+});
+
 test("补录失败时返回原因而不是抛错", async () => {
   const env = makeEnv(); // reformat 为 null → 重写也失败
   const result = await refileQuestion({
     agent: env.agent, questionIndex: env.questionIndex,
     knowledgeRoot: env.knowledgeRoot, privateHistoryRoot: env.privateHistoryRoot,
-    chapterPath: "Java/多线程.md", title: "题？", standardAnswer: `1. **超长**：${"啊".repeat(40)}`,
+    chapterPath: "Java/多线程.md", title: "题？", standardAnswer: `1. **缺锚点**：短句`,
   });
   assert.equal(result.ok, false);
-  assert.match(result.reason, /30 字/);
+  assert.match(result.reason, /记忆锚点/);
   assert.equal(fs.readFileSync(env.knowledgeFile, "utf8").trim(), "# 多线程", "失败时不该写入");
 });
 

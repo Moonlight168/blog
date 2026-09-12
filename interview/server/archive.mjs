@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { buildQuestionBlock, slugify } from "./markdown.mjs";
+import { buildQuestionBlock, slugify, splitLongBullets } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
 
 function ensureInside(root, file) {
@@ -90,20 +90,32 @@ async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, so
   const historyUrl = `${history.url}#${slugify(title)}`;
 
   const append = (answer) => appendAtomically(sourceFile, `\n${buildQuestionBlock({ title, answer, historyUrl })}`);
-  try {
-    append(standardAnswer);
-    return { ok: true, historyUrl };
-  } catch (error) {
-    // 模型偶尔写出不合规范的主句。归档时模型就在手边，先让它按规范重写一遍再试，
-    // 好过把整道题丢掉。
+  const strip = (message = "") => message.replace(/^题目不符合《面试宝典文章格式规范》：/, "");
+  let candidate = standardAnswer;
+  let lastReason = "";
+  // 模型常把命令、英文标识符堆在一级主句里导致超标。归档时模型就在手边，让它按规范重写，
+  // 最多两次；报错里带着「第几条、超多少」，它才知道该改哪句。
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const hint = error.message.replace(/^题目不符合《面试宝典文章格式规范》：/, "");
-      const rewritten = await agent.reformatAnswer({ question: { title, standardAnswer }, errors: [hint] });
-      append(rewritten);
+      append(candidate);
       return { ok: true, historyUrl };
-    } catch (retryError) {
-      return { ok: false, reason: retryError.message };
+    } catch (error) {
+      lastReason = error.message;
+      try {
+        candidate = await agent.reformatAnswer({ question: { title, standardAnswer }, errors: [strip(error.message)] });
+      } catch (rewriteError) {
+        lastReason = rewriteError.message;
+        break;
+      }
     }
+  }
+  // 模型也救不回来时走确定性兜底：自动把超长主句拆成二级补充。
+  // 一条 bullet 的风格问题不该等于整个知识点丢失。
+  try {
+    append(splitLongBullets(candidate));
+    return { ok: true, historyUrl };
+  } catch (fallbackError) {
+    return { ok: false, reason: strip(fallbackError.message) || strip(lastReason) };
   }
 }
 
