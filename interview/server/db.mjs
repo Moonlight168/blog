@@ -22,7 +22,8 @@ export function openDatabase(file) {
       answer_fragments TEXT NOT NULL DEFAULT '[]', completed_count INTEGER NOT NULL DEFAULT 0,
       skill_snapshot TEXT NOT NULL, resume_excerpt TEXT NOT NULL,
       jd_path TEXT NOT NULL DEFAULT '', jd_excerpt TEXT NOT NULL DEFAULT '',
-      paper_questions TEXT NOT NULL DEFAULT '[]', paper_index INTEGER NOT NULL DEFAULT 0
+      paper_questions TEXT NOT NULL DEFAULT '[]', paper_index INTEGER NOT NULL DEFAULT 0,
+      paused_at TEXT, paused_ms INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL,
@@ -40,6 +41,9 @@ export function openDatabase(file) {
   if (!columns.has("jd_excerpt")) db.exec("ALTER TABLE sessions ADD COLUMN jd_excerpt TEXT NOT NULL DEFAULT ''");
   if (!columns.has("paper_questions")) db.exec("ALTER TABLE sessions ADD COLUMN paper_questions TEXT NOT NULL DEFAULT '[]'");
   if (!columns.has("paper_index")) db.exec("ALTER TABLE sessions ADD COLUMN paper_index INTEGER NOT NULL DEFAULT 0");
+  // 暂停：paused_at 非空表示正在暂停中，paused_ms 是累计已暂停时长（超时判定要扣除）
+  if (!columns.has("paused_at")) db.exec("ALTER TABLE sessions ADD COLUMN paused_at TEXT");
+  if (!columns.has("paused_ms")) db.exec("ALTER TABLE sessions ADD COLUMN paused_ms INTEGER NOT NULL DEFAULT 0");
   const attemptColumns = new Set(db.prepare("PRAGMA table_info(attempts)").all().map((row) => row.name));
   if (!attemptColumns.has("attempt_key")) db.exec("ALTER TABLE attempts ADD COLUMN attempt_key TEXT");
   // 归档时被跳过的题，之后要靠它补录
@@ -59,20 +63,23 @@ export function rowToSession(row) {
     skillSnapshot: row.skill_snapshot, resumeExcerpt: row.resume_excerpt,
     jdPath: row.jd_path ?? "", jdExcerpt: row.jd_excerpt ?? "",
     paperQuestions: JSON.parse(row.paper_questions || "[]"), paperIndex: row.paper_index ?? 0,
+    pausedAt: row.paused_at ?? null, pausedMs: row.paused_ms ?? 0,
   };
 }
 
 export function saveSession(db, session) {
   db.prepare(`INSERT INTO sessions
-    (id,resume_path,series,chapter_path,mode,duration_minutes,status,started_at,ended_at,current_question,answer_fragments,completed_count,skill_snapshot,resume_excerpt,jd_path,jd_excerpt,paper_questions,paper_index)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    (id,resume_path,series,chapter_path,mode,duration_minutes,status,started_at,ended_at,current_question,answer_fragments,completed_count,skill_snapshot,resume_excerpt,jd_path,jd_excerpt,paper_questions,paper_index,paused_at,paused_ms)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET status=excluded.status,ended_at=excluded.ended_at,current_question=excluded.current_question,
-      answer_fragments=excluded.answer_fragments,completed_count=excluded.completed_count,paper_index=excluded.paper_index`)
+      answer_fragments=excluded.answer_fragments,completed_count=excluded.completed_count,paper_index=excluded.paper_index,
+      paused_at=excluded.paused_at,paused_ms=excluded.paused_ms`)
     .run(session.id, session.resumePath, session.series, session.chapterPath, session.mode, session.durationMinutes,
       session.status, session.startedAt, session.endedAt ?? null, JSON.stringify(session.currentQuestion),
       JSON.stringify(session.answerFragments), session.completedCount ?? 0, session.skillSnapshot, session.resumeExcerpt,
       session.jdPath ?? "", session.jdExcerpt ?? "",
-      JSON.stringify(session.paperQuestions ?? []), session.paperIndex ?? 0);
+      JSON.stringify(session.paperQuestions ?? []), session.paperIndex ?? 0,
+      session.pausedAt ?? null, session.pausedMs ?? 0);
 }
 
 export function addMessage(db, sessionId, message) {

@@ -7,4 +7,8 @@ export interface Session {
   completedCount: number; currentQuestion?: { title: string };
   /** 目标 JD 的路径；没选则为空串 */
   jdPath?: string;
+  /** 本次暂停的开始时间；为空表示未暂停 */
+  pausedAt?: string | null;
+  /** 历史累计暂停毫秒数，超时判定与倒计时都要扣除 */
+  pausedMs?: number;
 }
