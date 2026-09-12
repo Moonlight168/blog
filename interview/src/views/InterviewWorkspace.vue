@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { NAlert, NButton, NCard, NEmpty, NInput, NModal, NSelect, NSpin, NTag, useMessage } from "naive-ui";
+import { NAlert, NButton, NCard, NEmpty, NInput, NModal, NSelect, NSpin, NSwitch, NTag, useMessage } from "naive-ui";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import type { Chapter, Message, Session, TopicSeries } from "../types";
@@ -19,6 +19,9 @@ const jdPath = ref("");
 const jdOptions = computed(() => jobs.value.map((job) => ({ label: job.name, value: job.path })));
 const topics = ref<TopicSeries[]>([]);
 const embeddingEnabled = ref(false);
+const asrAvailable = ref(false);
+/** 语音识别引擎：browser = 浏览器内置（边说边出字）；model = 硅基流动转写（松手后出字） */
+const voiceEngine = ref<"browser" | "model">("browser");
 const resumePath = ref("");
 const series = ref("");
 const chapterPath = ref("");
@@ -57,6 +60,7 @@ function syncResumeSelection(preferred?: string) {
 interface SetupPrefs {
   resumeGroup?: string; resumePath?: string; series?: string;
   chapterPath?: string; mode?: string; durationMinutes?: number; jdPath?: string;
+  autoSpeak?: boolean; speakRate?: number; voiceEngine?: string;
 }
 const PREFS_KEY = "interview-setup";
 function loadPrefs(): SetupPrefs {
@@ -67,7 +71,7 @@ function savePrefs() {
   const prefs: SetupPrefs = {
     resumeGroup: resumeGroup.value, resumePath: resumePath.value, series: series.value,
     chapterPath: chapterPath.value, mode: mode.value, durationMinutes: durationMinutes.value,
-    jdPath: jdPath.value,
+    jdPath: jdPath.value, autoSpeak: autoSpeak.value, speakRate: speakRate.value, voiceEngine: voiceEngine.value,
   };
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
 }
@@ -93,8 +97,9 @@ const timerText = computed(() => `${String(Math.floor(secondsLeft.value / 60)).p
 async function loadBootstrap() {
   loading.value = true;
   try {
-    const data = await api<{ resumeDir: string; resumes: typeof resumes.value; jobs: typeof jobs.value; topics: TopicSeries[]; embeddingEnabled: boolean }>("/api/bootstrap");
+    const data = await api<{ resumeDir: string; resumes: typeof resumes.value; jobs: typeof jobs.value; topics: TopicSeries[]; embeddingEnabled: boolean; asrEnabled?: boolean }>("/api/bootstrap");
     resumeDir.value = data.resumeDir; resumes.value = data.resumes; jobs.value = data.jobs ?? []; topics.value = data.topics; embeddingEnabled.value = data.embeddingEnabled;
+    asrAvailable.value = Boolean(data.asrEnabled);
 
     // 恢复上次的选择；只有失效了（简历被删、章节改名、JD 被删）才退回第一项
     const prefs = loadPrefs();
@@ -106,6 +111,12 @@ async function loadBootstrap() {
     series.value = topics.value.some((item) => item.name === prefs.series) ? (prefs.series ?? "") : (topics.value[0]?.name ?? "");
     chapterPath.value = chapters.value.some((item) => item.path === prefs.chapterPath) ? (prefs.chapterPath ?? "") : (chapters.value[0]?.path ?? "");
     if (prefs.durationMinutes) durationMinutes.value = prefs.durationMinutes;
+    if (prefs.autoSpeak !== undefined) autoSpeak.value = prefs.autoSpeak;
+    if (prefs.speakRate) speakRate.value = prefs.speakRate;
+    // 语音识别引擎：存过就尊重用户选择，否则「配了转写服务就用它」（识别质量明显好于内置）
+    if (prefs.voiceEngine === "browser" || prefs.voiceEngine === "model") voiceEngine.value = prefs.voiceEngine;
+    else voiceEngine.value = asrAvailable.value ? "model" : "browser";
+    if (voiceEngine.value === "model" && !asrAvailable.value) voiceEngine.value = "browser";
   } catch (error) { toast.error((error as Error).message); }
   finally { loading.value = false; }
 }
@@ -123,10 +134,19 @@ let holdTimer: number | undefined;
 // 这次按住空格是否已被语音输入接管。接管后所有自动重复的 keydown 都必须拦掉默认行为，
 // 否则浏览器会在输入框里连续插入空格——「长按一直出空格」就是这么来的。
 let spaceHeld = false;
+// 这一次按住是否真的开出了语音：用来区分「长按」和「轻点」
+let voiceFired = false;
+// 「希望一直在听」：长按期间为 true；主动停止或识别出错后置 false（决定 onend 后要不要自动续听）
+let voiceActive = false;
+// 不支持语音识别时只提示一次，避免每按一下空格都弹
+let warnedNoSpeech = false;
 
 function startVoice() {
   const Ctor = speechCtor.value;
   if (!Ctor) return;
+  // 正在朗读 AI 回复就先停掉：否则识别会把朗读的声音也当成你说的话录进去
+  stopSpeak();
+  voiceActive = true;
   recognition = new Ctor();
   recognition.lang = "zh-CN";
   recognition.continuous = true;
@@ -143,37 +163,59 @@ function startVoice() {
     interimText.value = interim;
   };
   recognition.onerror = (event: any) => {
+    // 真出错了就不再自动续听，否则会陷入「一直失败一直重开」的循环
+    voiceActive = false;
     listening.value = false; interimText.value = "";
     toast.error(event.error === "network"
       ? "语音识别连不上服务（Chrome 走 Google 服务器，国内不可用）——改用 Edge 打开即可"
       : `语音识别失败：${event.error}`);
   };
-  recognition.onend = () => { listening.value = false; interimText.value = ""; };
+  // 浏览器会在你停顿后自行结束会话（continuous 也不保证一直开着）。手还按着就自动续上，
+  // 否则后半句直接没人听——那看起来就像「识别不准」。
+  recognition.onend = () => {
+    listening.value = false; interimText.value = "";
+    if (voiceActive) window.setTimeout(() => { if (voiceActive) startVoice(); }, 150);
+  };
   listening.value = true;
   recognition.start();
 }
 
 function stopVoice() {
+  // 先放下「要继续听」的意愿，否则 stop() 触发的 onend 会立刻又把它拉起来
+  voiceActive = false;
   if (!listening.value) return;
   try { recognition?.stop(); } catch { /* 已经停了 */ }
   listening.value = false;
   interimText.value = "";
 }
 
-/** 松开、失焦或卸载时收尾：清定时器、交还空格、停止识别。 */
+/** 松开、失焦或卸载时收尾：清定时器、交还空格、停掉当前识别引擎。 */
 function releaseSpace() {
   if (holdTimer) { window.clearTimeout(holdTimer); holdTimer = undefined; }
   spaceHeld = false;
-  stopVoice();
+  voiceFired = false;
+  stopCapture();
+}
+
+/** 轻点空格：keydown 的默认输入被我们拦掉了，这里手动补一个空格回去。 */
+function insertSpace(el: HTMLTextAreaElement) {
+  const start = el.selectionStart ?? draft.value.length;
+  const end = el.selectionEnd ?? start;
+  draft.value = draft.value.slice(0, start) + " " + draft.value.slice(end);
+  // 等 v-model 把新值写回输入框之后，再把光标放到刚插入的空格后面
+  void nextTick(() => { el.selectionStart = el.selectionEnd = start + 1; });
 }
 
 /**
  * 输入框只挂一个 keydown：naive-ui 把 onKeydown 声明成 Function 属性，
  * 同一元素上写两个 @keydown 会被 Vue 合成数组，触发 prop 类型告警。
- * Ctrl/Cmd + Enter 发送，其余交给空格长按语音。
+ * Enter 发送、Shift+Enter 换行，其余交给空格长按语音。
+ *
+ * isComposing / keyCode 229 必须挡住：中文输入法挑候选词也是按 Enter，
+ * 不挡的话「选词」会直接把半句话发出去。
  */
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
     event.preventDefault();
     void send();
     return;
@@ -181,7 +223,13 @@ function onKeydown(event: KeyboardEvent) {
   onSpaceDown(event);
 }
 
-/** 长按空格开始、松开结束；只有输入框为空或光标在开头时才抢空格，否则正常输入。 */
+/**
+ * 长按空格说话、轻点打一个空格。
+ * 「轻点还是长按」必须等松开才能定：按下时得先 preventDefault 拦掉默认的空格输入，
+ * 否则长按会先落下一串空格；拦掉之后轻点就得自己把那个空格补回去。
+ * 这样不管输入框里有没有字、光标在哪，长按都能起语音——旧版要求「空框或光标在开头」，
+ * 而第一次语音输入后 v-model 回写会把光标停在文末，于是第二次长按被守卫挡掉、再也按不出语音。
+ */
 function onSpaceDown(event: KeyboardEvent) {
   if (event.code !== "Space" || event.isComposing) return;
   // 长按产生的重复事件：已接管就必须在这里 preventDefault，不能先 return 再补
@@ -189,22 +237,262 @@ function onSpaceDown(event: KeyboardEvent) {
     if (spaceHeld) event.preventDefault();
     return;
   }
-  const el = event.target as HTMLTextAreaElement;
-  const atStart = el.selectionStart === 0 && el.selectionEnd === 0;
-  if (el.value.trim() !== "" && !atStart) return;
-  // 不支持语音的浏览器不要抢空格：抢了就是空格被吞、长按还照样连续输入，反而碍事
-  if (!speechCtor.value) {
-    toast.warning("当前浏览器不支持内置语音识别——用 Edge 打开这个页面即可");
+  // 引擎不可用就别抢空格：抢了空格还得自己补回来，反而碍事
+  if (!voiceReady.value) {
+    if (!warnedNoSpeech) {
+      warnedNoSpeech = true;
+      toast.warning(voiceEngine.value === "model" ? "语音识别服务未配置，空格仍可正常输入" : "当前浏览器不支持内置语音识别，空格仍可正常输入");
+    }
     return;
   }
   event.preventDefault();
   spaceHeld = true;
-  holdTimer = window.setTimeout(() => startVoice(), 300);
+  voiceFired = false;
+  holdTimer = window.setTimeout(() => { voiceFired = true; startCapture(); }, 300);
 }
 function onSpaceUp(event: KeyboardEvent) {
-  if (event.code !== "Space") return;
+  if (event.code !== "Space" || !spaceHeld) return;
+  const el = event.target as HTMLTextAreaElement;
+  const wasTap = !voiceFired;
   releaseSpace();
+  // 没到长按阈值就松开了 → 这是一次轻点，把空格补回输入框
+  if (wasTap) insertSpace(el);
 }
+
+/**
+ * 硅基流动转写这条路：长按录音、松开上传、出文字。
+ * 和内置识别互斥，由配置面板的「语音识别」决定走哪条。
+ * 代价是没有实时预览——音频得先上传再转写，松手后约一秒才出字。
+ */
+const recording = ref(false);
+const transcribing = ref(false);
+let mediaRecorder: MediaRecorder | null = null;
+let mediaStream: MediaStream | null = null;
+let recordedChunks: Blob[] = [];
+
+/** 这条引擎当前能不能用：内置看浏览器有没有那个构造器，模型看服务端配没配 key */
+const voiceReady = computed(() => (voiceEngine.value === "model" ? asrAvailable.value : Boolean(speechCtor.value)));
+const voiceEngineOptions = computed(() => [
+  { label: "浏览器内置（实时出字）", value: "browser" },
+  { label: asrAvailable.value ? "硅基流动（更准）" : "硅基流动（未配置）", value: "model", disabled: !asrAvailable.value },
+]);
+const voiceHint = computed(() => {
+  if (transcribing.value) return "正在转写…";
+  if (!listening.value) return "";
+  return voiceEngine.value === "model" ? "正在录音…松开结束" : "正在听…松开空格结束";
+});
+
+/** 解码后重采样成 16kHz 单声道 16bit WAV——这条格式已实测被硅基流动接受，且不依赖任何库 */
+async function toWav(blob: Blob) {
+  const audioContext = new AudioContext();
+  let decoded: AudioBuffer;
+  try { decoded = await audioContext.decodeAudioData(await blob.arrayBuffer()); }
+  finally { void audioContext.close(); }
+
+  const rate = 16000;
+  const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+  const source = offline.createBufferSource();
+  source.buffer = decoded;
+  source.connect(offline.destination);
+  source.start();
+  const samples = (await offline.startRendering()).getChannelData(0);
+
+  const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const writeText = (offset: number, value: string) => { for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i)); };
+  writeText(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); writeText(8, "WAVE");
+  writeText(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  writeText(36, "data"); view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i += 1) {
+    const value = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+  }
+  return new Blob([view], { type: "audio/wav" });
+}
+
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia) { toast.error("这个浏览器拿不到麦克风"); return; }
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  } catch (error) {
+    toast.error(`打不开麦克风：${(error as Error).message}`);
+    return;
+  }
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(mediaStream);
+  mediaRecorder.ondataavailable = (event) => { if (event.data.size) recordedChunks.push(event.data); };
+  mediaRecorder.start();
+  recording.value = true;
+  // 复用同一个「正在听」提示位，模板不用分两套
+  listening.value = true;
+}
+
+async function stopRecording() {
+  recording.value = false;
+  listening.value = false;
+  const recorder = mediaRecorder;
+  const stream = mediaStream;
+  mediaRecorder = null;
+  mediaStream = null;
+  if (!recorder) return;
+  // 等 onstop：这时最后的 chunk 才吐出来
+  await new Promise<void>((resolve) => {
+    recorder.onstop = () => resolve();
+    try { recorder.stop(); } catch { resolve(); }
+  });
+  stream?.getTracks().forEach((track) => track.stop());
+  const blob = new Blob(recordedChunks, { type: recorder.mimeType || "audio/webm" });
+  recordedChunks = [];
+  if (blob.size < 2000) return;   // 太短，基本是误触，别白花一次调用
+  await transcribeBlob(blob);
+}
+
+async function transcribeBlob(blob: Blob) {
+  transcribing.value = true;
+  try {
+    const wav = await toWav(blob);
+    const data = await api<{ text: string }>("/api/asr", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
+    if (data.text) draft.value += data.text;
+    else toast.warning("没听清，再说一次？");
+  } catch (error) { toast.error((error as Error).message); }
+  finally { transcribing.value = false; }
+}
+
+/** 两条引擎共用的入口：长按开始 */
+function startCapture() {
+  stopSpeak();
+  if (voiceEngine.value === "model") void startRecording();
+  else startVoice();
+}
+/**
+ * 松开 / 失焦 / 卸载：停掉「实际在跑的那条」。
+ * 注意判据用 mediaRecorder 而不是 voiceEngine.value——设置是可以边录边改的，
+ * 按设置分支的话，录到一半把引擎切走就再也停不掉，麦克风会一直开着。
+ */
+function stopCapture() {
+  voiceActive = false;
+  if (mediaRecorder) { void stopRecording(); return; }
+  stopVoice();
+}
+
+/**
+ * AI 回复朗读：浏览器内置的语音合成（speechSynthesis）——免费、不走后端。
+ * 自动朗读只覆盖「面试官提问」这一种消息；点评 / 标准答案 / 总评需要手动点喇叭，
+ * 因为标准答案和总评动辄上千字，全自动会连着念很久。
+ */
+const ttsSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+/** 自动朗读开关（默认开）：只决定「提问」要不要自动读 */
+const autoSpeak = ref(true);
+/** 正在朗读的消息 id；null 表示没在朗读 */
+const speakingId = ref<number | null>(null);
+const speakingPaused = ref(false);
+/** 消息水位：只朗读比它更新的消息，免得刷新恢复历史时把旧题从头念一遍 */
+const spokenThrough = ref(0);
+
+const isSpeaking = (message: Message) => speakingId.value !== null && speakingId.value === message.id;
+
+/** 朗读语速：默认 1.0 偏慢，1.3 更接近正常语速；可在配置面板里调 */
+const speakRate = ref(1.3);
+const SPEAK_RATE_OPTIONS = [1, 1.2, 1.3, 1.5, 1.8, 2].map((value) => ({ label: `${value}x`, value }));
+
+/**
+ * 音色优先级：装了神经网络音色就优先用（最接近豆包那种质感），没有就退到系统里
+ * 最好的中文音色，最后随便挑一个中文的。注意这条链的上限取决于系统装了什么音色。
+ */
+const VOICE_PREFERENCE = [
+  /xiaoxiao|xiaoyi|xiaomeng/i,   // 微软神经网络女声 / Edge 自然音色
+  /natural|neural|online/i,      // 其它标注为自然、神经网络的音色
+  /yunxi|yunyang|yunjian/i,      // 微软神经网络男声
+  /huihui|yaoyao/i,              // SAPI 老版中文女声
+  /zh[-_]?cn/i,                  // 兜底：任意中文音色
+];
+/** getVoices() 首次可能是空的（异步加载），先缓存一份，voiceschanged 时刷新 */
+let cachedVoices: SpeechSynthesisVoice[] = [];
+function refreshVoices() { cachedVoices = window.speechSynthesis.getVoices(); }
+if (ttsSupported) {
+  refreshVoices();
+  window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+}
+
+function pickVoice() {
+  const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
+  const zh = voices.filter((item) => item.lang.toLowerCase().startsWith("zh"));
+  if (!zh.length) return undefined;
+  for (const pattern of VOICE_PREFERENCE) {
+    const hit = zh.find((item) => pattern.test(item.name));
+    if (hit) return hit;
+  }
+  return zh[0];
+}
+
+/** 把 markdown 洗成能念的纯文本：代码块、记号、链接目标都得去掉，否则会念出星号和括号。 */
+function toSpeechText(markdown: string) {
+  return markdown
+    .replace(/```[\s\S]*?```/g, "（代码略）")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/^\s{0,3}[-*+]\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/\*\*([^*]*)\*\*/g, "$1")
+    .replace(/[*_~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** 同一时刻只允许一条在念：开新的之前先取消旧的。 */
+function speak(message: Message) {
+  if (!ttsSupported) return;
+  const text = toSpeechText(message.content);
+  if (!text) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "zh-CN";
+  utterance.rate = speakRate.value;
+  const voice = pickVoice();
+  if (voice) utterance.voice = voice;
+  const id = message.id ?? null;
+  const finish = () => { if (speakingId.value === id) { speakingId.value = null; speakingPaused.value = false; } };
+  utterance.onend = finish;
+  utterance.onerror = finish;
+  speakingId.value = id;
+  speakingPaused.value = false;
+  window.speechSynthesis.speak(utterance);
+}
+
+function stopSpeak() {
+  if (!ttsSupported) return;
+  window.speechSynthesis.cancel();
+  speakingId.value = null;
+  speakingPaused.value = false;
+}
+
+/** 点喇叭：正在念这条 → 暂停；暂停中 → 继续；否则从头念这条。 */
+function toggleSpeak(message: Message) {
+  if (!ttsSupported) return toast.warning("当前浏览器不支持语音朗读");
+  const id = message.id ?? null;
+  if (speakingId.value === id) {
+    if (speakingPaused.value) { window.speechSynthesis.resume(); speakingPaused.value = false; }
+    else { window.speechSynthesis.pause(); speakingPaused.value = true; }
+    return;
+  }
+  speak(message);
+}
+
+// 新消息到达：只自动念「面试官提问」，历史恢复带进来的旧消息不念
+watch(() => messages.value.map((item) => item.id ?? 0).join(","), () => {
+  const latestId = messages.value.at(-1)?.id ?? 0;
+  if (latestId <= spokenThrough.value) return;
+  const fresh = messages.value.filter((item) => (item.id ?? 0) > spokenThrough.value);
+  spokenThrough.value = latestId;
+  if (!autoSpeak.value) return;
+  const question = [...fresh].reverse().find((item) => item.role === "assistant" && item.kind === "question");
+  if (question) speak(question);
+});
+
+// 关掉自动朗读时，正在念的那条也一起停掉
+watch(autoSpeak, (on) => { if (!on) stopSpeak(); });
 
 /** 预览选中简历转换后的 Markdown——即模型实际会看到的内容。 */
 const previewOpen = ref(false);
@@ -251,6 +539,8 @@ async function restore() {
   try {
     const data = await api<{ session: Session; messages: Message[] }>(`/api/sessions/${id}`);
     session.value = data.session; messages.value = data.messages;
+    // 恢复的历史消息不算「新消息」，把水位抬到最新一条，避免一刷新就自动念旧题
+    spokenThrough.value = messages.value.at(-1)?.id ?? 0;
     // 面板跟着进行中的会话走，否则显示的是上次的选择、和当前面试对不上
     if (data.session.series) series.value = data.session.series;
     if (data.session.chapterPath) chapterPath.value = data.session.chapterPath;
@@ -276,6 +566,8 @@ async function start() {
     const data = await api<{ session: Session; messages: Message[] }>("/api/sessions", { method: "POST", body: JSON.stringify({ resumePath: resumePath.value, series: series.value, chapterPath: chapterPath.value, mode: mode.value, durationMinutes: durationMinutes.value, jdPath: jdPath.value }) });
     session.value = data.session; messages.value = data.messages;
     localStorage.setItem("interview-session", data.session.id);
+    // 新开一场：水位归零，第一条提问才会自动朗读
+    spokenThrough.value = 0;
     await scrollBottom();
   } catch (error) { toast.error((error as Error).message); }
   finally { sending.value = false; }
@@ -357,7 +649,7 @@ function pickSeries(value: string) {
 function pickChapter(value: string) { chapterPath.value = value; }
 
 // 任何一项改动都自动记住，下次打开直接恢复
-watch([resumeGroup, resumePath, series, chapterPath, mode, durationMinutes, jdPath], savePrefs);
+watch([resumeGroup, resumePath, series, chapterPath, mode, durationMinutes, jdPath, autoSpeak, speakRate, voiceEngine], savePrefs);
 
 onMounted(async () => {
   // 必须先拿到简历/章节列表，restore() 才能把面板对齐到会话的真实选择
@@ -368,7 +660,7 @@ onMounted(async () => {
     if (active.value && secondsLeft.value === 0) void syncExpiredSession();
   }, 1000);
 });
-onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); });
+onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak(); });
 </script>
 
 <template>
@@ -391,13 +683,30 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); });
           <label>目标岗位</label>
           <n-select :value="jdMode ? jdPath : ''" :disabled="locked || !jdMode" :placeholder="jdMode ? '请选择目标岗位' : '仅岗位定制需要'"
             :consistent-menu-width="false" :options="jdOptions" @update:value="(value: string) => { jdPath = value; }" />
-          <label>知识分类</label>
-          <n-select :value="jdMode ? '' : series" :disabled="locked || jdMode" :placeholder="jdMode ? '岗位定制不需要选' : ''" :options="topics.map(s => ({ label: s.name, value: s.name }))" @update:value="pickSeries" />
-          <label>章节（面试主题）</label>
-          <n-select :value="jdMode ? '' : chapterPath" :disabled="locked || jdMode" :placeholder="jdMode ? '岗位定制不需要选' : ''" filterable :options="chapters.map(c => ({ label: c.name, value: c.path }))" @update:value="pickChapter" />
+          <div class="two-cols">
+            <div>
+              <label>知识分类</label>
+              <n-select :value="jdMode ? '' : series" :disabled="locked || jdMode" :placeholder="jdMode ? '岗位定制不需要选' : ''" :options="topics.map(s => ({ label: s.name, value: s.name }))" @update:value="pickSeries" />
+            </div>
+            <div>
+              <label>章节（面试主题）</label>
+              <n-select :value="jdMode ? '' : chapterPath" :disabled="locked || jdMode" :placeholder="jdMode ? '岗位定制不需要选' : ''" filterable :options="chapters.map(c => ({ label: c.name, value: c.path }))" @update:value="pickChapter" />
+            </div>
+          </div>
           <div class="two-cols">
             <div><label>面试形式</label><n-select v-model:value="mode" :disabled="locked" :options="[{label:'技术面试',value:'interview'},{label:'编码面试',value:'coding'},{label:'书面测评',value:'written'},{label:'岗位定制',value:'jd'}]" /></div>
             <div><label>时长</label><n-select v-model:value="durationMinutes" :disabled="locked" :options="[15,30,45,60,90].map(v => ({label:`${v} 分钟`,value:v}))" /></div>
+          </div>
+          <div class="switch-row">
+            <label>语音识别</label>
+            <n-select v-model:value="voiceEngine" size="small" style="width: 180px" :options="voiceEngineOptions" />
+          </div>
+          <div class="switch-row">
+            <label>AI 回复自动朗读</label>
+            <div class="switch-row-right">
+              <n-select v-model:value="speakRate" size="small" style="width: 84px" :options="SPEAK_RATE_OPTIONS" />
+              <n-switch v-model:value="autoSpeak" />
+            </div>
           </div>
           <n-alert :show-icon="false" type="info">查重：精确匹配 + 关键词匹配 <span v-if="embeddingEnabled">+ 向量检索</span><span v-else>（未配置向量模型）</span></n-alert>
           <n-button v-if="!session" type="primary" size="large" :loading="sending" block @click="start">开始面试</n-button>
@@ -428,18 +737,28 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); });
             <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
             <div v-if="message.role === 'assistant'" class="message-text" v-html="renderMarkdown(message.content)" />
             <div v-else class="message-text">{{ message.content }}</div>
+            <!-- AI 消息下方的朗读按钮：喇叭 / 暂停 / 继续 三个图标同规格（同一套填充 SVG，不用 emoji） -->
+            <button v-if="message.role === 'assistant' && ttsSupported" class="speak-btn"
+              :class="{ active: isSpeaking(message) }"
+              :title="isSpeaking(message) ? (speakingPaused ? '继续朗读' : '暂停朗读') : '朗读这条回复'"
+              :aria-label="isSpeaking(message) ? (speakingPaused ? '继续朗读' : '暂停朗读') : '朗读这条回复'"
+              @click="toggleSpeak(message)">
+              <svg v-if="!isSpeaking(message)" class="speak-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+              <svg v-else-if="!speakingPaused" class="speak-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+              <svg v-else class="speak-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            </button>
           </div>
         </article>
       </div>
       <div class="composer" :class="{ disabled: !active }">
         <n-input v-model:value="draft" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" :disabled="!active" placeholder="输入你的回答，或直接追问（长按空格可以说话）"
           @keydown="onKeydown" @keyup="onSpaceUp" @blur="releaseSpace" />
-        <div v-if="listening" class="voice-hint">
-          <span class="voice-dot" />正在听…松开空格结束
+        <div v-if="voiceHint" class="voice-hint">
+          <span class="voice-dot" />{{ voiceHint }}
           <span v-if="interimText" class="voice-interim">{{ interimText }}</span>
         </div>
         <div class="composer-foot">
-          <span>Ctrl + Enter 发送 · 长按空格语音输入</span>
+          <span>Enter 发送 · Shift + Enter 换行 · 长按空格语音输入</span>
           <div class="composer-actions">
             <n-button :disabled="!session || finished || sending" :loading="pausing" @click="togglePause">{{ paused ? '继续' : '暂停' }}</n-button>
             <n-button :disabled="!active || sending || pausing" @click="endConfirmOpen = true">结束</n-button>
