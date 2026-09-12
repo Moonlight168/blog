@@ -1,15 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
-import { NButton, NSpin, useMessage } from "naive-ui";
+import { useRoute, useRouter } from "vue-router";
+import { NButton, NPopconfirm, NSpin, useMessage } from "naive-ui";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 import { durationLabel, resumeLabel, statLabel, timeLabel, topicLabel } from "../format";
 import type { Message, Session } from "../types";
 
 const route = useRoute(); const loading = ref(true);
+const router = useRouter();
 const message = useMessage();
 const refilingId = ref<number | null>(null);
+const deleting = ref(false);
+
+/** 删除本场历史记录：服务端只删这一场的 session/messages/attempts，已归档进知识库的题目不动 */
+async function removeSession() {
+  if (deleting.value) return;
+  deleting.value = true;
+  try {
+    await api(`/api/sessions/${route.params.id}/discard`, { method: "POST" });
+    message.success("已删除本场记录");
+    await router.push("/history");
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : "删除失败");
+  } finally { deleting.value = false; }
+}
 /** 总评是三行固定格式，breaks:true 让单换行也生效；html:false 已转义原始 HTML */
 interface Attempt {
   id: number; questionTitle: string; rawAnswer: string;
@@ -75,7 +90,18 @@ onMounted(async () => { try { detail.value = await api(`/api/history/${route.par
           </p>
           <p v-if="detail.session.jdPath" class="hero-jd">目标岗位：{{ jdLabel(detail.session.jdPath) }}</p>
         </div>
-        <span class="hero-stat">{{ statLabel(detail.averageScore, detail.questionCount, detail.archivedCount) }}</span>
+        <div class="hero-actions">
+          <span class="hero-stat">{{ statLabel(detail.averageScore, detail.questionCount, detail.archivedCount) }}</span>
+          <n-popconfirm @positive-click="removeSession">
+            <template #trigger>
+              <button class="hero-delete" :disabled="deleting" title="删除本场历史记录">删除本场记录</button>
+            </template>
+            <div class="confirm-body">
+              <p>本场记录将删除，无法恢复。</p>
+              <p>已归档的题目不受影响。</p>
+            </div>
+          </n-popconfirm>
+        </div>
       </div>
       <section v-if="summary" class="review-summary">
         <span class="message-label">本场总评</span>

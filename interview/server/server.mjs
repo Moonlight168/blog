@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { InterviewAgent } from "./agent.mjs";
 import { createArchive, refileQuestion } from "./archive.mjs";
+import { asrEnabled, transcribe } from "./asr.mjs";
 import { config } from "./config.mjs";
 import { addMessage, openDatabase, rowToSession, saveSession } from "./db.mjs";
 import { EmbeddingClient } from "./embedding-client.mjs";
@@ -80,6 +81,19 @@ async function body(request) {
   return text ? JSON.parse(text) : {};
 }
 
+/** 读原始二进制请求体（语音上传用）；超限就中断并报可读错误 */
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+async function rawBody(request, limit = MAX_AUDIO_BYTES) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > limit) throw new Error(`音频过大（上限 ${Math.round(limit / 1024 / 1024)}MB），说短一点再试`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 function ruleSnapshot() {
   const skill = fs.readFileSync(path.join(config.appRoot, "skill", "SKILL.md"), "utf8");
   const handbook = fs.readFileSync(path.join(config.blogRoot, "面试宝典文章格式规范.md"), "utf8");
@@ -96,7 +110,7 @@ async function api(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/bootstrap") {
     await questionIndex.refresh();
     const resumeDir = config.resumeDir;
-    return json(response, 200, { resumeDir, resumes: scanResumes(resumeDir), jobs: scanJobs(resumeDir), topics: questionIndex.topics(), embeddingEnabled: embeddingClient.enabled, embeddingModel: config.embedding.model || null, docsBaseUrl: config.docsBaseUrl });
+    return json(response, 200, { resumeDir, resumes: scanResumes(resumeDir), jobs: scanJobs(resumeDir), topics: questionIndex.topics(), embeddingEnabled: embeddingClient.enabled, embeddingModel: config.embedding.model || null, docsBaseUrl: config.docsBaseUrl, asrEnabled: asrEnabled(config.asr), asrModel: config.asr.model || null });
   }
   if (request.method === "POST" && url.pathname === "/api/resume/preview") {
     const input = await body(request);
@@ -107,6 +121,22 @@ async function api(request, response, url) {
     // 返回转换后的 Markdown 原文，便于确认「模型实际看到的是什么」
     const markdown = readResume(target);
     return json(response, 200, { markdown, chars: markdown.length });
+  }
+  // 语音转写：前端把 16kHz 单声道 WAV 直接传上来，这里转发给硅基流动（key 只在服务端）
+  if (request.method === "POST" && url.pathname === "/api/asr") {
+    if (!asrEnabled(config.asr)) return json(response, 400, { error: "未配置语音识别服务（.env 里缺 API Key）" });
+    const contentType = String(request.headers["content-type"] || "audio/wav").split(";")[0].trim().toLowerCase();
+    if (!contentType.startsWith("audio/")) return json(response, 400, { error: "只接受音频内容" });
+    let audio;
+    try { audio = await rawBody(request); }
+    catch (error) { return json(response, 413, { error: error.message }); }
+    if (!audio.length) return json(response, 400, { error: "音频内容为空" });
+    try {
+      const { text, duration } = await transcribe({ config: config.asr, buffer: audio, mime: contentType });
+      return json(response, 200, { text, duration, model: config.asr.model });
+    } catch (error) {
+      return json(response, 502, { error: error.message });
+    }
   }
   if (request.method === "POST" && url.pathname === "/api/config/resume-dir") {
     const input = await body(request);

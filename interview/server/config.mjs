@@ -44,6 +44,13 @@ export const config = {
     apiKey: process.env.INTERVIEW_EMBEDDING_API_KEY || "",
     model: process.env.INTERVIEW_EMBEDDING_MODEL || "",
   },
+  // 语音转写（ASR）：默认复用硅基流动那套（embedding 用同一账号、同一个 key），
+  // 要换别家服务时用 INTERVIEW_ASR_BASE_URL / INTERVIEW_ASR_API_KEY / INTERVIEW_ASR_MODEL 覆盖
+  asr: {
+    baseUrl: process.env.INTERVIEW_ASR_BASE_URL || process.env.INTERVIEW_EMBEDDING_BASE_URL || "",
+    apiKey: process.env.INTERVIEW_ASR_API_KEY || process.env.INTERVIEW_EMBEDDING_API_KEY || "",
+    model: process.env.INTERVIEW_ASR_MODEL || "XingChenAGI/XingChenASR-V3.2-Ultra",
+  },
 };
 
 export function apiUrl(baseUrl, endpoint) {
