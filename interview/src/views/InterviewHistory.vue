@@ -52,7 +52,15 @@ const STATUS_OPTIONS = [
   { label: "全部状态", value: "" },
   { label: "已结束", value: "completed" },
   { label: "进行中", value: "active" },
+  { label: "已暂停", value: "paused" },
 ];
+// 状态标签的三态文案与配色；未知状态按已结束兜底
+const STATUS_META = {
+  active: { text: "进行中", type: "success" },
+  paused: { text: "已暂停", type: "warning" },
+  completed: { text: "已结束", type: "default" },
+} as const;
+const statusMeta = (status: string) => STATUS_META[status as keyof typeof STATUS_META] ?? STATUS_META.completed;
 
 const visible = computed(() => rows.value.filter((row) => {
   if (seriesFilter.value && row.series !== seriesFilter.value) return false;
@@ -117,7 +125,7 @@ function resetFilters() {
       <div v-if="visible.length" class="history-grid">
         <router-link v-for="row in visible" :key="row.id" :to="`/history/${row.id}`" class="history-card">
           <div class="history-top">
-            <n-tag size="small" :type="row.status === 'active' ? 'success' : 'default'">{{ row.status === 'active' ? '进行中' : '已结束' }}</n-tag>
+            <n-tag size="small" :type="statusMeta(row.status).type">{{ statusMeta(row.status).text }}</n-tag>
             <span>{{ timeLabel(row.startedAt) }}</span>
           </div>
           <h3>{{ topicLabel(row.series, row.chapterPath) }}</h3>

@@ -13,6 +13,7 @@ import { InterviewEngine } from "./interview-engine.mjs";
 import { QuestionIndex } from "./question-index.mjs";
 import { slugify } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
+import { expired } from "./session-time.mjs";
 import { isAllowedJob, isAllowedResume, readResume, scanJobs, scanResumes, updateEnvFile } from "./resume.mjs";
 
 const db = openDatabase(config.databasePath);
@@ -91,10 +92,6 @@ function messagesFor(sessionId) {
     .map((row) => ({ ...row, payload: row.payload ? JSON.parse(row.payload) : null }));
 }
 
-function expired(session) {
-  return Date.now() >= new Date(session.startedAt).getTime() + session.durationMinutes * 60_000;
-}
-
 async function api(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/bootstrap") {
     await questionIndex.refresh();
@@ -158,6 +155,7 @@ async function api(request, response, url) {
       // readResume 对 .md/.txt 原样读、对 .html 转 Markdown，JD 也走同一条路
       jdExcerpt: jdPath ? readResume(jdPath).slice(0, 8_000) : "",
       paperQuestions: [], paperIndex: 0,
+      pausedAt: null, pausedMs: 0,
     };
     if (session.mode === "written") {
       const count = Math.min(10, Math.max(3, Math.floor(session.durationMinutes / 6)));
@@ -177,6 +175,10 @@ async function api(request, response, url) {
     try {
     const session = rowToSession(db.prepare("SELECT * FROM sessions WHERE id=?").get(messageMatch[1]));
     if (!session) return json(response, 404, { error: "面试记录不存在" });
+    // 暂停中不接受任何消息（含下一题/结束）：界面上这些都禁用了，这里是兜底。
+    // 放在引擎之前，否则引擎只会笼统地说「面试已结束」，还会变成 500。
+    if (session.status === "paused") return json(response, 409, { error: "面试已暂停，请先点「继续」" });
+    if (session.status !== "active") return json(response, 409, { error: "面试已结束" });
     const input = await body(request);
     // 界面上「下一题」「结束」是按钮，直接指定动作，不经模型判断
     const action = input.action === "next" || input.action === "end" ? input.action : null;
@@ -191,6 +193,37 @@ async function api(request, response, url) {
     result.messages.forEach((message) => addMessage(db, session.id, message));
     return json(response, 200, { session: result.session, messages: messagesFor(session.id) });
     } finally { sessionLocks.delete(messageMatch[1]); }
+  }
+  // 暂停 / 继续：只改会话状态与暂停计时，不调用模型
+  const pauseMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/(pause|resume)$/);
+  if (request.method === "POST" && pauseMatch) {
+    // 有消息正在处理时不能改状态：那条消息结束时会把旧快照写回，暂停会被覆盖掉
+    if (sessionLocks.has(pauseMatch[1])) return json(response, 409, { error: "当前会话正在处理消息，请稍后重试" });
+    const session = rowToSession(db.prepare("SELECT * FROM sessions WHERE id=?").get(pauseMatch[1]));
+    if (!session) return json(response, 404, { error: "面试记录不存在" });
+    const resuming = pauseMatch[2] === "resume";
+    if (resuming && session.status !== "paused") return json(response, 400, { error: "面试当前不在暂停中" });
+    if (!resuming && session.status !== "active") {
+      return json(response, 400, { error: session.status === "paused" ? "面试已经暂停了" : "面试已结束" });
+    }
+    const now = Date.now();
+    // pausedAt 理论上不会为空，真遇到就按「本次暂停 0 毫秒」处理，别把 now 当成起点加进去
+    const pausedAtMs = session.pausedAt ? new Date(session.pausedAt).getTime() : now;
+    const next = resuming
+      ? { ...session, status: "active", pausedAt: null, pausedMs: Number(session.pausedMs ?? 0) + Math.max(0, now - pausedAtMs) }
+      : { ...session, status: "paused", pausedAt: new Date(now).toISOString() };
+    saveSession(db, next);
+    return json(response, 200, { session: next, messages: messagesFor(session.id) });
+  }
+  // 结束面试时选择「不保存」：丢弃这场会话记录（题目与回答已归档，不受影响）
+  const discardMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/discard$/);
+  if (request.method === "POST" && discardMatch) {
+    const session = rowToSession(db.prepare("SELECT * FROM sessions WHERE id=?").get(discardMatch[1]));
+    if (!session) return json(response, 404, { error: "面试记录不存在" });
+    db.prepare("DELETE FROM messages WHERE session_id=?").run(session.id);
+    db.prepare("DELETE FROM attempts WHERE session_id=?").run(session.id);
+    db.prepare("DELETE FROM sessions WHERE id=?").run(session.id);
+    return json(response, 200, { discarded: true });
   }
   const sessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
   if (request.method === "GET" && sessionMatch) {
