@@ -21,6 +21,7 @@ export function openDatabase(file) {
       started_at TEXT NOT NULL, ended_at TEXT, current_question TEXT,
       answer_fragments TEXT NOT NULL DEFAULT '[]', completed_count INTEGER NOT NULL DEFAULT 0,
       skill_snapshot TEXT NOT NULL, resume_excerpt TEXT NOT NULL,
+      jd_path TEXT NOT NULL DEFAULT '', jd_excerpt TEXT NOT NULL DEFAULT '',
       paper_questions TEXT NOT NULL DEFAULT '[]', paper_index INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS messages (
@@ -34,6 +35,9 @@ export function openDatabase(file) {
     );
   `);
   const columns = new Set(db.prepare("PRAGMA table_info(sessions)").all().map((row) => row.name));
+  // 目标 JD：出题与总评都会带上它
+  if (!columns.has("jd_path")) db.exec("ALTER TABLE sessions ADD COLUMN jd_path TEXT NOT NULL DEFAULT ''");
+  if (!columns.has("jd_excerpt")) db.exec("ALTER TABLE sessions ADD COLUMN jd_excerpt TEXT NOT NULL DEFAULT ''");
   if (!columns.has("paper_questions")) db.exec("ALTER TABLE sessions ADD COLUMN paper_questions TEXT NOT NULL DEFAULT '[]'");
   if (!columns.has("paper_index")) db.exec("ALTER TABLE sessions ADD COLUMN paper_index INTEGER NOT NULL DEFAULT 0");
   const attemptColumns = new Set(db.prepare("PRAGMA table_info(attempts)").all().map((row) => row.name));
@@ -53,19 +57,21 @@ export function rowToSession(row) {
     currentQuestion: row.current_question ? JSON.parse(row.current_question) : null,
     answerFragments: JSON.parse(row.answer_fragments || "[]"), completedCount: row.completed_count,
     skillSnapshot: row.skill_snapshot, resumeExcerpt: row.resume_excerpt,
+    jdPath: row.jd_path ?? "", jdExcerpt: row.jd_excerpt ?? "",
     paperQuestions: JSON.parse(row.paper_questions || "[]"), paperIndex: row.paper_index ?? 0,
   };
 }
 
 export function saveSession(db, session) {
   db.prepare(`INSERT INTO sessions
-    (id,resume_path,series,chapter_path,mode,duration_minutes,status,started_at,ended_at,current_question,answer_fragments,completed_count,skill_snapshot,resume_excerpt,paper_questions,paper_index)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    (id,resume_path,series,chapter_path,mode,duration_minutes,status,started_at,ended_at,current_question,answer_fragments,completed_count,skill_snapshot,resume_excerpt,jd_path,jd_excerpt,paper_questions,paper_index)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET status=excluded.status,ended_at=excluded.ended_at,current_question=excluded.current_question,
       answer_fragments=excluded.answer_fragments,completed_count=excluded.completed_count,paper_index=excluded.paper_index`)
     .run(session.id, session.resumePath, session.series, session.chapterPath, session.mode, session.durationMinutes,
       session.status, session.startedAt, session.endedAt ?? null, JSON.stringify(session.currentQuestion),
       JSON.stringify(session.answerFragments), session.completedCount ?? 0, session.skillSnapshot, session.resumeExcerpt,
+      session.jdPath ?? "", session.jdExcerpt ?? "",
       JSON.stringify(session.paperQuestions ?? []), session.paperIndex ?? 0);
 }
 

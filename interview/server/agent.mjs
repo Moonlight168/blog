@@ -45,19 +45,36 @@ export class InterviewAgent {
   }
 
   async generateQuestion({ session }) {
+    // 岗位定制模式没有指定章节，由模型判断这道题该归到哪个章节与分类
+    const jdMode = session.mode === "jd";
     const samples = this.questionIndex.samples(session.chapterPath, 5);
+    const seriesNames = jdMode ? this.questionIndex.topics().map((item) => item.name) : [];
+
     const result = await this.#json(
-      `你是严格的中文技术面试官。围绕指定章节并结合简历生成一道新的、真实面试口吻的问题，不编号、不加星标、一次只问一个核心任务。`
+      `你是严格的中文技术面试官。`
+      + (jdMode
+        ? `围绕目标岗位 JD 与候选人简历生成一道新的、真实面试口吻的问题——考察 JD 里强调、而简历中值得深挖的能力。`
+        : `围绕指定章节并结合简历生成一道新的、真实面试口吻的问题。`)
+      + `不编号、不加星标、一次只问一个核心任务。`
       + `标准答案必须遵守《面试宝典文章格式规范》：第一行是记忆锚点；`
       + `之后是1到6个“数字. **关键词**：主句”的一级要点——冒号后到行尾的这段文字就是主句，必须不超过30字，`
       + `细节、命令、举例一律放到下一行的二级补充里（用恰好3个空格缩进的“-”）；`
       + `不得使用三级标题；总计不超过15行。`
-      + `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案"}。\n`
+      + (jdMode
+        ? `另外判断这道题该归到哪个章节：topic 是简短的章节名（如“JVM 调优”“分布式事务”）；`
+          + `series 必须从这些现有知识分类里挑一个最贴近的：${seriesNames.join("、")}。`
+          + `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案","topic":"章节名","series":"分类名"}。`
+        : `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案"}。`)
+      + `给了目标岗位 JD 时，优先考察 JD 里强调的能力，不要问与该岗位无关的方向。\n`
       + `当前会话规则快照：\n${session.skillSnapshot}`,
-      `知识分类：${session.series}\n章节：${session.chapterPath}\n面试模式：${session.mode}\n简历摘要：${session.resumeExcerpt}\n章节已有题目样例（避免照抄）：${JSON.stringify(samples)}`,
+      (jdMode ? `面试模式：岗位定制（不限定章节）\n` : `知识分类：${session.series}\n章节：${session.chapterPath}\n`)
+      + `面试模式：${session.mode}\n简历摘要：${session.resumeExcerpt}\n`
+      + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
+      + `章节已有题目样例（避免照抄）：${JSON.stringify(samples)}`,
     );
     result.standardAnswer = result.standardAnswer ?? result.standard_answer;
     if (!result.title?.match(/[？?]$/u) || !result.standardAnswer) throw new Error("模型生成的题目结构不完整");
+    if (jdMode && !String(result.topic ?? "").trim()) throw new Error("模型没有给出这道题归属的章节");
     return result;
   }
 
@@ -67,9 +84,12 @@ export class InterviewAgent {
       `你是中文技术笔试出题人。一次生成 ${count} 道彼此不同、难度递进的书面题。每题只考一个核心任务，不编号、不加星标。`
       + `标准答案格式：先一行记忆锚点，再给1到6个“数字. **关键词**：主句”的要点——冒号后到行尾的这段文字就是主句，必须不超过30字，`
       + `细节放到3空格缩进的二级列表里；总计不超过15行。`
-      + `只返回 JSON：{"questions":[{"title":"以？结尾","prompt":"题目","standardAnswer":"标准答案"}]}。\n`
+      + `只返回 JSON：{"questions":[{"title":"以？结尾","prompt":"题目","standardAnswer":"标准答案"}]}。`
+      + `给了目标岗位 JD 时，优先考察 JD 里强调的能力。\n`
       + `规则快照：${session.skillSnapshot}`,
-      `知识分类：${session.series}\n章节：${session.chapterPath}\n简历摘要：${session.resumeExcerpt}\n已有题目样例：${JSON.stringify(samples)}`,
+      `知识分类：${session.series}\n章节：${session.chapterPath}\n简历摘要：${session.resumeExcerpt}\n`
+      + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
+      + `已有题目样例：${JSON.stringify(samples)}`,
     );
     if (!Array.isArray(result.questions) || result.questions.length !== count) throw new Error("模型未生成完整书面试卷");
     return result.questions;
@@ -131,9 +151,12 @@ export class InterviewAgent {
       + `不要泛泛鼓励（“表现不错继续加油”这类等于没说）。`
       + `逐题记录里的「得分 N/100」就是该题实际得分，引用时必须原样照抄，不要换算、也不要推测它“应该”得几分。`
       + `只依据给出的点评判断候选人会什么、不会什么，不要根据题目本身臆测他答过什么。`
+      + `给了目标岗位 JD 时，「下一场重点」要落到该岗位最看重、而候选人目前最弱的那块。`
       + `不要自己写场均分或总分，那一行由系统统一给出。\n`
       + `规则快照：${session.skillSnapshot}`,
-      `主题：${session.series}/${session.chapterPath}\n已点评 ${session.completedCount ?? 0} 次\n逐题记录：\n${scored || "（本场没有点评记录）"}`,
+      `主题：${session.series}/${session.chapterPath}\n已点评 ${session.completedCount ?? 0} 次\n`
+      + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
+      + `逐题记录：\n${scored || "（本场没有点评记录）"}`,
     );
     // 场均分由服务端算，不让模型碰数字——否则它会自己编
     const average = attempts.length

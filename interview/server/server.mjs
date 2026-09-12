@@ -13,7 +13,7 @@ import { InterviewEngine } from "./interview-engine.mjs";
 import { QuestionIndex } from "./question-index.mjs";
 import { slugify } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
-import { isAllowedResume, readResume, scanResumes, updateEnvFile } from "./resume.mjs";
+import { isAllowedJob, isAllowedResume, readResume, scanJobs, scanResumes, updateEnvFile } from "./resume.mjs";
 
 const db = openDatabase(config.databasePath);
 const embeddingClient = new EmbeddingClient(config.embedding);
@@ -99,7 +99,17 @@ async function api(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/bootstrap") {
     await questionIndex.refresh();
     const resumeDir = config.resumeDir;
-    return json(response, 200, { resumeDir, resumes: scanResumes(resumeDir), topics: questionIndex.topics(), embeddingEnabled: embeddingClient.enabled, embeddingModel: config.embedding.model || null, docsBaseUrl: config.docsBaseUrl });
+    return json(response, 200, { resumeDir, resumes: scanResumes(resumeDir), jobs: scanJobs(resumeDir), topics: questionIndex.topics(), embeddingEnabled: embeddingClient.enabled, embeddingModel: config.embedding.model || null, docsBaseUrl: config.docsBaseUrl });
+  }
+  if (request.method === "POST" && url.pathname === "/api/resume/preview") {
+    const input = await body(request);
+    const target = String(input.path ?? "").trim();
+    if (!isAllowedResume(target, config.resumeDir) || !fs.existsSync(target) || !fs.statSync(target).isFile()) {
+      return json(response, 400, { error: "只能预览简历目录下的简历" });
+    }
+    // 返回转换后的 Markdown 原文，便于确认「模型实际看到的是什么」
+    const markdown = readResume(target);
+    return json(response, 200, { markdown, chars: markdown.length });
   }
   if (request.method === "POST" && url.pathname === "/api/config/resume-dir") {
     const input = await body(request);
@@ -115,21 +125,38 @@ async function api(request, response, url) {
       return json(response, 400, { error: error.message });
     }
     config.resumeDir = resolved;
-    return json(response, 200, { resumeDir: resolved, resumes: scanResumes(resolved) });
+    return json(response, 200, { resumeDir: resolved, resumes: scanResumes(resolved), jobs: scanJobs(resolved) });
   }
   if (request.method === "POST" && url.pathname === "/api/sessions") {
     const input = await body(request);
     if (!isAllowedResume(input.resumePath, config.resumeDir) || !fs.existsSync(input.resumePath) || !fs.statSync(input.resumePath).isFile()) {
       return json(response, 400, { error: "只能选择简历目录下的 Markdown / TXT / HTML 简历" });
     }
-    const validTopic = questionIndex.topics().some((series) => series.name === input.series && series.chapters.some((chapter) => chapter.path === input.chapterPath));
-    if (!validTopic) return json(response, 400, { error: "请选择有效的知识分类章节" });
+    const mode = ["interview", "coding", "written", "jd"].includes(input.mode) ? input.mode : "interview";
+    const jdMode = mode === "jd";
+    // 目标岗位可选；岗位定制模式下则必填
+    const jdPath = String(input.jdPath ?? "").trim();
+    if (jdPath && (!isAllowedJob(jdPath, config.resumeDir) || !fs.existsSync(jdPath) || !fs.statSync(jdPath).isFile())) {
+      return json(response, 400, { error: "目标岗位必须是简历目录下的 Markdown / TXT / HTML 文件" });
+    }
+    if (jdMode && !jdPath) return json(response, 400, { error: "岗位定制面试需要先选择目标岗位" });
+
+    // 岗位定制模式不限定章节（由模型按题目内容决定归档位置），所以跳过章节校验
+    if (!jdMode) {
+      const validTopic = questionIndex.topics().some((series) => series.name === input.series && series.chapters.some((chapter) => chapter.path === input.chapterPath));
+      if (!validTopic) return json(response, 400, { error: "请选择有效的知识分类章节" });
+    }
     const session = {
-      id: randomUUID(), resumePath: input.resumePath, series: input.series, chapterPath: input.chapterPath,
-      mode: ["interview", "coding", "written"].includes(input.mode) ? input.mode : "interview",
+      id: randomUUID(), resumePath: input.resumePath,
+      series: jdMode ? "岗位定制" : input.series,
+      chapterPath: jdMode ? "" : input.chapterPath,
+      mode,
       durationMinutes: Math.min(180, Math.max(5, Number(input.durationMinutes) || 30)), status: "active",
       startedAt: new Date().toISOString(), endedAt: null, currentQuestion: null, answerFragments: [], completedCount: 0,
       skillSnapshot: ruleSnapshot(), resumeExcerpt: readResume(input.resumePath).slice(0, 12_000),
+      jdPath: jdPath || "",
+      // readResume 对 .md/.txt 原样读、对 .html 转 Markdown，JD 也走同一条路
+      jdExcerpt: jdPath ? readResume(jdPath).slice(0, 8_000) : "",
       paperQuestions: [], paperIndex: 0,
     };
     if (session.mode === "written") {

@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { NButton, NEmpty, NInputNumber, NSelect, NSpin, NTag, useMessage } from "naive-ui";
-import MarkdownIt from "markdown-it";
 import { api } from "../api";
+import { renderMarkdown } from "../markdown";
 import type { Chapter, TopicSeries } from "../types";
 
 interface ReviewQuestion { id: string; title: string; answer: string; historyUrl: string | null }
 interface HistoryEntry { date: string; answer: string }
-
-/** html:false 会把原始 HTML 转义，javascript: 伪协议也不会被渲染成链接，可安全用于 v-html */
-const markdown = new MarkdownIt({ html: false, linkify: false });
 
 const message = useMessage();
 const topics = ref<TopicSeries[]>([]);
@@ -110,10 +107,6 @@ async function toggleHistory(question: ReviewQuestion) {
   } finally {
     historyLoadingId.value = "";
   }
-}
-
-function renderMarkdown(text: string) {
-  return markdown.render(text);
 }
 
 /** 题里的历史链接是文档站路径（.md），VuePress 实际渲染成 .html，这里做同样转换。 */
