@@ -67,6 +67,30 @@ test("岗位定制：出题时列出各分类已有章节，要求优先复用�
   });
 });
 
+test("标准答案要求第一人称、不要写成「对应简历那版…」这种旁白", async () => {
+  await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句" }, async (agent, lastBody) => {
+    await agent.generateQuestion({
+      session: { mode: "interview", series: "Java", chapterPath: "Java/JVM.md", resumeExcerpt: "简历", skillSnapshot: "" },
+    });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /第一人称/, "要求候选人当场会说的话");
+    assert.match(system, /旁白/, "要明确禁止站在文档外面讲解");
+    assert.match(system, /不要出现“简历”/, "点明不许出现「简历」二字");
+  });
+});
+
+test("笔试出题同样要求第一人称、不要旁白", async () => {
+  await withStubbedChat({ questions: [{ title: "题？", prompt: "题？", standardAnswer: "**锚点**：`x`\n\n1. **要点**：短句" }] }, async (agent, lastBody) => {
+    await agent.generatePaper({
+      session: { series: "Java", chapterPath: "Java/JVM.md", resumeExcerpt: "简历", skillSnapshot: "", nextFocuses: [], askedQuestions: [] },
+      count: 1,
+    });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /第一人称/);
+    assert.match(system, /旁白/);
+  });
+});
+
 test("岗位定制：模型没给 topic 时抛错而不是带着空 topic 往下走", async () => {
   await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句" }, async (agent) => {
     await assert.rejects(() => agent.generateQuestion({
