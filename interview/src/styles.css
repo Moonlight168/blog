@@ -68,6 +68,12 @@ main { height: calc(100vh - 72px); }
 .preview-body h1 { margin: 0 0 10px; font-size: 18px; }.preview-body h2 { margin: 18px 0 8px; padding-top: 12px; border-top: 1px solid #f0ede4; font-size: 15px; }.preview-body h3 { margin: 14px 0 6px; font-size: 14px; }
 .preview-body p { margin: 0 0 8px; }.preview-body ul, .preview-body ol { margin: 0 0 8px; padding-left: 22px; }.preview-body li { margin-bottom: 3px; }.preview-body strong { color: #173f36; }
 .preview-body code { padding: 1px 5px; border-radius: 4px; background: #f0ede4; font-family: ui-monospace, monospace; font-size: 12px; }.preview-body a { color: #1a73e8; }
+/* 引用块：浏览器默认是左右各缩进 40px、无边框，看起来像一段莫名其妙的居中引文
+   （自我介绍首行「> 开场 → 实习 → …」这种链路行就是这样）。改成左边框便签的常见样式。 */
+.preview-body blockquote, .answer .message-text blockquote, .assistant .message-text blockquote, .review-answer blockquote, .attempt-comment blockquote {
+  margin: 0 0 10px; padding: 8px 14px; border-left: 3px solid #e4c276; border-radius: 0 8px 8px 0; background: #fffaf0; color: #4a5450;
+}
+.preview-body blockquote p, .answer .message-text blockquote p, .assistant .message-text blockquote p, .review-answer blockquote p, .attempt-comment blockquote p { margin: 0; }
 .review-bar { display: grid; grid-template-columns: 180px minmax(0, 1fr) 110px auto; gap: 10px; margin: 18px 0 26px; }
 .review-list { display: grid; gap: 12px; }.review-card { padding: 18px 20px; border: 1px solid #dedbd1; border-radius: 14px; background: #fffefa; }
 .review-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }.review-head h3 { flex: 1; min-width: 220px; margin: 0; font-size: 15px; }
@@ -82,10 +88,13 @@ main { height: calc(100vh - 72px); }
 .si-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .si-tools { display: flex; align-items: center; gap: 8px; }.si-count { color: #929a97; font-size: 12px; }
 .selfintro > .n-spin-container, .selfintro > .n-spin-container > .n-spin-content { height: 100%; min-height: 0; }
-.si-body { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px; gap: 14px; }
+.si-body { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; }
 .si-pane { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid #dedbd1; border-radius: 14px; background: #fffefa; overflow: hidden; }
-.si-pane-head { padding: 10px 16px; border-bottom: 1px solid #f0ede4; color: #79827f; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
-/* 用原生 textarea 而不是 n-input：这里的输入框要撑满整栏高度，naive-ui 的 wrapper 反而不好控 */
+.si-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px 8px 16px; border-bottom: 1px solid #f0ede4; color: #79827f; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+/* 预览/编辑是同一个栏位的两种态，所以切换键就放在栏头右端，而不是另开一栏 */
+.si-mode { padding: 4px 10px; border: 1px solid #e6e2d8; border-radius: 999px; background: #fffefa; color: #79827f; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: 0; cursor: pointer; transition: .15s ease; }
+.si-mode:hover { border-color: #c8dcd4; background: #f3f8f5; color: #173f36; }
+/* 用原生 textarea 而不是 n-input：要撑满整栏高度，naive-ui 的 wrapper 反而不好控 */
 .si-editor { width: 100%; height: 100%; padding: 16px 18px; border: 0; outline: none; resize: none; background: transparent; color: #2d3833; font: inherit; font-size: 13px; line-height: 1.85; }
 .si-preview { padding: 16px 18px; overflow: auto; overscroll-behavior: contain; font-size: 13px; }
 .si-chat-pane { grid-template-rows: auto minmax(0, 1fr) auto; }
@@ -103,7 +112,7 @@ main { height: calc(100vh - 72px); }
 .si-history-preview { max-height: 62vh; overflow-y: auto; padding: 14px 18px; border-radius: 10px; background: #fffefa; }
 .si-history-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0ede4; display: flex; align-items: center; gap: 12px; }
 .intro-foot { display: flex; justify-content: flex-end; gap: 8px; }
-@media (max-width: 1100px) { .si-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }.si-chat-pane { grid-column: 1 / -1; }.si-history { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .si-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 260px; }.si-history { grid-template-columns: 1fr; } }
 .retrieval-bar { margin: 18px 0 10px; }.retrieval-actions { display: flex; gap: 8px; margin-bottom: 22px; }.confirm-body p { max-width: 330px; margin: 0 0 8px; line-height: 1.6; }.confirm-body p:last-child { margin-bottom: 0; }
 .end-confirm-body p { max-width: 430px; margin: 0 0 8px; color: #4a5450; line-height: 1.7; }.end-confirm-body p:last-child { margin-bottom: 0; }.end-confirm-body strong { color: #173f36; }
 .channel-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 30px; }.channel-col { min-width: 0; padding: 16px 18px; border: 1px solid #dedbd1; border-radius: 14px; background: #fffefa; }.channel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }.channel-empty { margin: 0; font-size: 12px; }

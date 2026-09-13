@@ -20,12 +20,15 @@ const filePath = ref("");
 const versioned = ref(true);
 
 /**
- * 回撤 / 前进用的版本栈。模型每次改写立即入栈；手动输入则等停手 800ms 再入栈，
- * 否则每敲一个字都会压一个版本，回撤一次只退一个字符。
+ * 回撤 / 前进用的版本栈。模型改写、历史回滚都立即入栈；
+ * 手动输入则等停手 800ms 再入栈，否则每敲一个字都压一个版本，回撤一次只退一个字符。
  */
 const versions = ref<string[]>([]);
 const cursor = ref(-1);
 let snapshotTimer = 0;
+
+/** 预览栏是否切到编辑态——同一个栏位，不再并排摆两拦 */
+const editing = ref(false);
 
 const dirty = computed(() => text.value !== saved.value);
 const canUndo = computed(() => cursor.value > 0);
@@ -37,7 +40,7 @@ function pushVersion(value: string) {
   versions.value = [...versions.value.slice(0, cursor.value + 1), value];
   cursor.value = versions.value.length - 1;
 }
-/** 点回撤/前进前先把还在防抖里的这次输入落栈，否则刚敲的字不在栈上，会「撤不动」 */
+/** 切模式或点回撤前，先把还在防抖里的这次输入落栈，否则刚敲的字不在栈上，会「撤不动」 */
 function flushVersion() { window.clearTimeout(snapshotTimer); pushVersion(text.value); }
 function undo() { flushVersion(); if (canUndo.value) { cursor.value -= 1; text.value = versions.value[cursor.value]; } }
 function redo() { flushVersion(); if (canRedo.value) { cursor.value += 1; text.value = versions.value[cursor.value]; } }
@@ -45,6 +48,10 @@ function onInput(event: Event) {
   text.value = (event.target as HTMLTextAreaElement).value;
   window.clearTimeout(snapshotTimer);
   snapshotTimer = window.setTimeout(() => pushVersion(text.value), 800);
+}
+function toggleEditing() {
+  flushVersion();
+  editing.value = !editing.value;
 }
 
 async function load() {
@@ -100,7 +107,9 @@ async function revise() {
     });
     text.value = data.markdown;
     pushVersion(data.markdown);
-    chatLog.value.push({ role: "assistant", text: "已按你的要求改好，预览在中间那栏。不满意就点「回撤」。" });
+    // 改完切回预览：内容变了，让人直接看到结果，而不是停在编辑框
+    editing.value = false;
+    chatLog.value.push({ role: "assistant", text: "已按你的要求改好，看左边预览。不满意就点「回撤」。" });
   } catch (error) {
     chatLog.value.push({ role: "assistant", text: `这次没改成：${(error as Error).message}` });
   } finally {
@@ -184,27 +193,28 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
     <n-spin :show="loading">
       <div class="si-body">
         <section class="si-pane">
-          <div class="si-pane-head">编辑</div>
+          <div class="si-pane-head">
+            <span>{{ editing ? "编辑" : "预览" }}</span>
+            <button class="si-mode" @click="toggleEditing">{{ editing ? "完成" : "编辑" }}</button>
+          </div>
           <textarea
+            v-if="editing"
             class="si-editor"
             :value="text"
             spellcheck="false"
             placeholder="在这里写自我介绍……"
             @input="onInput"
           />
-        </section>
-
-        <section class="si-pane">
-          <div class="si-pane-head">预览</div>
           <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
-          <div class="si-preview preview-body" v-html="renderMarkdown(text)" />
+          <div v-else class="si-preview preview-body" v-html="renderMarkdown(text)" />
         </section>
 
         <aside class="si-pane si-chat-pane">
           <div class="si-pane-head">让模型改</div>
           <div ref="chatBox" class="si-chat">
             <p v-if="!chatLog.length" class="si-chat-hint">
-              用一句话说怎么改，比如「FlowMind 那段再具体一点」「开场压缩到两句」「实习那段加上 SQL 脚本维护」。
+              内容只通过模型改：用一句话说怎么改，比如「FlowMind 那段再具体一点」「开场压缩到两句」「实习那段加上 SQL 脚本维护」。
+              改完看左边预览，不满意点「回撤」。
             </p>
             <div v-for="(entry, index) in chatLog" :key="index" class="si-chat-item" :class="entry.role">
               <span class="si-chat-who">{{ entry.role === "user" ? "我" : "AI" }}</span>

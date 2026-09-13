@@ -746,7 +746,7 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
         <div><div class="eyebrow">LIVE SESSION</div><h2>{{ session ? `${session.series} · ${session.chapterPath.split('/').at(-1)?.replace('.md','')}` : '等待开始' }}</h2></div>
         <div class="session-meta">
           <n-button size="tiny" quaternary :loading="introLoading" @click="openIntro">自我介绍</n-button>
-          <n-button size="tiny" quaternary @click="$router.push('/self-intro')">编辑</n-button>
+          <n-button size="tiny" quaternary @click="$router.push('/self-intro')">调整</n-button>
           <n-tag v-if="session" :type="statusType">{{ statusText }}</n-tag><span v-if="session && !finished" class="timer" :class="{ paused }">{{ timerText }}</span>
         </div>
       </div>
@@ -812,7 +812,7 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
       <template #footer>
         <div class="intro-foot">
           <n-button size="small" @click="introOpen = false">关闭</n-button>
-          <n-button size="small" type="primary" @click="introOpen = false; $router.push('/self-intro')">去编辑</n-button>
+          <n-button size="small" type="primary" @click="introOpen = false; $router.push('/self-intro')">去调整</n-button>
         </div>
       </template>
     </n-modal>
