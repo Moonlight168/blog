@@ -10,15 +10,19 @@ a { color: inherit; text-decoration: none; }
 nav { display: flex; gap: 8px; } nav a { padding: 9px 15px; border-radius: 9px; color: #65706c; } nav a.router-link-active { color: #173f36; background: #e4ebe5; font-weight: 700; }
 main { height: calc(100vh - 72px); }
 /* 配置面板给足宽度：简历名（如「李四-销售工程师-清新风格-27届」）不能被挤成省略号 */
-.workspace { height: 100%; display: grid; grid-template-columns: 412px minmax(0, 1fr); }
-.config-panel { padding: 38px 30px; border-right: 1px solid #ddd9cc; overflow-y: auto; background: rgba(250,249,245,.74); }
+/* 行高必须 minmax(0, 1fr)：网格行的最小尺寸默认取内容高度，
+   否则聊天内容一长就把整行顶开，整页跟着变长。 */
+.workspace { height: 100%; display: grid; grid-template-columns: 412px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.config-panel { min-height: 0; padding: 38px 30px; border-right: 1px solid #ddd9cc; overflow-y: auto; background: rgba(250,249,245,.74); }
 .config-panel h1, .page h1 { margin: 7px 0 8px; font-family: Georgia, "STSong", serif; font-size: 29px; }
 .eyebrow { color: #b17c25; font-size: 10px; font-weight: 800; letter-spacing: .18em; }
 .muted { margin: 0 0 28px; color: #79827f; line-height: 1.65; }
 .form-stack { display: flex; flex-direction: column; gap: 10px; }.form-stack label { margin-top: 8px; color: #48534f; font-size: 12px; font-weight: 700; }
 .field-note { color: #929a97; line-height: 1.5; }
 .inline { display: grid; grid-template-columns: 1fr auto; gap: 8px; }.two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.two-cols > div { display: flex; flex-direction: column; gap: 10px; }
-.chat-panel { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; background: rgba(255,255,253,.64); }
+/* 中间行同理用 minmax(0, 1fr)：这样消息列表才会自己滚，
+   头（chat-head）和输入框（composer）始终钉在面板上下两端。 */
+.chat-panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: rgba(255,255,253,.64); }
 .chat-head { padding: 24px 34px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e6e2d8; }.chat-head h2 { margin: 5px 0 0; font-size: 18px; }.session-meta { display: flex; align-items: center; gap: 14px; }.timer { font: 600 18px ui-monospace, monospace; color: #173f36; }
 .messages { padding: 32px max(28px, 8vw); overflow-y: auto; overscroll-behavior: contain; }.welcome { max-width: 550px; margin: 10vh auto 0; text-align: center; }.welcome-orb { width: 76px; height: 76px; margin: auto; display: grid; place-items: center; border-radius: 50%; background: #173f36; color: #f7d77e; font: 32px Georgia, serif; box-shadow: 0 18px 45px #173f3630; }.welcome h2 { margin: 24px 0 10px; font-family: Georgia, "STSong", serif; font-size: 27px; }.welcome p { color: #7b8581; line-height: 1.8; }
 .message { max-width: 800px; margin: 0 auto 24px; display: flex; gap: 12px; }.message.user { flex-direction: row-reverse; }.avatar { flex: 0 0 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #e5e8df; color: #53605b; font-size: 11px; font-weight: 800; }.assistant .avatar { background: #173f36; color: #f6d679; }.bubble { max-width: 78%; padding: 15px 18px; border: 1px solid #dfddd5; border-radius: 4px 16px 16px; background: #fff; box-shadow: 0 7px 24px #24332b0b; }.user .bubble { border: none; border-radius: 16px 4px 16px 16px; background: #173f36; color: white; }.evaluation .bubble { border-color: #e4c276; background: #fffaf0; }
@@ -73,6 +77,33 @@ main { height: calc(100vh - 72px); }
 .review-answer ol, .review-answer ul { margin: 0 0 8px; padding-left: 22px; }.review-answer ol:last-child, .review-answer ul:last-child { margin-bottom: 0; }.review-answer li { margin-bottom: 4px; }.review-answer strong { color: #173f36; }.review-answer code { padding: 1px 5px; border-radius: 4px; background: #e8e5da; font-family: ui-monospace, monospace; font-size: 12px; }
 .review-history { margin: 12px 0 0; padding: 12px 16px; border-left: 3px solid #e4c276; border-radius: 0 8px 8px 0; background: #fffaf0; }.history-entry { display: flex; gap: 10px; margin-bottom: 8px; color: #4a5450; font-size: 13px; line-height: 1.7; }.history-entry:last-of-type { margin-bottom: 6px; }.history-empty { margin: 0; font-size: 12px; }.history-blank { color: #a8a29a; font-style: italic; }
 @media (max-width: 850px) { .review-bar { grid-template-columns: 1fr; } }
+/* 自我介绍编辑器：工具条固定在顶，下面三栏各自滚（同聊天区那套 minmax(0,1fr) 的约束） */
+.selfintro { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.si-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.si-tools { display: flex; align-items: center; gap: 8px; }.si-count { color: #929a97; font-size: 12px; }
+.selfintro > .n-spin-container, .selfintro > .n-spin-container > .n-spin-content { height: 100%; min-height: 0; }
+.si-body { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px; gap: 14px; }
+.si-pane { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid #dedbd1; border-radius: 14px; background: #fffefa; overflow: hidden; }
+.si-pane-head { padding: 10px 16px; border-bottom: 1px solid #f0ede4; color: #79827f; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+/* 用原生 textarea 而不是 n-input：这里的输入框要撑满整栏高度，naive-ui 的 wrapper 反而不好控 */
+.si-editor { width: 100%; height: 100%; padding: 16px 18px; border: 0; outline: none; resize: none; background: transparent; color: #2d3833; font: inherit; font-size: 13px; line-height: 1.85; }
+.si-preview { padding: 16px 18px; overflow: auto; overscroll-behavior: contain; font-size: 13px; }
+.si-chat-pane { grid-template-rows: auto minmax(0, 1fr) auto; }
+.si-chat { padding: 12px 14px; overflow-y: auto; overscroll-behavior: contain; }
+.si-chat-hint { margin: 0; color: #929a97; font-size: 12px; line-height: 1.8; }
+.si-chat-item { margin-bottom: 10px; display: flex; gap: 8px; font-size: 12px; line-height: 1.7; }.si-chat-item.user { color: #173f36; }.si-chat-item.assistant { color: #56615d; }
+.si-chat-who { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; background: #e5e8df; color: #53605b; font-size: 10px; font-weight: 800; }.si-chat-item.assistant .si-chat-who { background: #173f36; color: #f6d679; }
+.si-chat-box { padding: 10px 12px; border-top: 1px solid #f0ede4; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }.si-chat-box > .n-input { width: 100%; }
+.si-path { margin: 10px 0 0; font-size: 11px; word-break: break-all; }
+.si-history { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; min-height: 380px; }
+.si-history-list { max-height: 62vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.si-commit { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid #e6e2d8; border-radius: 10px; background: #fffefa; text-align: left; font: inherit; cursor: pointer; transition: .15s ease; }
+.si-commit:hover { border-color: #c8dcd4; background: #f3f8f5; }.si-commit.active { border-color: #173f36; background: #f3f8f5; }
+.si-commit strong { font-size: 12px; font-weight: 600; color: #2d3833; line-height: 1.5; }.si-commit-meta { color: #929a97; font-size: 11px; font-family: ui-monospace, monospace; }
+.si-history-preview { max-height: 62vh; overflow-y: auto; padding: 14px 18px; border-radius: 10px; background: #fffefa; }
+.si-history-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0ede4; display: flex; align-items: center; gap: 12px; }
+.intro-foot { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 1100px) { .si-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }.si-chat-pane { grid-column: 1 / -1; }.si-history { grid-template-columns: 1fr; } }
 .retrieval-bar { margin: 18px 0 10px; }.retrieval-actions { display: flex; gap: 8px; margin-bottom: 22px; }.confirm-body p { max-width: 330px; margin: 0 0 8px; line-height: 1.6; }.confirm-body p:last-child { margin-bottom: 0; }
 .end-confirm-body p { max-width: 430px; margin: 0 0 8px; color: #4a5450; line-height: 1.7; }.end-confirm-body p:last-child { margin-bottom: 0; }.end-confirm-body strong { color: #173f36; }
 .channel-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 30px; }.channel-col { min-width: 0; padding: 16px 18px; border: 1px solid #dedbd1; border-radius: 14px; background: #fffefa; }.channel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }.channel-empty { margin: 0; font-size: 12px; }

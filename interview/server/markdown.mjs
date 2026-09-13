@@ -7,6 +7,9 @@ const HISTORY_LINK = /^→\s*\[回答历史\]\(([^)]+)\)\s*$/m;
 /** 一级要点主句的字数上限，按「汉字当量」计。 */
 export const MAX_MAIN_UNITS = 30;
 
+/** 记忆锚点行：全库统一写法，加粗「锚点」+ 中文冒号 + 反引号包裹的一行口诀 */
+export const ANCHOR_LINE = /^\*\*锚点\*\*：`[^`]+`$/u;
+
 /**
  * 视觉宽度当量：非 ASCII（汉字、全角标点、箭头等）算 1，ASCII 算 0.5，空格与反引号不计。
  * 不能直接用 String.length——那会把 retry_count 这类标识符按每个字母 1 字算，
@@ -130,7 +133,11 @@ export function validateQuestionBlock(block) {
     .filter((line) => line.trim() && line.trim() !== "---");
   if (answerLines.length > 15) errors.push("答案记忆卡不得超过 15 行");
   if (!answerLines.length) errors.push("题目与回答历史链接之间必须有标准答案");
-  else if (/^\d+\.|^\s+-|^#/u.test(answerLines[0])) errors.push("答案第一行必须是记忆锚点");
+  // 锚点格式全库 574/574 都是「**锚点**：`一行口诀`」。原来只拦「首行不是编号/缩进/标题」，
+  // 模型照着规范正文里的「记忆锚点」四个字另写了一种样式，照样能过关（实测漏进来过一条）。
+  else if (!ANCHOR_LINE.test(answerLines[0])) {
+    errors.push("答案第一行必须是锚点，写法固定为 **锚点**：`一行口诀`（例：**锚点**：`数组+链表+红黑树`）");
+  }
   const topLevel = answerLines.filter((line) => /^\d+\.\s+\*\*[^*]+\*\*/u.test(line));
   if (!topLevel.length || topLevel.length > 6) errors.push("答案必须包含 1–6 个编号加粗要点");
   // 主句上限按汉字当量算；报错要带上「第几条、超多少」，否则重写时模型不知道该改哪句

@@ -68,6 +68,18 @@ test("空音频不发请求", async () => {
   assert.equal(called, false);
 });
 
+test("网络不可用时说「连不上」而不是 fetch failed", async () => {
+  const fetchImpl = async () => {
+    const error = new TypeError("fetch failed");
+    error.cause = { code: "ECONNREFUSED" };
+    throw error;
+  };
+  await assert.rejects(
+    () => transcribe({ config: CONFIG, buffer: Buffer.from("a"), mime: "audio/wav", fetchImpl }),
+    /连不上语音识别服务.*ECONNREFUSED/s,
+  );
+});
+
 test("超时转成可读提示，而不是抛 AbortError", async () => {
   const fetchImpl = async (_url, options) => new Promise((_resolve, reject) => {
     options.signal.addEventListener("abort", () => {

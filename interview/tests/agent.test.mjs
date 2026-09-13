@@ -14,7 +14,12 @@ async function withStubbedChat(reply, run) {
   try {
     const agent = new InterviewAgent({
       config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" },
-      questionIndex: { topics: () => [{ name: "Java" }, { name: "框架" }] },
+      questionIndex: {
+        topics: () => [
+          { name: "Java", chapters: [{ name: "集合", path: "Java/集合.md" }, { name: "多线程", path: "Java/多线程.md" }] },
+          { name: "框架", chapters: [{ name: "spring", path: "框架/spring.md" }] },
+        ],
+      },
     });
     await run(agent, () => bodies.at(-1));
   } finally { globalThis.fetch = previousFetch; }
@@ -46,6 +51,19 @@ test("岗位定制：出题时要求模型给出 topic / series，并把现有�
     assert.equal(question.topic, "JVM 调优");
     assert.match(JSON.stringify(lastBody().messages), /topic/, "提示词里要说明 topic");
     assert.match(JSON.stringify(lastBody().messages), /框架/, "要把现有分类列给它挑");
+  });
+});
+
+test("岗位定制：出题时列出各分类已有章节，要求优先复用而不是另造近义章节", async () => {
+  await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句", topic: "集合", series: "Java" }, async (agent, lastBody) => {
+    await agent.generateQuestion({
+      session: { mode: "jd", series: "岗位定制", chapterPath: "", resumeExcerpt: "简历", jdExcerpt: JD, skillSnapshot: "" },
+    });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /各分类已有章节/, "要告诉模型库里已经有哪些章节");
+    assert.match(system, /- Java：集合、多线程/, "已有章节要按分类列出来");
+    assert.match(system, /不要合并两章造一个新名字/, "跨两章的题要挑最贴近的一个，不能自造合并名");
+    assert.doesNotMatch(system, /JVM 调优/, "不能再拿库里没有的章节名当例子，模型会照着造");
   });
 });
 
@@ -119,6 +137,62 @@ test("出题提示词带上「已问过的题」，只给标题且放在最末�
     assert.ok(user.trimEnd().endsWith("- Redis 缓存穿透怎么防？"), "变化的部分要放在最后，好让前缀命中缓存");
     // 已问清单只给标题：没有答案/摘要
     assert.doesNotMatch(user, /标准答案|answer_excerpt/);
+  });
+});
+
+test("网络不可用时给出可读提示，而不是把 fetch failed 甩给用户", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    const error = new TypeError("fetch failed");
+    error.cause = { code: "ENOTFOUND" };
+    throw error;
+  };
+  try {
+    const agent = new InterviewAgent({
+      config: { baseUrl: "https://api.deepseek.com/v1", apiKey: "k", model: "m" },
+      questionIndex: { topics: () => [] },
+    });
+    await assert.rejects(
+      () => agent.generateQuestion({
+        session: { mode: "interview", series: "Java", chapterPath: "Java/JVM.md", resumeExcerpt: "简历", skillSnapshot: "" },
+      }),
+      (error) => {
+        assert.match(error.message, /连不上对话模型服务/);
+        assert.match(error.message, /api\.deepseek\.com/);
+        assert.match(error.message, /ENOTFOUND/);
+        return true;
+      },
+    );
+  } finally { globalThis.fetch = previousFetch; }
+});
+
+test("追问要带上简历/JD/当前题与标准答案，否则答不出「结合我的项目」", async () => {
+  await withStubbedChat({ reply: "……" }, async (agent, lastBody) => {
+    await agent.answerFollowup({
+      session: {
+        currentQuestion: { title: "集合怎么选型？", standardAnswer: "记忆锚点：先说场景。\n1. **选型**：按 key 查改用 HashMap。" },
+        resumeExcerpt: "项目经历：校园二手交易平台，用 Redis 缓存热点商品",
+        jdExcerpt: JD,
+      },
+      text: "结合我的项目，给出一个标准答案。",
+    });
+    const user = lastBody().messages[1].content;
+    assert.match(user, /校园二手交易平台/, "要拿得到简历里的真实项目，否则只能回「我没法替你编」");
+    assert.match(user, /LangGraph/, "要带上目标 JD");
+    assert.match(user, /HashMap/, "要带上本题标准答案");
+    assert.ok(user.trimEnd().endsWith("结合我的项目，给出一个标准答案。"), "追问放最后，前面同一题不变的部分才能命中缓存");
+  });
+});
+
+test("追问的提示词禁止回避推诿，也不再要求藏起标准答案（它本来就展示给候选人）", async () => {
+  await withStubbedChat({ reply: "……" }, async (agent, lastBody) => {
+    await agent.answerFollowup({
+      session: { currentQuestion: { title: "什么是 G1？", standardAnswer: "1. **分区**：把堆切成 Region。" }, resumeExcerpt: "简历", jdExcerpt: "" },
+      text: "结合我的项目讲讲",
+    });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /不许回避/, "要明确禁止「这个得结合你自己的项目来讲」这类推诿");
+    assert.doesNotMatch(system, /不泄露完整标准答案/, "作答后本来就会展示标准答案，藏它只会让模型推掉追问");
   });
 });
 

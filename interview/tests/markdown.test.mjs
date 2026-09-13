@@ -21,7 +21,7 @@ test("parses H2 questions and omits the answer-history link from the answer", ()
 test("builds a question block that follows the interview handbook", () => {
   const block = buildQuestionBlock({
     title: "为什么需要状态机？",
-    answer: "记忆锚点：状态定义边界，事件驱动迁移。\n\n1. **边界清晰**：用状态约束流程\n   - 非法迁移会被拒绝",
+    answer: "**锚点**：`状态定义边界，事件驱动迁移`\n\n1. **边界清晰**：用状态约束流程\n   - 非法迁移会被拒绝",
     historyUrl: "/private/series/答题历史/Java/topic-答题记录.md#为什么需要状态机",
   });
   assert.deepEqual(validateQuestionBlock(block), []);
@@ -43,7 +43,7 @@ test("英文标识符堆出来的主句不再被误判超长", () => {
   // 旧口径下这句是 40 字（retry_count 每个字母算 1 字），实际视觉宽度只有 24
   const block = buildQuestionBlock({
     title: "定时任务怎么失败重试？",
-    answer: "记忆锚点：状态机 + 乐观锁。\n\n1. **失败重试**：记录 retry_count 与 next_retry_time，指数退避重试。",
+    answer: "**锚点**：`状态机 + 乐观锁`\n\n1. **失败重试**：记录 retry_count 与 next_retry_time，指数退避重试。",
     historyUrl: "/private/series/答题历史/Java/topic-答题记录.md#定时任务怎么失败重试",
   });
   assert.match(block, /retry_count/);
@@ -51,14 +51,14 @@ test("英文标识符堆出来的主句不再被误判超长", () => {
 
 test("真正超长的主句仍然拒绝，并指出是第几条、超多少", () => {
   const long = "1. **定义**：这句话故意写得非常长用来触发上限校验一二三四五六七八九十甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥";
-  const block = `## 什么是状态机？\n\n记忆锚点：状态定义边界。\n\n${long}\n\n→ [回答历史](/private/series/答题历史/Java/t.md#什么是状态机)\n`;
+  const block = `## 什么是状态机？\n\n**锚点**：\`状态定义边界\`\n\n${long}\n\n→ [回答历史](/private/series/答题历史/Java/t.md#什么是状态机)\n`;
   const errors = validateQuestionBlock(block);
   assert.ok(errors.some((error) => /第 1 条/.test(error)), `错误信息要指出第几条：${errors.join("；")}`);
 });
 
 test("兜底拆分：超长主句降级为二级补充，事实不丢且能通过校验", () => {
   const long = "1. **失败重试**：记录 retry_count 与 next_retry_time，失败后按指数退避重试，超过上限置为死信状态并通知人工介入处理";
-  const split = splitLongBullets(`记忆锚点：状态机。\n\n${long}`);
+  const split = splitLongBullets(`**锚点**：\`状态机重试\`\n\n${long}`);
   assert.match(split, /\n {3}- /, "应当生成 3 空格缩进的二级补充");
   const block = buildQuestionBlock({
     title: "状态机怎么重试？",
@@ -67,6 +67,18 @@ test("兜底拆分：超长主句降级为二级补充，事实不丢且能通�
   });
   assert.match(block, /retry_count/);
   assert.match(block, /人工介入/);
+});
+
+test("锚点写法固定为 **锚点**：`一行口诀`，写成「记忆锚点：」会被拒绝", () => {
+  // 全库 574 条锚点无一例外都是这个写法，规范正文里却只写了「记忆锚点」四个字，
+  // 模型照着正文写过一次「记忆锚点：…」，校验当时不查格式，就这么漏进了知识库
+  const withOldStyle = `## 什么是状态机？\n\n记忆锚点：状态定义边界。\n\n1. **定义**：状态驱动流程\n\n→ [回答历史](/private/series/答题历史/Java/t.md#什么是状态机)\n`;
+  const errors = validateQuestionBlock(withOldStyle);
+  assert.ok(errors.some((error) => /锚点/.test(error)), `要指出锚点写法不对：${errors.join("；")}`);
+
+  // 漏掉反引号同样不算数
+  const withoutTicks = `## 什么是状态机？\n\n**锚点**：状态定义边界。\n\n1. **定义**：状态驱动流程\n\n→ [回答历史](/private/series/答题历史/Java/t.md#什么是状态机)\n`;
+  assert.ok(validateQuestionBlock(withoutTicks).some((error) => /锚点/.test(error)), "锚点内容必须用反引号包住");
 });
 
 test("rejects headings, stars and overlong answer cards", () => {

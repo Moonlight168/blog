@@ -15,6 +15,7 @@ import { InterviewEngine } from "./interview-engine.mjs";
 import { QuestionIndex } from "./question-index.mjs";
 import { slugify } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
+import { commitSelfIntro, readSelfIntro, readSelfIntroAt, rollbackSelfIntro, selfIntroHistory, writeSelfIntro } from "./self-intro.mjs";
 import { expired } from "./session-time.mjs";
 import { isAllowedJob, isAllowedResume, readResume, scanJobs, scanResumes, updateEnvFile } from "./resume.mjs";
 
@@ -160,6 +161,56 @@ async function api(request, response, url) {
     // 返回转换后的 Markdown 原文，便于确认「模型实际看到的是什么」
     const markdown = readResume(target);
     return json(response, 200, { markdown, chars: markdown.length });
+  }
+  // 自我介绍编辑：读 / 写 / 让模型改 / 历史版本 / 回滚。
+  // 文件在 src/private 下，写回后顺手提交给那个目录里的独立仓库（无远程，不会外流）。
+  if (request.method === "GET" && url.pathname === "/api/self-intro") {
+    const { path: file, exists, markdown, mtime, repo } = readSelfIntro(config.resumeDir);
+    return json(response, 200, { path: file, exists, markdown, mtime, versioned: Boolean(repo) });
+  }
+  if (request.method === "GET" && url.pathname === "/api/self-intro/history") {
+    return json(response, 200, { commits: selfIntroHistory(config.resumeDir) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/self-intro/history") {
+    const input = await body(request);
+    return json(response, 200, { markdown: readSelfIntroAt(config.resumeDir, String(input.hash ?? "")) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/self-intro/rollback") {
+    const input = await body(request);
+    const result = rollbackSelfIntro(config.resumeDir, String(input.hash ?? ""));
+    return json(response, 200, { ...result });
+  }
+  if (request.method === "POST" && url.pathname === "/api/self-intro") {
+    const input = await body(request);
+    const markdown = String(input.markdown ?? "");
+    if (!markdown.trim()) return json(response, 400, { error: "自我介绍不能为空" });
+    // 编辑器打开期间文件被别处改过：先把磁盘上那份提交存档，再覆盖。
+    // 不做「报冲突让你二选一」——那会卡住保存；先存档则两边都不会丢，git 里都能翻到。
+    const current = readSelfIntro(config.resumeDir);
+    const externallyChanged = current.exists
+      && typeof input.baseMtime === "number"
+      && Math.abs(current.mtime - input.baseMtime) > 1;
+    const notices = [];
+    if (externallyChanged) {
+      const archived = commitSelfIntro(config.resumeDir, "自我介绍：外部改动存档（编辑器保存前自动存档）");
+      notices.push(archived.committed
+        ? `这个文件在编辑器外被改过，已先把外部版本存成 ${archived.hash}，再写入你现在的版本`
+        : "这个文件在编辑器外被改过（当前内容与磁盘一致，无需额外存档）");
+    }
+    const written = writeSelfIntro(config.resumeDir, markdown);
+    const commit = commitSelfIntro(config.resumeDir, String(input.message ?? "").trim() || "自我介绍：编辑器保存");
+    return json(response, 200, { ...written, commit, externallyChanged, notices });
+  }
+  if (request.method === "POST" && url.pathname === "/api/self-intro/revise") {
+    const input = await body(request);
+    const markdown = String(input.markdown ?? "");
+    const instruction = String(input.instruction ?? "").trim();
+    if (!instruction) return json(response, 400, { error: "请说明想怎么改" });
+    try {
+      return json(response, 200, { markdown: await agent.reviseSelfIntro({ markdown, instruction }) });
+    } catch (error) {
+      return json(response, 502, { error: error.message });
+    }
   }
   // 语音转写：前端把 16kHz 单声道 WAV 直接传上来，这里转发给硅基流动（key 只在服务端）
   if (request.method === "POST" && url.pathname === "/api/asr") {

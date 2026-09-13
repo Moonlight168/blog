@@ -65,7 +65,8 @@ export const zhNavbar = navbar([
       { text: "面试宝典",icon: "/assets/icon/书本.png", link: "/series/knowledge/index.md" },
       ...(process.env.NODE_ENV === "development"
           ? [
-              { text: "模拟面试", icon: "/assets/icon/chat.svg", link: "/private/resume/面试回答话术.md" }, // 本地显示
+              // 直接指向本地面试台（interview/ 里跑 npm run dev；5174 是 vite 热更新版）
+              { text: "模拟面试", icon: "/assets/icon/chat.svg", link: "http://127.0.0.1:5174/" }, // 本地显示
               { text: "寻找 Offer", icon: "/assets/icon/招聘.png", link: "/private/hires/" },
               { text: "秋招打卡", icon: "/assets/icon/轨迹.png", link: "/private/checkin/" },
             ]

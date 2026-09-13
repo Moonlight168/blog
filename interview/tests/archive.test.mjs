@@ -9,7 +9,7 @@ import { openDatabase } from "../server/db.mjs";
 
 const SESSION = { id: "session-1", completedCount: 0, chapterPath: "Java/多线程.md" };
 
-function makeEnv({ candidates = [], existing = null, reformat = null } = {}) {
+function makeEnv({ candidates = [], existing = null, reformat = null, matchChapter = "" } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "archive-"));
   const knowledgeRoot = path.join(root, "knowledge");
   const privateHistoryRoot = path.join(root, "history");
@@ -24,6 +24,11 @@ function makeEnv({ candidates = [], existing = null, reformat = null } = {}) {
   };
   const agent = {
     async judgeDuplicate() { calls.push("judgeDuplicate"); return { kind: "new" }; },
+    // 默认空串 = 模型认为该分类下没有章节装得下这道题 → 新建
+    async matchChapter({ chapters }) {
+      calls.push("matchChapter");
+      return typeof matchChapter === "function" ? matchChapter({ chapters }) : matchChapter;
+    },
     async reformatAnswer() {
       calls.push("reformatAnswer");
       // reformat 为 null 时模拟"重写也救不回来"
@@ -34,6 +39,7 @@ function makeEnv({ candidates = [], existing = null, reformat = null } = {}) {
   return {
     calls, agent, questionIndex, knowledgeRoot, privateHistoryRoot,
     // 暴露出来给「新建章节」的断言用
+    knowledgeDir: path.join(knowledgeRoot, "Java"),
     knowledgeFile: path.join(knowledgeRoot, "Java", "多线程.md"),
     historyFile: path.join(privateHistoryRoot, "Java", "多线程-答题记录.md"),
     archive: createArchive({ questionIndex, agent, knowledgeRoot, privateHistoryRoot, db: openDatabase(path.join(root, "test.sqlite")) }),
@@ -55,8 +61,8 @@ test("岗位定制：已有同名章节时归到那个文件", async () => {
   assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /## 为什么需要状态机？/, "应归到已有的 多线程.md");
 });
 
-test("岗位定制：没有同名章节时按模型选的分类新建", async () => {
-  const env = makeEnv();
+test("岗位定制：没有章节装得下时，才按模型选的分类新建", async () => {
+  const env = makeEnv({ matchChapter: "" });
   const result = await env.archive({
     session: JD_SESSION,
     question: { title: "G1 和 CMS 怎么选？", standardAnswer: COMPLIANT, topic: "JVM 调优", series: "Java" },
@@ -64,10 +70,40 @@ test("岗位定制：没有同名章节时按模型选的分类新建", async ()
   });
 
   assert.equal(result?.notice, undefined);
-  const created = path.join(env.knowledgeRoot, "Java", "JVM 调优.md");
-  assert.ok(fs.existsSync(created), "应按 topic 新建章节文件");
+  assert.ok(env.calls.includes("matchChapter"), "新建之前要先问一遍已有章节");
+  const created = path.join(env.knowledgeDir, "JVM 调优.md");
+  assert.ok(fs.existsSync(created), "确实没有能覆盖的章节时才新建");
   assert.match(fs.readFileSync(created, "utf8"), /## G1 和 CMS 怎么选？/);
   assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /^# 多线程/, "不该动到别的章节");
+});
+
+test("岗位定制：章节名对不上但已有章节能覆盖时，归到已有章节而不是新建", async () => {
+  const env = makeEnv({ matchChapter: ({ chapters }) => (chapters.includes("集合") ? "集合" : "") });
+  fs.writeFileSync(path.join(env.knowledgeDir, "集合.md"), "# 集合\n", "utf8");
+
+  const result = await env.archive({
+    session: JD_SESSION,
+    // 复现线上那次：模型把「集合」和「多线程」并成了一个新名字
+    question: { title: "说说集合怎么选型，有没有并发控制？", standardAnswer: COMPLIANT, topic: "Java 集合与并发", series: "Java" },
+    rawAnswer: "回答", evaluation: { score: 75, comment: "还行" },
+  });
+
+  assert.equal(result?.notice, undefined);
+  assert.match(fs.readFileSync(path.join(env.knowledgeDir, "集合.md"), "utf8"), /## 说说集合怎么选型，有没有并发控制？/, "应并进已有的 集合.md");
+  assert.ok(!fs.existsSync(path.join(env.knowledgeDir, "Java 集合与并发.md")), "不该凭空多出一个近义章节文件");
+});
+
+test("岗位定制：分类下还一个章节都没有时，不再多问一次直接新建", async () => {
+  const env = makeEnv({ matchChapter: "" });
+  const result = await env.archive({
+    session: JD_SESSION,
+    question: { title: "题？", standardAnswer: COMPLIANT, topic: "全新的章节", series: "Python" },
+    rawAnswer: "回答", evaluation: { score: 60, comment: "凑合" },
+  });
+
+  assert.equal(result?.notice, undefined);
+  assert.ok(!env.calls.includes("matchChapter"), "该分类下没有候选章节，没必要白调一次模型");
+  assert.ok(fs.existsSync(path.join(env.knowledgeRoot, "Python", "全新的章节.md")));
 });
 
 test("岗位定制：模型没给 topic 时报错，不静默写错地方", async () => {
@@ -127,7 +163,7 @@ test("主句超长、重写也失败时，用自动拆分兜底写进知识库�
 
 test("结构性不合规（拆分也修不了）才跳过入库，且不阻断整场面试", async () => {
   const env = makeEnv(); // reformat 为 null → 重写抛错
-  // 第一行不是记忆锚点：属于结构问题，自动拆分只处理主句超长，救不了这种
+  // 第一行不是锚点：属于结构问题，自动拆分只处理主句超长，救不了这种
   const broken = `1. **第一条**：短句\n\n2. **第二条**：短句`;
 
   const result = await env.archive({
@@ -138,7 +174,7 @@ test("结构性不合规（拆分也修不了）才跳过入库，且不阻断�
   });
 
   assert.ok(result?.notice, "要把跳过原因回报出来，不能静默吞掉");
-  assert.match(result.notice, /记忆锚点/);
+  assert.match(result.notice, /锚点/);
   // 知识库保持原样，没有写入不合规的题块
   assert.equal(fs.readFileSync(env.knowledgeFile, "utf8").trim(), "# 多线程");
   // 但这次回答必须留下来
@@ -188,7 +224,7 @@ test("补录：主句超长时走自动拆分兜底，成功写入", async () =>
   const result = await refileQuestion({
     agent: env.agent, questionIndex: env.questionIndex,
     knowledgeRoot: env.knowledgeRoot, privateHistoryRoot: env.privateHistoryRoot,
-    chapterPath: "Java/多线程.md", title: "题？", standardAnswer: `记忆锚点：先看频率。\n\n1. **超长**：${"啊".repeat(40)}`,
+    chapterPath: "Java/多线程.md", title: "题？", standardAnswer: `**锚点**：\`先看频率\`\n\n1. **超长**：${"啊".repeat(40)}`,
   });
   assert.equal(result.ok, true);
   assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /- 啊{10}$/m);
@@ -202,7 +238,7 @@ test("补录失败时返回原因而不是抛错", async () => {
     chapterPath: "Java/多线程.md", title: "题？", standardAnswer: `1. **缺锚点**：短句`,
   });
   assert.equal(result.ok, false);
-  assert.match(result.reason, /记忆锚点/);
+  assert.match(result.reason, /锚点/);
   assert.equal(fs.readFileSync(env.knowledgeFile, "utf8").trim(), "# 多线程", "失败时不该写入");
 });
 

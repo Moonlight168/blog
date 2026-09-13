@@ -1,4 +1,5 @@
 import { apiUrl } from "./config.mjs";
+import { friendlyNetworkError, httpStatusHint } from "./net.mjs";
 
 /**
  * 语音转写：调硅基流动的 /audio/transcriptions（OpenAI 兼容的 multipart 形式）。
@@ -32,8 +33,9 @@ export async function transcribe({ config: asrConfig, buffer, mime, fetchImpl = 
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const url = apiUrl(asrConfig.baseUrl, "audio/transcriptions");
   try {
-    const response = await fetchImpl(apiUrl(asrConfig.baseUrl, "audio/transcriptions"), {
+    const response = await fetchImpl(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${asrConfig.apiKey}` },
       body: form,
@@ -42,7 +44,7 @@ export async function transcribe({ config: asrConfig, buffer, mime, fetchImpl = 
     const raw = await response.text();
     if (!response.ok) {
       // 带上上游状态码：前端才分得清是 key 失效（401）、限流（429）还是音频有问题（400）
-      throw new Error(`语音识别服务返回 ${response.status}${raw ? `：${raw.slice(0, 200)}` : ""}`);
+      throw new Error(`语音识别服务返回 ${response.status}${httpStatusHint(response.status)}${raw ? `：${raw.slice(0, 200)}` : ""}`);
     }
     let payload;
     try { payload = JSON.parse(raw); }
@@ -53,7 +55,8 @@ export async function transcribe({ config: asrConfig, buffer, mime, fetchImpl = 
     };
   } catch (error) {
     if (error?.name === "AbortError") throw new Error("语音识别超时，请重试或改用浏览器内置识别");
-    throw error;
+    // 网络不通时给出「连不上谁」而不是 "fetch failed"
+    throw new Error(friendlyNetworkError(error, { what: "语音识别服务", url }) ?? error.message);
   } finally {
     clearTimeout(timer);
   }

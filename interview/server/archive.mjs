@@ -53,21 +53,44 @@ function listMarkdown(dir, out = []) {
   return out;
 }
 
+/** 知识库现有章节，按分类归拢：{ 分类名 → [{ name: 章节名, path: 相对路径 }] } */
+function chaptersBySeries(knowledgeRoot) {
+  const map = new Map();
+  for (const file of listMarkdown(knowledgeRoot)) {
+    const relative = path.relative(knowledgeRoot, file).split(path.sep).join("/");
+    const [series, ...rest] = relative.split("/");
+    if (!rest.length) continue; // 直接躺在知识库根下的文件不构成章节
+    if (!map.has(series)) map.set(series, []);
+    map.get(series).push({ name: path.basename(file, ".md"), path: relative });
+  }
+  return map;
+}
+
 /**
  * 岗位定制模式下没有指定章节，由模型给出的 topic / series 决定归档位置：
- * 全库已有同名章节就归过去，没有就在它选的分类下新建。
+ * 全库已有同名章节就归过去；名字对不上但该分类下有章节能覆盖，就归到那一章；
+ * 都不是才在它选的分类下新建。
  */
-function resolveJdTarget({ question, knowledgeRoot }) {
+async function resolveJdTarget({ question, knowledgeRoot, agent }) {
   const topic = String(question.topic ?? "").trim();
   const series = String(question.series ?? "").trim();
   if (!topic) throw new Error("岗位定制模式下缺少题目归属的章节");
   if (/[\\/]/.test(topic)) throw new Error(`章节名不能包含路径分隔符：${topic}`);
 
+  const bySeries = chaptersBySeries(knowledgeRoot);
   const wanted = topic.toLowerCase();
-  for (const file of listMarkdown(knowledgeRoot)) {
-    if (path.basename(file, ".md").toLowerCase() === wanted) {
-      return path.relative(knowledgeRoot, file).split(path.sep).join("/");
-    }
+  for (const chapters of bySeries.values()) {
+    const exact = chapters.find((chapter) => chapter.name.toLowerCase() === wanted);
+    if (exact) return exact.path;
+  }
+
+  // 模型会把跨两章的问题合并成一个新名字（实测造出过「Java 集合与并发」，而「集合」「多线程」都在）。
+  // 新建之前先让它在已有章节里挑一次，避免知识库被近义章节越切越碎。
+  const candidates = bySeries.get(series) ?? [];
+  if (candidates.length) {
+    const picked = await agent.matchChapter({ topic, series, chapters: candidates.map((chapter) => chapter.name) });
+    const hit = candidates.find((chapter) => chapter.name === picked);
+    if (hit) return hit.path;
   }
 
   if (!series || /[\\/]/.test(series)) throw new Error(`新建章节需要合法的知识分类名：${series || "(空)"}`);
@@ -138,7 +161,7 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
     const existing = decision.kind === "existing" ? questionIndex.getById(decision.questionId) : null;
     // 岗位定制模式没有指定章节，改由题目自带的 topic/series 决定归档位置
     const sourceRelative = existing?.source_path
-      ?? (session.mode === "jd" ? resolveJdTarget({ question, knowledgeRoot }) : session.chapterPath);
+      ?? (session.mode === "jd" ? await resolveJdTarget({ question, knowledgeRoot, agent }) : session.chapterPath);
     const sourceFile = path.join(knowledgeRoot, sourceRelative);
     ensureInside(knowledgeRoot, sourceFile);
     const series = sourceRelative.split("/")[0];

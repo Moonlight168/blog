@@ -524,6 +524,21 @@ async function openPreview() {
   } finally { previewLoading.value = false; }
 }
 
+/** 预览自我介绍（私有的 markdown，按 md 渲染，和编辑页看到的一致）。 */
+const introOpen = ref(false);
+const introText = ref("");
+const introLoading = ref(false);
+async function openIntro() {
+  introLoading.value = true;
+  try {
+    const data = await api<{ markdown: string; exists: boolean }>("/api/self-intro");
+    introText.value = data.exists ? data.markdown : "";
+    introOpen.value = true;
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "打开自我介绍失败");
+  } finally { introLoading.value = false; }
+}
+
 /** 把页面上的简历目录写回 interview/.env，并重新扫描该目录。 */
 async function saveResumeDir() {
   const dir = resumeDir.value.trim();
@@ -729,7 +744,11 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
     <section class="chat-panel">
       <div class="chat-head">
         <div><div class="eyebrow">LIVE SESSION</div><h2>{{ session ? `${session.series} · ${session.chapterPath.split('/').at(-1)?.replace('.md','')}` : '等待开始' }}</h2></div>
-        <div class="session-meta"><n-tag v-if="session" :type="statusType">{{ statusText }}</n-tag><span v-if="session && !finished" class="timer" :class="{ paused }">{{ timerText }}</span></div>
+        <div class="session-meta">
+          <n-button size="tiny" quaternary :loading="introLoading" @click="openIntro">自我介绍</n-button>
+          <n-button size="tiny" quaternary @click="$router.push('/self-intro')">编辑</n-button>
+          <n-tag v-if="session" :type="statusType">{{ statusText }}</n-tag><span v-if="session && !finished" class="timer" :class="{ paused }">{{ timerText }}</span>
+        </div>
       </div>
       <div ref="chat" class="messages">
         <div v-if="!messages.length" class="welcome">
@@ -785,6 +804,17 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
     <n-modal v-model:show="previewOpen" preset="card" style="width: 900px; max-width: 92vw" title="简历预览">
       <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
       <div class="preview-body" v-html="renderMarkdown(previewText)" />
+    </n-modal>
+
+    <n-modal v-model:show="introOpen" preset="card" style="width: 900px; max-width: 92vw" title="自我介绍">
+      <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
+      <div class="preview-body" v-html="renderMarkdown(introText)" />
+      <template #footer>
+        <div class="intro-foot">
+          <n-button size="small" @click="introOpen = false">关闭</n-button>
+          <n-button size="small" type="primary" @click="introOpen = false; $router.push('/self-intro')">去编辑</n-button>
+        </div>
+      </template>
     </n-modal>
 
     <n-modal v-model:show="endConfirmOpen" preset="dialog" title="结束本次面试？"

@@ -6,7 +6,12 @@ export async function api<T>(url: string, options?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...(options?.headers || {}) },
     });
   } catch {
-    throw new Error("连不上后端服务，请确认 API 服务已启动（npm run dev）");
+    // 浏览器断网和「后端没启动」都会走到这里，靠 navigator.onLine 区分一下，
+    // 否则用户会对着「请确认 API 服务已启动」白折腾半天。
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    throw new Error(offline
+      ? "当前设备网络不可用——请检查 Wi-Fi 或网线后重试"
+      : "连不上后端服务：请确认 API 服务已启动（npm run dev），或检查网络/代理");
   }
 
   // 代理在后端未启动时会返回空 body，直接 response.json() 会抛出难以理解的
