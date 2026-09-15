@@ -4,7 +4,7 @@ date: 2026-03-24
 icon: /assets/icon/spring.png
 order: 5
 ---
-## 什么是Spring Boot？说一下它的原理？
+## ⭐什么是Spring Boot？说一下它的原理？
 
 **锚点**：`约定优于配置 + 自动装配 + 内嵌服务器 + Starter`
 
@@ -14,7 +14,7 @@ order: 5
 4. **Starter 依赖**：`spring-boot-starter-web` 等一组 POM，引入即自动装配相关功能
 5. **配置管理**：`application.properties/yml` + 环境变量，`@ConfigurationProperties` / `@Value` 注入
 
-→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#什么是spring-boot-说一下它的原理)
+→ [回答历史](/private/series/答题历史/框架/springboot-答题记录.md#⭐什么是spring-boot-说一下它的原理)
 
 ## Spring Boot 的启动流程
 

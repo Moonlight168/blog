@@ -196,7 +196,7 @@ IPv6：`VARBINARY(16)` 或 `BINARY(16)`，配合 `INET6_ATON()` / `INET6_NTOA()`
 
 → [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#不停服数据迁移怎么做)
 
-## 如何优化 SQL 性能？
+## ⭐如何优化 SQL 性能？
 
 **锚点**：`索引 + 免 SELECT * + EXPLAIN + JOIN 替代子查询 + LIMIT`
 
@@ -206,7 +206,7 @@ IPv6：`VARBINARY(16)` 或 `BINARY(16)`，配合 `INET6_ATON()` / `INET6_NTOA()`
 4. 避免子查询，尽量用 JOIN
 5. 控制返回行数，分页加 LIMIT
 
-→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#如何优化-sql-性能)
+→ [回答历史](/private/series/答题历史/数据库/mysql-答题记录.md#⭐如何优化-sql-性能)
 
 ## `OVER` 与 `GROUP BY` 的区别？
 

@@ -142,7 +142,7 @@ public class AppConfig {
 3. **required**：`@Autowired` 有 required 属性（默认 true，可设 false）；`@Resource` 没有
 4. **场景**：`@Autowired` 适合 Spring 项目配合 IoC/AOP；`@Resource` 需兼容 JDK 规范或重名称匹配时
 
-## Spring 和 SpringBoot 常用注解有哪些？
+## ⭐Spring 和 SpringBoot 常用注解有哪些？
 
 **锚点**：`Spring 四类（组件/注入/AOP/事务）+ Boot 特有（启动三合一/配置绑定/测试）`
 
@@ -152,7 +152,7 @@ public class AppConfig {
 4. **事务**：`@Transactional`、`@EnableTransactionManagement`
 5. **SpringBoot 特有**：`@SpringBootApplication`（启动三合一，见下题）、`@ConfigurationProperties`（配置绑定）、测试三件套 `@SpringBootTest` / `@MockBean` / `@TestConfiguration`
 
-→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#spring-和-springboot-常用注解有哪些)
+→ [回答历史](/private/series/答题历史/框架/spring-答题记录.md#⭐spring-和-springboot-常用注解有哪些)
 
 ## Spring Bean 的作用域有哪些？一般项目中用什么？
 
