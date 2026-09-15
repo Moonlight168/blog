@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
-import { NButton, NInput, NModal, NSpin, NTag, useMessage } from "naive-ui";
+import { NButton, NInput, NModal, NSelect, NSpin, NTag, useMessage } from "naive-ui";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 
 interface Commit { hash: string; date: string; subject: string; added: number; deleted: number }
+interface IntroFile { file: string; name: string }
+
+/** 面试页的预览弹窗也读这个键，两处看的是同一份 */
+const STORAGE_KEY = "self-intro-file";
 
 const toast = useMessage();
 const loading = ref(true);
@@ -18,6 +22,9 @@ const saved = ref("");
 const baseMtime = ref<number | null>(null);
 const filePath = ref("");
 const versioned = ref(true);
+/** 目录下的全部自我介绍，以及在编辑的这一份 */
+const files = ref<IntroFile[]>([]);
+const currentFile = ref("");
 
 /**
  * 回撤 / 前进用的版本栈。模型改写、历史回滚都立即入栈；
@@ -54,16 +61,23 @@ function toggleEditing() {
   editing.value = !editing.value;
 }
 
-async function load() {
+async function load(file = "") {
   loading.value = true;
   try {
-    const data = await api<{ path: string; markdown: string; mtime: number | null; versioned: boolean }>("/api/self-intro");
+    const data = await api<{
+      files: IntroFile[]; file: string; name: string; path: string;
+      markdown: string; mtime: number | null; versioned: boolean;
+    }>(`/api/self-intro${file ? `?file=${encodeURIComponent(file)}` : ""}`);
+    files.value = data.files;
+    currentFile.value = data.file;
+    if (data.file) localStorage.setItem(STORAGE_KEY, data.file);
     text.value = data.markdown;
     saved.value = data.markdown;
     baseMtime.value = data.mtime;
     filePath.value = data.path;
     versioned.value = data.versioned;
     resetVersions(data.markdown);
+    editing.value = false;
   } catch (error) {
     toast.error((error as Error).message);
   } finally {
@@ -71,12 +85,23 @@ async function load() {
   }
 }
 
+/** 切到另一份自我介绍。有未保存改动先问一句——切过去那份的改动就找不回来了 */
+async function switchFile(file: string) {
+  if (!file || file === currentFile.value) return;
+  if (dirty.value && !window.confirm(`「${nameOf(currentFile.value)}」还有未保存的改动，切换会丢掉，确定吗？`)) return;
+  await load(file);
+}
+
+function nameOf(file: string) {
+  return files.value.find((item) => item.file === file)?.name ?? file;
+}
+
 async function save() {
   saving.value = true;
   try {
     const data = await api<{ mtime: number; externallyChanged: boolean; notices: string[]; commit: { committed: boolean; hash?: string; reason?: string } }>(
       "/api/self-intro",
-      { method: "POST", body: JSON.stringify({ markdown: text.value, baseMtime: baseMtime.value }) },
+      { method: "POST", body: JSON.stringify({ file: currentFile.value, markdown: text.value, baseMtime: baseMtime.value }) },
     );
     saved.value = text.value;
     baseMtime.value = data.mtime;
@@ -130,7 +155,7 @@ async function openHistory() {
   previewText.value = "";
   historyLoading.value = true;
   try {
-    const data = await api<{ commits: Commit[] }>("/api/self-intro/history");
+    const data = await api<{ commits: Commit[] }>(`/api/self-intro/history?file=${encodeURIComponent(currentFile.value)}`);
     commits.value = data.commits;
     if (commits.value[0]) await previewCommit(commits.value[0].hash);
   } catch (error) {
@@ -143,7 +168,7 @@ async function openHistory() {
 async function previewCommit(hash: string) {
   previewHash.value = hash;
   try {
-    const data = await api<{ markdown: string }>("/api/self-intro/history", { method: "POST", body: JSON.stringify({ hash }) });
+    const data = await api<{ markdown: string }>("/api/self-intro/history", { method: "POST", body: JSON.stringify({ file: currentFile.value, hash }) });
     previewText.value = data.markdown;
   } catch (error) {
     toast.error((error as Error).message);
@@ -154,7 +179,7 @@ async function rollback(hash: string) {
   try {
     const data = await api<{ markdown: string; mtime: number; commit: { committed: boolean; hash?: string } }>(
       "/api/self-intro/rollback",
-      { method: "POST", body: JSON.stringify({ hash }) },
+      { method: "POST", body: JSON.stringify({ file: currentFile.value, hash }) },
     );
     text.value = data.markdown;
     saved.value = data.markdown;
@@ -167,7 +192,7 @@ async function rollback(hash: string) {
   }
 }
 
-onMounted(load);
+onMounted(() => load(localStorage.getItem(STORAGE_KEY) ?? ""));
 onBeforeUnmount(() => window.clearTimeout(snapshotTimer));
 // 有未保存改动时离开要拦一下：这个文件不在主仓库里，随手丢了不好找回来
 onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保存的改动，确定离开吗？") : true));
@@ -177,6 +202,14 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
   <div class="page selfintro">
     <div class="si-toolbar">
       <div class="si-tools">
+        <n-select
+          class="si-file"
+          size="small"
+          :value="currentFile"
+          :options="files.map((item) => ({ label: item.name, value: item.file }))"
+          :disabled="loading || files.length < 2"
+          @update:value="switchFile"
+        />
         <n-button size="small" :disabled="!canUndo" @click="undo">← 回撤</n-button>
         <n-button size="small" :disabled="!canRedo" @click="redo">前进 →</n-button>
         <span class="si-count">版本 {{ cursor + 1 }}/{{ versions.length }}</span>

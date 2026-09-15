@@ -524,14 +524,26 @@ async function openPreview() {
   } finally { previewLoading.value = false; }
 }
 
-/** 预览自我介绍（私有的 markdown，按 md 渲染，和编辑页看到的一致）。 */
+/**
+ * 预览自我介绍（私有的 markdown，按 md 渲染，和编辑页看到的一致）。
+ * 目录下可能有多份（技术面 / HR 面），弹窗里也能切；选中的那份记在 localStorage，
+ * 和自我介绍编辑页共用同一个键，两处看到的是同一份。
+ */
 const introOpen = ref(false);
 const introText = ref("");
 const introLoading = ref(false);
-async function openIntro() {
+const introFiles = ref<{ file: string; name: string }[]>([]);
+const introFile = ref("");
+async function openIntro(file = "") {
   introLoading.value = true;
   try {
-    const data = await api<{ markdown: string; exists: boolean }>("/api/self-intro");
+    const wanted = file || localStorage.getItem("self-intro-file") || "";
+    const data = await api<{ files: { file: string; name: string }[]; file: string; markdown: string; exists: boolean }>(
+      `/api/self-intro${wanted ? `?file=${encodeURIComponent(wanted)}` : ""}`,
+    );
+    introFiles.value = data.files;
+    introFile.value = data.file;
+    if (data.file) localStorage.setItem("self-intro-file", data.file);
     introText.value = data.exists ? data.markdown : "";
     introOpen.value = true;
   } catch (error) {
@@ -745,7 +757,7 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
       <div class="chat-head">
         <div><div class="eyebrow">LIVE SESSION</div><h2>{{ session ? `${session.series} · ${session.chapterPath.split('/').at(-1)?.replace('.md','')}` : '等待开始' }}</h2></div>
         <div class="session-meta">
-          <n-button size="tiny" quaternary :loading="introLoading" @click="openIntro">自我介绍</n-button>
+          <n-button size="tiny" quaternary :loading="introLoading" @click="openIntro()">自我介绍</n-button>
           <n-button size="tiny" quaternary @click="$router.push('/self-intro')">调整</n-button>
           <n-tag v-if="session" :type="statusType">{{ statusText }}</n-tag><span v-if="session && !finished" class="timer" :class="{ paused }">{{ timerText }}</span>
         </div>
@@ -807,6 +819,15 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
     </n-modal>
 
     <n-modal v-model:show="introOpen" preset="card" style="width: 900px; max-width: 92vw" title="自我介绍">
+      <n-select
+        v-if="introFiles.length > 1"
+        class="intro-switch"
+        size="small"
+        :value="introFile"
+        :options="introFiles.map((item) => ({ label: item.name, value: item.file }))"
+        :loading="introLoading"
+        @update:value="openIntro"
+      />
       <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
       <div class="preview-body" v-html="renderMarkdown(introText)" />
       <template #footer>

@@ -15,7 +15,7 @@ import { InterviewEngine } from "./interview-engine.mjs";
 import { QuestionIndex } from "./question-index.mjs";
 import { slugify } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
-import { commitSelfIntro, readSelfIntro, readSelfIntroAt, rollbackSelfIntro, selfIntroHistory, writeSelfIntro } from "./self-intro.mjs";
+import { commitSelfIntro, listSelfIntros, readSelfIntro, readSelfIntroAt, rollbackSelfIntro, selfIntroHistory, writeSelfIntro } from "./self-intro.mjs";
 import { expired } from "./session-time.mjs";
 import { isAllowedJob, isAllowedResume, readResume, scanJobs, scanResumes, updateEnvFile } from "./resume.mjs";
 
@@ -163,42 +163,55 @@ async function api(request, response, url) {
     return json(response, 200, { markdown, chars: markdown.length });
   }
   // 自我介绍编辑：读 / 写 / 让模型改 / 历史版本 / 回滚。
-  // 文件在 src/private 下，写回后顺手提交给那个目录里的独立仓库（无远程，不会外流）。
+  // 目录下可以放多份（技术面、HR 面…），请求带 file 指定；后端只从扫描结果里取，
+  // 不接受拼出来的路径。文件在 src/private 下，写回后顺手提交给那个目录里的独立仓库。
   if (request.method === "GET" && url.pathname === "/api/self-intro") {
-    const { path: file, exists, markdown, mtime, repo } = readSelfIntro(config.resumeDir);
-    return json(response, 200, { path: file, exists, markdown, mtime, versioned: Boolean(repo) });
+    const files = listSelfIntros(config.resumeDir).map(({ file, name }) => ({ file, name }));
+    const current = readSelfIntro(config.resumeDir, url.searchParams.get("file") ?? "");
+    return json(response, 200, {
+      files,
+      file: current.file,
+      name: current.name,
+      path: current.path,
+      exists: current.exists,
+      markdown: current.markdown,
+      mtime: current.mtime,
+      versioned: Boolean(current.repo),
+    });
   }
   if (request.method === "GET" && url.pathname === "/api/self-intro/history") {
-    return json(response, 200, { commits: selfIntroHistory(config.resumeDir) });
+    const file = url.searchParams.get("file") ?? "";
+    return json(response, 200, { commits: selfIntroHistory(config.resumeDir, file) });
   }
   if (request.method === "POST" && url.pathname === "/api/self-intro/history") {
     const input = await body(request);
-    return json(response, 200, { markdown: readSelfIntroAt(config.resumeDir, String(input.hash ?? "")) });
+    return json(response, 200, { markdown: readSelfIntroAt(config.resumeDir, String(input.file ?? ""), String(input.hash ?? "")) });
   }
   if (request.method === "POST" && url.pathname === "/api/self-intro/rollback") {
     const input = await body(request);
-    const result = rollbackSelfIntro(config.resumeDir, String(input.hash ?? ""));
+    const result = rollbackSelfIntro(config.resumeDir, String(input.file ?? ""), String(input.hash ?? ""));
     return json(response, 200, { ...result });
   }
   if (request.method === "POST" && url.pathname === "/api/self-intro") {
     const input = await body(request);
+    const file = String(input.file ?? "");
     const markdown = String(input.markdown ?? "");
     if (!markdown.trim()) return json(response, 400, { error: "自我介绍不能为空" });
     // 编辑器打开期间文件被别处改过：先把磁盘上那份提交存档，再覆盖。
     // 不做「报冲突让你二选一」——那会卡住保存；先存档则两边都不会丢，git 里都能翻到。
-    const current = readSelfIntro(config.resumeDir);
+    const current = readSelfIntro(config.resumeDir, file);
     const externallyChanged = current.exists
       && typeof input.baseMtime === "number"
       && Math.abs(current.mtime - input.baseMtime) > 1;
     const notices = [];
     if (externallyChanged) {
-      const archived = commitSelfIntro(config.resumeDir, "自我介绍：外部改动存档（编辑器保存前自动存档）");
+      const archived = commitSelfIntro(config.resumeDir, file, "自我介绍：外部改动存档（编辑器保存前自动存档）");
       notices.push(archived.committed
         ? `这个文件在编辑器外被改过，已先把外部版本存成 ${archived.hash}，再写入你现在的版本`
         : "这个文件在编辑器外被改过（当前内容与磁盘一致，无需额外存档）");
     }
-    const written = writeSelfIntro(config.resumeDir, markdown);
-    const commit = commitSelfIntro(config.resumeDir, String(input.message ?? "").trim() || "自我介绍：编辑器保存");
+    const written = writeSelfIntro(config.resumeDir, file, markdown);
+    const commit = commitSelfIntro(config.resumeDir, file, String(input.message ?? "").trim() || "自我介绍：编辑器保存");
     return json(response, 200, { ...written, commit, externallyChanged, notices });
   }
   if (request.method === "POST" && url.pathname === "/api/self-intro/revise") {
