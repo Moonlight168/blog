@@ -126,15 +126,25 @@ async function revise() {
   instruction.value = "";
   revising.value = true;
   try {
+    const before = text.value;
     const data = await api<{ markdown: string }>("/api/self-intro/revise", {
       method: "POST",
-      body: JSON.stringify({ markdown: text.value, instruction: ask }),
+      body: JSON.stringify({ markdown: before, instruction: ask }),
     });
     text.value = data.markdown;
     pushVersion(data.markdown);
     // 改完切回预览：内容变了，让人直接看到结果，而不是停在编辑框
     editing.value = false;
-    chatLog.value.push({ role: "assistant", text: "已按你的要求改好，看左边预览。不满意就点「回撤」。" });
+    // 实测模型会把开头的链路锚点当冗余删掉（`> 开场 → 实习 → …` 那行），
+    // 提示词已经要求保留，这里再兜一道——丢了要说出来，别让人自己发现
+    const anchor = (value: string) => value.split("\n").find((line) => line.trim())?.trim() ?? "";
+    const lostAnchor = anchor(before).startsWith(">") && !anchor(data.markdown).startsWith(">");
+    chatLog.value.push({
+      role: "assistant",
+      text: lostAnchor
+        ? "改好了，但这次把开头的链路锚点弄丢了——建议点「回撤」退回，或直接让它「把第一行的链路锚点补回去」。"
+        : "已按你的要求改好，看左边预览。不满意就点「回撤」。",
+    });
   } catch (error) {
     chatLog.value.push({ role: "assistant", text: `这次没改成：${(error as Error).message}` });
   } finally {

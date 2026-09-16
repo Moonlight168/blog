@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 
 import { InterviewAgent } from "./agent.mjs";
@@ -13,6 +14,9 @@ import { ensurePlan, focusPayload, resumeSlice, takeFocuses } from "./focus-plan
 import { readHistorySection } from "./history.mjs";
 import { InterviewEngine } from "./interview-engine.mjs";
 import { QuestionIndex } from "./question-index.mjs";
+import { pickPath } from "./picker.mjs";
+import { listRealInterviews, readRealInterview } from "./real-interview.mjs";
+import { commitResumeDoc, findBrowser, htmlToPdf, listResumeGroups, pdfFileName, readResumeDoc, resolveResumeDoc, writeResumeDoc } from "./resume-doc.mjs";
 import { slugify } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
 import { commitSelfIntro, listSelfIntros, readSelfIntro, readSelfIntroAt, rollbackSelfIntro, selfIntroHistory, writeSelfIntro } from "./self-intro.mjs";
@@ -96,6 +100,33 @@ async function rawBody(request, limit = MAX_AUDIO_BYTES) {
   return Buffer.concat(chunks);
 }
 
+/**
+ * 改写类调用要读的规范：本地规范文件里混着「投递策略」这类跟改写无关的章节，
+ * 按标题关键字丢掉再喂，免得模型跑偏、也省 token。
+ * 文件不存在就返回空串（提示词里那段会整段省略）。
+ */
+function readSpec(file, dropKeywords = []) {
+  if (!fs.existsSync(file)) return "";
+  return fs.readFileSync(file, "utf8")
+    .split(/^(?=## )/mu)
+    .filter((section) => !dropKeywords.some((keyword) => section.split("\n")[0].includes(keyword)))
+    .join("")
+    .trim();
+}
+
+/** 简历 / 自我介绍的规范正文（缓存：文件不变就不重复读） */
+let specCache = { at: 0, resume: "", intro: "" };
+function editingSpecs() {
+  const now = Date.now();
+  if (now - specCache.at < 5000) return specCache;
+  specCache = {
+    at: now,
+    resume: readSpec(path.join(config.resumeDir, "简历设计规范.md"), ["投递策略", "面试话术文档规范"]),
+    intro: readSpec(path.join(config.resumeDir, "自我介绍规范.md")),
+  };
+  return specCache;
+}
+
 function ruleSnapshot() {
   const skill = fs.readFileSync(path.join(config.appRoot, "skill", "SKILL.md"), "utf8");
   const handbook = fs.readFileSync(path.join(config.blogRoot, "面试宝典文章格式规范.md"), "utf8");
@@ -120,6 +151,10 @@ function askedQuestionTitles(session) {
   for (const row of rows) if (row.title && !titles.includes(row.title)) titles.push(row.title);
   return titles.slice(0, 20);
 }
+
+/** 人事面试（行为面）的题固定归到软素质文档 */
+const HR_SERIES = "基础知识";
+const HR_CHAPTER = "基础知识/协作交流.md";
 
 /** 章节名（章节模式的考点表用章节名兜底第一节） */
 function chapterNameOf(session) {
@@ -220,7 +255,7 @@ async function api(request, response, url) {
     const instruction = String(input.instruction ?? "").trim();
     if (!instruction) return json(response, 400, { error: "请说明想怎么改" });
     try {
-      return json(response, 200, { markdown: await agent.reviseSelfIntro({ markdown, instruction }) });
+      return json(response, 200, { markdown: await agent.reviseSelfIntro({ markdown, instruction, spec: editingSpecs().intro }) });
     } catch (error) {
       return json(response, 502, { error: error.message });
     }
@@ -262,8 +297,13 @@ async function api(request, response, url) {
     if (!isAllowedResume(input.resumePath, config.resumeDir) || !fs.existsSync(input.resumePath) || !fs.statSync(input.resumePath).isFile()) {
       return json(response, 400, { error: "只能选择简历目录下的 Markdown / TXT / HTML 简历" });
     }
-    const mode = ["interview", "coding", "written", "jd"].includes(input.mode) ? input.mode : "interview";
+    const mode = ["interview", "coding", "written", "jd", "hr"].includes(input.mode) ? input.mode : "interview";
     const jdMode = mode === "jd";
+    // 人事面试不让人手选章节：行为面的题固定归到软素质文档，和岗位定制一样省掉这一步
+    const hrMode = mode === "hr";
+    if (hrMode && !questionIndex.topics().some((series) => series.chapters.some((chapter) => chapter.path === HR_CHAPTER))) {
+      return json(response, 400, { error: `人事面试需要知识库里有 ${HR_CHAPTER}，当前索引里没有` });
+    }
     // 目标岗位可选；岗位定制模式下则必填
     const jdPath = String(input.jdPath ?? "").trim();
     if (jdPath && (!isAllowedJob(jdPath, config.resumeDir) || !fs.existsSync(jdPath) || !fs.statSync(jdPath).isFile())) {
@@ -272,14 +312,14 @@ async function api(request, response, url) {
     if (jdMode && !jdPath) return json(response, 400, { error: "岗位定制面试需要先选择目标岗位" });
 
     // 岗位定制模式不限定章节（由模型按题目内容决定归档位置），所以跳过章节校验
-    if (!jdMode) {
+    if (!jdMode && !hrMode) {
       const validTopic = questionIndex.topics().some((series) => series.name === input.series && series.chapters.some((chapter) => chapter.path === input.chapterPath));
       if (!validTopic) return json(response, 400, { error: "请选择有效的知识分类章节" });
     }
     const session = {
       id: randomUUID(), resumePath: input.resumePath,
-      series: jdMode ? "岗位定制" : input.series,
-      chapterPath: jdMode ? "" : input.chapterPath,
+      series: jdMode ? "岗位定制" : hrMode ? HR_SERIES : input.series,
+      chapterPath: jdMode ? "" : hrMode ? HR_CHAPTER : input.chapterPath,
       mode,
       durationMinutes: Math.min(180, Math.max(5, Number(input.durationMinutes) || 30)), status: "active",
       startedAt: new Date().toISOString(), endedAt: null, currentQuestion: null, answerFragments: [], completedCount: 0,
@@ -371,20 +411,138 @@ async function api(request, response, url) {
     const session = rowToSession(db.prepare("SELECT * FROM sessions WHERE id=?").get(sessionMatch[1]));
     return session ? json(response, 200, { session, messages: messagesFor(session.id) }) : json(response, 404, { error: "面试记录不存在" });
   }
+  // 我的简历：按人分组列出、读写 HTML、生成 PDF（预览即导出，同一份文件同一个渲染器）
+  if (request.method === "GET" && url.pathname === "/api/resume-doc") {
+    const people = listResumeGroups(config.resumeDir).map((group) => ({
+      id: group.id,
+      label: group.label,
+      resumes: group.resumes.map((item) => ({ file: item.file, name: item.name })),
+    }));
+    const wanted = url.searchParams.get("file") || people[0]?.resumes[0]?.file || "";
+    const current = wanted ? readResumeDoc(config.resumeDir, wanted) : { file: "", name: "", path: "", html: "", mtime: null, repo: null };
+    return json(response, 200, {
+      people, file: current.file, name: current.name, path: current.path,
+      html: current.html, mtime: current.mtime, versioned: Boolean(current.repo),
+      exportDir: config.resumeExportDir, browser: findBrowser(config.browserPath),
+    });
+  }
+  if (request.method === "POST" && url.pathname === "/api/resume-doc") {
+    const input = await body(request);
+    const file = String(input.file ?? "");
+    const html = String(input.html ?? "");
+    const current = readResumeDoc(config.resumeDir, file);
+    const notices = [];
+    if (current.mtime && typeof input.baseMtime === "number" && Math.abs(current.mtime - input.baseMtime) > 1) {
+      const archived = commitResumeDoc(config.resumeDir, file, "简历：外部改动存档（编辑器保存前自动存档）");
+      notices.push(archived.committed
+        ? `这份简历在编辑器外被改过，已先把外部版本存成 ${archived.hash}，再写入你现在的版本`
+        : "这份简历在编辑器外被改过（当前内容与磁盘一致，无需额外存档）");
+    }
+    const written = writeResumeDoc(config.resumeDir, file, html);
+    const commit = commitResumeDoc(config.resumeDir, file, String(input.message ?? "").trim() || "简历：编辑器保存");
+    return json(response, 200, { ...written, commit, notices });
+  }
+  if (request.method === "POST" && url.pathname === "/api/resume-doc/revise") {
+    const input = await body(request);
+    const instruction = String(input.instruction ?? "").trim();
+    if (!instruction) return json(response, 400, { error: "请说明想怎么改" });
+    try {
+      return json(response, 200, { html: await agent.reviseResume({ html: String(input.html ?? ""), instruction, spec: editingSpecs().resume }) });
+    } catch (error) {
+      return json(response, 502, { error: error.message });
+    }
+  }
+  // 预览与导出走同一条渲染：预览把 PDF 字节回给前端显示，导出直接写到配置目录（同名覆盖）
+  if (request.method === "POST" && url.pathname === "/api/resume-doc/pdf") {
+    const input = await body(request);
+    const html = String(input.html ?? "");
+    if (!html.trim()) return json(response, 400, { error: "简历内容不能为空" });
+    const out = path.join(os.tmpdir(), `resume-preview-${process.pid}-${Date.now()}.pdf`);
+    try {
+      await htmlToPdf({ browser: config.browserPath, html, outPath: out });
+      const bytes = fs.readFileSync(out);
+      response.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": bytes.length, "Cache-Control": "no-store" });
+      response.end(bytes);
+      return;
+    } catch (error) {
+      return json(response, 500, { error: error.message });
+    } finally {
+      fs.rmSync(out, { force: true });
+    }
+  }
+  // 原生目录 / 文件选择框：浏览器给不了真实路径，这里由服务端开系统对话框
+  if (request.method === "POST" && url.pathname === "/api/pick") {
+    const input = await body(request);
+    try {
+      const picked = await pickPath({ kind: String(input.kind ?? "folder"), start: String(input.start ?? ""), filter: String(input.filter ?? "") });
+      return json(response, 200, picked ? { path: picked } : { cancelled: true });
+    } catch (error) {
+      return json(response, 500, { error: error.message });
+    }
+  }
+  // 导出目录可改：写回 .env，下次启动仍是这个目录
+  if (request.method === "POST" && url.pathname === "/api/resume-doc/export-dir") {
+    const input = await body(request);
+    const dir = String(input.dir ?? "").trim();
+    if (!dir) return json(response, 400, { error: "导出目录不能为空" });
+    const resolved = path.resolve(dir);
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+      return json(response, 400, { error: `目录不存在或不是文件夹：${resolved}` });
+    }
+    try {
+      updateEnvFile(path.join(config.appRoot, ".env"), "INTERVIEW_RESUME_EXPORT_DIR", resolved);
+    } catch (error) {
+      return json(response, 400, { error: error.message });
+    }
+    config.resumeExportDir = resolved;
+    return json(response, 200, { exportDir: resolved });
+  }
+  if (request.method === "POST" && url.pathname === "/api/resume-doc/export") {
+    const input = await body(request);
+    const html = String(input.html ?? "");
+    if (!html.trim()) return json(response, 400, { error: "简历内容不能为空" });
+    const file = resolveResumeDoc(config.resumeDir, String(input.file ?? ""));
+    if (!file) return json(response, 400, { error: "没有这份简历" });
+    const name = pdfFileName(input.name, file.name);
+    const out = path.join(config.resumeExportDir, name);
+    try {
+      await htmlToPdf({ browser: config.browserPath, html, outPath: out });
+      return json(response, 200, { path: out, name, bytes: fs.statSync(out).size });
+    } catch (error) {
+      return json(response, 500, { error: error.message });
+    }
+  }
+  // 真实面试记录（本人一手材料）与模拟面试并列展示，靠 kind 区分
+  if (request.method === "POST" && url.pathname === "/api/real-interviews/detail") {
+    const input = await body(request);
+    try {
+      const detail = readRealInterview(config.realInterviewDir, input.id, { knowledgeRoot: config.knowledgeRoot });
+      return json(response, 200, { ...detail, docsBaseUrl: config.docsBaseUrl });
+    } catch (error) {
+      return json(response, 404, { error: error.message });
+    }
+  }
   if (request.method === "GET" && url.pathname === "/api/history") {
     const rows = db.prepare(`SELECT id,series,chapter_path AS chapterPath,resume_path AS resumePath,mode,status,
       started_at AS startedAt,ended_at AS endedAt,duration_minutes AS durationMinutes,
       completed_count AS completedCount FROM sessions ORDER BY started_at DESC`).all();
     const stats = attemptStats(new Set(rows.map((row) => row.id)));
-    return json(response, 200, rows.map((row) => {
-      const stat = stats.get(row.id);
-      return {
-        ...row,
-        questionCount: stat?.questions.size ?? 0,
-        archivedCount: stat?.archived.size ?? 0,
-        averageScore: averageScore(stat?.scores),
-      };
-    }));
+    const real = listRealInterviews(config.realInterviewDir);
+    // 两边各自已按时间倒序，这里合并后再排一次，真实面试才能插在正确的位置
+    const merged = [
+      ...rows.map((row) => {
+        const stat = stats.get(row.id);
+        return {
+          ...row,
+          kind: "session",
+          questionCount: stat?.questions.size ?? 0,
+          archivedCount: stat?.archived.size ?? 0,
+          averageScore: averageScore(stat?.scores),
+        };
+      }),
+      ...real,
+    ].sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""));
+    return json(response, 200, merged);
   }
   const historyMatch = url.pathname.match(/^\/api\/history\/([^/]+)$/);
   if (request.method === "GET" && historyMatch) {
@@ -502,7 +660,11 @@ function staticFile(response, pathname) {
   let file = path.resolve(dist, relative);
   if (!file.startsWith(path.resolve(dist)) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, "index.html");
   if (!fs.existsSync(file)) return json(response, 404, { error: "前端尚未构建，请运行 npm run build" });
-  response.writeHead(200, { "Content-Type": MIME[path.extname(file)] || "application/octet-stream" });
+  const ext = path.extname(file);
+  // index.html 必须每次回源：它指向带哈希的资源文件名，缓存住就会一直加载旧版页面，
+  // 表现是"改了代码但页面没变"。带哈希的 js/css 内容变了文件名就变，可以长缓存。
+  const cacheControl = ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable";
+  response.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream", "Cache-Control": cacheControl });
   fs.createReadStream(file).pipe(response);
 }
 

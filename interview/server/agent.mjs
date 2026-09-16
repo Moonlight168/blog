@@ -1,4 +1,5 @@
 import { apiUrl } from "./config.mjs";
+import { MAX_PROSE_LINES } from "./markdown.mjs";
 import { friendlyNetworkError, httpStatusHint } from "./net.mjs";
 
 /**
@@ -94,7 +95,41 @@ export class InterviewAgent {
     );
   }
 
+  /**
+   * 人事面试（行为面）：问经历、动机、协作、稳定性这类问题，不问技术细节。
+   * 标准答案写成候选人**当场会说的第一人称口语**，不是分点笔记——行为面背要点没用，
+   * 面试官要听的是你怎么把事情讲下来。
+   */
+  async #generateHrQuestion({ session }) {
+    const system = `你是正在做人事面试（HR 面）的面试官。围绕候选人的简历经历问一个真实 HR 会问的问题：`
+      + `学生干部或竞赛、团队协作与沟通、为什么换实习、职业规划、稳定性、抗压、最有成就感的事、优缺点这类。`
+      + `不问技术细节（不问 JVM、并发、框架原理），考的是经历与做事方式。`
+      + `不编号、不加星标、一次只问一个。\n`
+      + `标准答案写成候选人当场会说的第一人称回答，严格两段：\n`
+      + `第一行——锚点，必须带反引号，照抄这个形状（实测漏过反引号，会被归档校验打回）：\n`
+      + `**锚点**：\`一行要点\`\n`
+      + `反引号里是简短的一行口诀，不是整句话；不要写成“记忆锚点”或别的前缀。\n`
+      + `之后——一段口语，2 到 ${MAX_PROSE_LINES} 行、不分点、不用编号，直接回答，不加旁白也不解释这道题在考什么；\n`
+      + `只讲简历里真有的经历，不编；没有的就如实说没有，再把话题转到自己真做过的事上。\n`
+      + `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案"}。`;
+    const user = `面试模式：人事面试（行为面）\n`
+      + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
+      + resumeBlock(session)
+      + focusBlock(session.nextFocus)
+      + askedBlock(session);
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const result = await this.#json(system, user, CREATIVE_TEMPERATURE);
+      result.standardAnswer = result.standardAnswer ?? result.standard_answer;
+      const broken = !result.title?.match(/[？?]$/u) || !result.standardAnswer ? "模型生成的题目结构不完整" : "";
+      if (!broken) return result;
+      if (attempt === 2) throw new Error(broken);
+    }
+    throw new Error("模型生成的题目结构不完整");
+  }
+
   async generateQuestion({ session }) {
+    if (session.mode === "hr") return this.#generateHrQuestion({ session });
     // 岗位定制模式没有指定章节，由模型判断这道题该归到哪个章节与分类
     const jdMode = session.mode === "jd";
     // 分类连同其下已有章节一起给它：只给分类名的时候，模型看不见「集合」「多线程」已经存在，
@@ -223,14 +258,20 @@ export class InterviewAgent {
    * 模型写出的标准答案偶尔不合《格式规范》。归档时用同一个模型按规范重写一遍，
    * 好过把整道题丢掉。只返回 JSON：{"standardAnswer":"重写后的完整答案"}。
    */
-  async reformatAnswer({ question, errors = [] }) {
+  async reformatAnswer({ question, errors = [], prose = false }) {
+    const shape = prose
+      // 行为面：目标形态是「锚点 + 一段口语」，不能再按技术题重写成编号要点
+      ? `之后写成一段第一人称口语，2 到 ${MAX_PROSE_LINES} 行、不分点、不用编号，` +
+        `直接回答，不加旁白；讲简历里真有的经历，没有的如实说没有。`
+      : `之后是 1 到 6 个“数字. **关键词**：主句”的一级要点——`
+        + `冒号后到行尾的这段文字就是主句，必须不超过 30 字，细节、命令、举例一律挪到下一行的二级补充里`
+        + `（用恰好 3 个空格缩进的“-”）。`;
     const result = await this.#json(
       `下面这道面试题的标准答案不符合《面试宝典文章格式规范》，请按规范重写，内容不要删减也不要新增事实。\n`
       + `规范：第一行是锚点，写法固定——加粗的锚点二字 + 中文冒号 + 反引号包住一行口诀`
       + `（例：**锚点**：\`按 key 查改用 HashMap\`）；不要写成“记忆锚点：…”或别的前缀；`
-      + `之后是 1 到 6 个“数字. **关键词**：主句”的一级要点——`
-      + `冒号后到行尾的这段文字就是主句，必须不超过 30 字，细节、命令、举例一律挪到下一行的二级补充里`
-      + `（用恰好 3 个空格缩进的“-”）；不得使用三级标题；总计不超过 15 行。\n`
+      + shape
+      + `不得使用三级标题；总计不超过 15 行。\n`
       + `只返回 JSON：{"standardAnswer":"重写后的完整答案"}。`
       + (errors.length ? `\n上次校验未通过：${errors.join("；")}` : ""),
       `题目：${question.title}\n原答案：\n${question.standardAnswer ?? ""}`,
@@ -244,11 +285,14 @@ export class InterviewAgent {
    * 走「整篇返回」而不是 diff：文档才 2KB，一次往返成本可忽略，而 patch 的失败模式
    * （找不到锚点、上下文对不上）要多得多——改坏了有回撤栈和 git 兜着。
    */
-  async reviseSelfIntro({ markdown, instruction }) {
+  async reviseSelfIntro({ markdown, instruction, spec = "" }) {
     const result = await this.#json(
       `你在帮候选人改他的面试自我介绍。按他的要求改这份 markdown，只返回 JSON：{"markdown":"改好的完整 markdown"}。\n`
+      + (spec ? `这份稿子要遵守的《自我介绍规范》：\n${spec}\n\n` : "")
       + `要求：\n`
-      + `- 保持原文的小节骨架与「**一、开场**」这类小标题写法，除非他明确要求调整结构。\n`
+      + `- 第一行是这份稿子的链路锚点（形如「> 开场 → 实习 → …」），**必须原样保留**，`
+      + `小节有增减时同步更新它；实测它被当成冗余删掉过，那是这份稿子的记忆索引，不能丢。\n`
+      + `- 保持原文的小节骨架与「**一、开场**」这类小标题写法，编号要连续，除非他明确要求调整结构。\n`
       + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
       + `- 不新增原文里没有的经历、数字或技术栈——原文就是事实来源。\n`
       + `- 返回完整全文，不是 diff、不是片段，开头也不要加任何解释。`,
@@ -257,6 +301,29 @@ export class InterviewAgent {
     );
     const revised = String(result.markdown ?? "").trim();
     if (!revised) throw new Error("模型没有返回改写后的自我介绍");
+    return revised;
+  }
+
+  /**
+   * 按候选人的一句话要求改简历。
+   * 简历是自包含 HTML（样式内联、带 A4 打印规则），所以只动**正文内容**，
+   * 不碰 <style> 与结构——一改样式，导出 PDF 的样子就变了。
+   */
+  async reviseResume({ html, instruction, spec = "" }) {
+    const result = await this.#json(
+      `你在帮候选人改他的简历。简历是一份**自包含的 HTML**，按他的要求改其中的正文内容，只返回 JSON：{"html":"改好的完整 HTML"}。\n`
+      // 规范由调用方读好传进来（简历设计规范.md，已剔掉投递策略那类无关章节）
+      + (spec ? `这份简历要遵守的《简历设计规范》：\n${spec}\n\n` : "")
+      + `要求：\n`
+      + `- <style> 里的样式、@page 打印规则、整体结构（层级与区块顺序）**一律不动**。\n`
+      + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
+      + `- 不新增原文里没有的经历、数字或技术栈——原文就是事实来源。\n`
+      + `- 返回完整 HTML 全文，不是 diff、不是片段，开头不要加解释、不要包 markdown 代码块。`,
+      `当前简历 HTML：\n${html}\n\n修改要求：${instruction}`,
+      CREATIVE_TEMPERATURE,
+    );
+    const revised = String(result.html ?? "").trim();
+    if (!revised) throw new Error("模型没有返回改写后的简历");
     return revised;
   }
 

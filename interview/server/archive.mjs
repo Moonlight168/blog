@@ -100,10 +100,20 @@ async function resolveJdTarget({ question, knowledgeRoot, agent }) {
 }
 
 /**
+ * 软素质文档：落在这里的题按「行为面」形态校验（锚点 + 一段口语，不要求编号要点）。
+ * 其余章节仍走技术题的卡片结构。
+ */
+const SOFT_SKILL_CHAPTER = "协作交流";
+
+export function isBehavioralChapter(sourceRelative) {
+  return path.basename(String(sourceRelative ?? ""), ".md") === SOFT_SKILL_CHAPTER;
+}
+
+/**
  * 把一道题按《格式规范》写进知识库；校验不过时先让模型按规范重写再试。
  * 返回 { ok: true, historyUrl } 或 { ok: false, reason }。
  */
-async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, sourceRelative, title, standardAnswer }) {
+async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, sourceRelative, title, standardAnswer, allowStar = false }) {
   const series = sourceRelative.split("/")[0];
   const chapter = path.basename(sourceRelative, ".md");
   const history = historyLocation({ privateHistoryRoot, series, chapter });
@@ -111,8 +121,9 @@ async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, so
   ensureInside(knowledgeRoot, sourceFile);
   ensureInside(privateHistoryRoot, history.file);
   const historyUrl = `${history.url}#${slugify(title)}`;
+  const prose = isBehavioralChapter(sourceRelative);
 
-  const append = (answer) => appendAtomically(sourceFile, `\n${buildQuestionBlock({ title, answer, historyUrl })}`);
+  const append = (answer) => appendAtomically(sourceFile, `\n${buildQuestionBlock({ title, answer, historyUrl, prose, allowStar })}`);
   const strip = (message = "") => message.replace(/^题目不符合《面试宝典文章格式规范》：/, "");
   let candidate = standardAnswer;
   let lastReason = "";
@@ -125,7 +136,7 @@ async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, so
     } catch (error) {
       lastReason = error.message;
       try {
-        candidate = await agent.reformatAnswer({ question: { title, standardAnswer }, errors: [strip(error.message)] });
+        candidate = await agent.reformatAnswer({ question: { title, standardAnswer }, errors: [strip(error.message)], prose });
       } catch (rewriteError) {
         lastReason = rewriteError.message;
         break;
@@ -133,9 +144,9 @@ async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, so
     }
   }
   // 模型也救不回来时走确定性兜底：自动把超长主句拆成二级补充。
-  // 一条 bullet 的风格问题不该等于整个知识点丢失。
+  // 一条 bullet 的风格问题不该等于整个知识点丢失。行为面没有分点，拆不了，直接报错。
   try {
-    append(splitLongBullets(candidate));
+    append(prose ? candidate : splitLongBullets(candidate));
     return { ok: true, historyUrl };
   } catch (fallbackError) {
     return { ok: false, reason: strip(fallbackError.message) || strip(lastReason) };
@@ -146,6 +157,8 @@ async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, so
 export async function refileQuestion({ agent, questionIndex, knowledgeRoot, privateHistoryRoot, chapterPath, title, standardAnswer }) {
   const written = await writeQuestionBlock({
     agent, knowledgeRoot, privateHistoryRoot, sourceRelative: chapterPath, title, standardAnswer,
+    // 标题来自已有记录（可能被人工标了 ⭐ 表示真题），补录时不该因为这个被拦下
+    allowStar: true,
   });
   if (written.ok) await questionIndex.refresh();
   return written;

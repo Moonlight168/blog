@@ -67,6 +67,35 @@ test("岗位定制：出题时列出各分类已有章节，要求优先复用�
   });
 });
 
+test("人事面试：出行为面题，答案要求写成一段口语而不是分点笔记", async () => {
+  await withStubbedChat({ title: "在校期间有没有担任学生干部？", prompt: "题？", standardAnswer: "**锚点**：`x`\n\n在校没有担任学生干部。" }, async (agent, lastBody) => {
+    await agent.generateQuestion({
+      session: { mode: "hr", series: "基础知识", chapterPath: "基础知识/协作交流.md", resumeExcerpt: "简历", skillSnapshot: "" },
+    });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /人事面试/, "要按人事面试的口径出题");
+    assert.match(system, /第一人称/, "答案要是当场会说的话");
+    assert.match(system, /不分点/, "行为面不写成分点");
+    assert.doesNotMatch(system, /各分类已有章节/, "人事面试不走岗位定制那套章节归类");
+  });
+});
+
+test("人事面试：出题同样会重试一次结构不全的结果", async () => {
+  let calls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const content = calls === 1 ? '{"title":"没有问号","standardAnswer":"x"}' : '{"title":"题？","standardAnswer":"**锚点**：`x`\\n\\n一段口语。"}';
+    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
+    const question = await agent.generateQuestion({ session: { mode: "hr", series: "基础知识", chapterPath: "基础知识/协作交流.md", resumeExcerpt: "简历", skillSnapshot: "" } });
+    assert.equal(question.title, "题？");
+    assert.equal(calls, 2, "第一次结构不全应当再试一次");
+  } finally { globalThis.fetch = previousFetch; }
+});
+
 test("标准答案要求第一人称、不要写成「对应简历那版…」这种旁白", async () => {
   await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句" }, async (agent, lastBody) => {
     await agent.generateQuestion({
@@ -217,6 +246,26 @@ test("追问的提示词禁止回避推诿，也不再要求藏起标准答案�
     const system = lastBody().messages[0].content;
     assert.match(system, /不许回避/, "要明确禁止「这个得结合你自己的项目来讲」这类推诿");
     assert.doesNotMatch(system, /不泄露完整标准答案/, "作答后本来就会展示标准答案，藏它只会让模型推掉追问");
+  });
+});
+
+test("改简历时把《简历设计规范》喂进提示词；不传规范时那段整段省略", async () => {
+  await withStubbedChat({ html: "<html>改好了</html>" }, async (agent, lastBody) => {
+    await agent.reviseResume({ html: "<html>原稿</html>", instruction: "实习那段压缩", spec: "排版硬性规则：正文不小于 13px" });
+    assert.match(lastBody().messages[0].content, /简历设计规范/, "要带上规范标题");
+    assert.match(lastBody().messages[0].content, /排版硬性规则/, "规范正文要进系统提示词");
+
+    await agent.reviseResume({ html: "<html>原稿</html>", instruction: "改一下" });
+    assert.doesNotMatch(lastBody().messages[0].content, /简历设计规范/, "没给规范就不该出现那一段");
+  });
+});
+
+test("改自我介绍时同样带上《自我介绍规范》", async () => {
+  const markdown = ["> a → b", "", "**一、开场**", "", "正文"].join("\n");
+  await withStubbedChat({ markdown }, async (agent, lastBody) => {
+    await agent.reviseSelfIntro({ markdown, instruction: "开场短点", spec: "篇幅约 3 分钟，不分分钟版" });
+    assert.match(lastBody().messages[0].content, /自我介绍规范/);
+    assert.match(lastBody().messages[0].content, /不分分钟版/);
   });
 });
 

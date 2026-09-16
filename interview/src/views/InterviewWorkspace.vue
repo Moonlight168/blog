@@ -38,6 +38,16 @@ let lastExpirySync = 0;
 const chapters = computed<Chapter[]>(() => topics.value.find((item) => item.name === series.value)?.chapters ?? []);
 /** 岗位定制模式：按目标岗位 + 简历出题，不需要（也不校验）知识分类与章节 */
 const jdMode = computed(() => mode.value === "jd");
+const hrMode = computed(() => mode.value === "hr");
+/** 岗位定制和人事面试都不用手选分类章节：前者由模型按题目内容定，后者固定归到软素质文档 */
+const autoTarget = computed(() => jdMode.value || hrMode.value);
+/** 人事面试固定归到这一章；直接把真实取值摆出来，比留个空框写提示更直白 */
+const HR_TARGET = { series: "基础知识", chapterPath: "基础知识/协作交流.md" };
+// 岗位定制是「模型来定」，无从显示，留空 + 提示；人事面试是确定的，显示真值
+const seriesShown = computed(() => (hrMode.value ? HR_TARGET.series : jdMode.value ? null : series.value));
+const chapterShown = computed(() => (hrMode.value ? HR_TARGET.chapterPath : jdMode.value ? null : chapterPath.value));
+/** 章节下拉要按「显示出来的分类」取，否则人事面试下列表里根本没有 协作交流 这一项 */
+const shownChapters = computed<Chapter[]>(() => topics.value.find((item) => item.name === seriesShown.value)?.chapters ?? []);
 // 简历按一级子目录（每个人一个目录）分组，先选目录再看该目录下的简历
 const resumeGroups = computed(() => [...new Set(resumes.value.map((item) => item.dir))]);
 const visibleResumes = computed(() => (resumeGroup.value ? resumes.value.filter((item) => item.dir === resumeGroup.value) : resumes.value));
@@ -551,6 +561,17 @@ async function openIntro(file = "") {
   } finally { introLoading.value = false; }
 }
 
+/** 开系统原生的目录选择框（浏览器拿不到真实路径，得由服务端弹） */
+async function pickResumeDir() {
+  try {
+    const data = await api<{ path?: string; cancelled?: boolean }>("/api/pick", {
+      method: "POST",
+      body: JSON.stringify({ kind: "folder", start: resumeDir.value }),
+    });
+    if (data.path) resumeDir.value = data.path;
+  } catch (error) { toast.error((error as Error).message); }
+}
+
 /** 把页面上的简历目录写回 interview/.env，并重新扫描该目录。 */
 async function saveResumeDir() {
   const dir = resumeDir.value.trim();
@@ -598,7 +619,10 @@ async function syncExpiredSession() {
 }
 
 async function start() {
-  if (!resumePath.value || !series.value || !chapterPath.value) return toast.warning("请先选好简历和面试章节");
+  if (!resumePath.value) return toast.warning("请先选择简历");
+  // 岗位定制与人事面试都不用手选章节，这两项空着也能开
+  if (!autoTarget.value && (!series.value || !chapterPath.value)) return toast.warning("请先选好面试章节");
+  if (jdMode.value && !jdPath.value) return toast.warning("岗位定制需要先选目标岗位");
   sending.value = true;
   try {
     const data = await api<{ session: Session; messages: Message[] }>("/api/sessions", { method: "POST", body: JSON.stringify({ resumePath: resumePath.value, series: series.value, chapterPath: chapterPath.value, mode: mode.value, durationMinutes: durationMinutes.value, jdPath: jdPath.value }) });
@@ -710,7 +734,7 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
       <n-spin :show="loading">
         <div class="form-stack">
           <label>简历根目录</label>
-          <div class="inline"><n-input v-model:value="resumeDir" :disabled="locked" placeholder="简历所在目录的绝对路径" /><n-button :disabled="locked" :loading="savingDir" @click="saveResumeDir">保存并刷新</n-button></div>
+          <div class="inline inline-3"><n-input v-model:value="resumeDir" :disabled="locked" placeholder="简历所在目录的绝对路径" /><n-button :disabled="locked" @click="pickResumeDir">浏览</n-button><n-button :disabled="locked" :loading="savingDir" @click="saveResumeDir">应用</n-button></div>
           <label>人员目录</label>
           <n-select v-model:value="resumeGroup" :disabled="locked" :options="resumeGroups.map(g => ({ label: g, value: g }))" @update:value="syncResumeSelection" />
           <label>已有简历</label>
@@ -719,20 +743,20 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
             <n-button :disabled="!resumePath" :loading="previewLoading" @click="openPreview">预览</n-button>
           </div>
           <label>目标岗位</label>
-          <n-select :value="jdMode ? jdPath : ''" :disabled="locked || !jdMode" :placeholder="jdMode ? '请选择目标岗位' : '仅岗位定制需要'"
+          <n-select :value="jdMode ? jdPath : null" :disabled="locked || !jdMode" :placeholder="jdMode ? '请选择目标岗位' : '仅岗位定制需要'"
             :consistent-menu-width="false" :options="jdOptions" @update:value="(value: string) => { jdPath = value; }" />
           <div class="two-cols">
             <div>
               <label>知识分类</label>
-              <n-select :value="jdMode ? '' : series" :disabled="locked || jdMode" :placeholder="jdMode ? '岗位定制不需要选' : ''" :options="topics.map(s => ({ label: s.name, value: s.name }))" @update:value="pickSeries" />
+              <n-select :value="seriesShown" :disabled="locked || autoTarget" :placeholder="jdMode ? '岗位定制不需要选' : ''" :options="topics.map(s => ({ label: s.name, value: s.name }))" @update:value="pickSeries" />
             </div>
             <div>
               <label>章节（面试主题）</label>
-              <n-select :value="jdMode ? '' : chapterPath" :disabled="locked || jdMode" :placeholder="jdMode ? '岗位定制不需要选' : ''" filterable :options="chapters.map(c => ({ label: c.name, value: c.path }))" @update:value="pickChapter" />
+              <n-select :value="chapterShown" :disabled="locked || autoTarget" :placeholder="jdMode ? '岗位定制不需要选' : ''" filterable :options="shownChapters.map(c => ({ label: c.name, value: c.path }))" @update:value="pickChapter" />
             </div>
           </div>
           <div class="two-cols">
-            <div><label>面试形式</label><n-select v-model:value="mode" :disabled="locked" :options="[{label:'技术面试',value:'interview'},{label:'编码面试',value:'coding'},{label:'书面测评',value:'written'},{label:'岗位定制',value:'jd'}]" /></div>
+            <div><label>面试形式</label><n-select v-model:value="mode" :disabled="locked" :options="[{label:'技术面试',value:'interview'},{label:'编码面试',value:'coding'},{label:'书面测评',value:'written'},{label:'岗位定制',value:'jd'},{label:'人事面试',value:'hr'}]" /></div>
             <div><label>时长</label><n-select v-model:value="durationMinutes" :disabled="locked" :options="[15,30,45,60,90].map(v => ({label:`${v} 分钟`,value:v}))" /></div>
           </div>
           <div class="switch-row">
@@ -758,7 +782,6 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
         <div><div class="eyebrow">LIVE SESSION</div><h2>{{ session ? `${session.series} · ${session.chapterPath.split('/').at(-1)?.replace('.md','')}` : '等待开始' }}</h2></div>
         <div class="session-meta">
           <n-button size="tiny" quaternary :loading="introLoading" @click="openIntro()">自我介绍</n-button>
-          <n-button size="tiny" quaternary @click="$router.push('/self-intro')">调整</n-button>
           <n-tag v-if="session" :type="statusType">{{ statusText }}</n-tag><span v-if="session && !finished" class="timer" :class="{ paused }">{{ timerText }}</span>
         </div>
       </div>
@@ -795,7 +818,7 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
         </article>
       </div>
       <div class="composer" :class="{ disabled: !active }">
-        <n-input v-model:value="draft" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" :disabled="!active" placeholder="输入你的回答，或直接追问（长按空格可以说话）"
+        <n-input v-model:value="draft" type="textarea" :autosize="{ minRows: 1, maxRows: 6 }" :disabled="!active" placeholder="输入你的回答，或直接追问（长按空格可以说话）"
           @keydown="onKeydown" @keyup="onSpaceUp" @blur="releaseSpace" />
         <div v-if="voiceHint" class="voice-hint">
           <span class="voice-dot" />{{ voiceHint }}

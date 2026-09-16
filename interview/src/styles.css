@@ -19,7 +19,7 @@ main { height: calc(100vh - 72px); }
 .muted { margin: 0 0 28px; color: #79827f; line-height: 1.65; }
 .form-stack { display: flex; flex-direction: column; gap: 10px; }.form-stack label { margin-top: 8px; color: #48534f; font-size: 12px; font-weight: 700; }
 .field-note { color: #929a97; line-height: 1.5; }
-.inline { display: grid; grid-template-columns: 1fr auto; gap: 8px; }.two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.two-cols > div { display: flex; flex-direction: column; gap: 10px; }
+.inline { display: grid; grid-template-columns: 1fr auto; gap: 8px; }.inline-3 { grid-template-columns: minmax(0, 1fr) auto auto; }.two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.two-cols > div { display: flex; flex-direction: column; gap: 10px; }
 /* 中间行同理用 minmax(0, 1fr)：这样消息列表才会自己滚，
    头（chat-head）和输入框（composer）始终钉在面板上下两端。 */
 .chat-panel { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: rgba(255,255,253,.64); }
@@ -53,6 +53,13 @@ main { height: calc(100vh - 72px); }
 .history-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 22px; }
 .filter-series { width: 170px; }.filter-person { width: 150px; }.filter-status { width: 140px; }.filter-range { width: 260px; }
 .history-count { margin-left: auto; color: #929a97; font-size: 12px; }
+/* 真实面试详情：材料多的场次用一排标签切换，而不是纵向堆成长文 */
+.real-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.real-tab { padding: 6px 14px; border: 1px solid #e6e2d8; border-radius: 999px; background: #fffefa; color: #79827f; font: inherit; font-size: 12px; cursor: pointer; transition: .15s ease; }
+.real-tab:hover { border-color: #c8dcd4; background: #f3f8f5; color: #173f36; }
+.real-tab.active { border-color: #173f36; background: #173f36; color: #f6d679; font-weight: 600; }
+/* 正文铺满：之前限了 900px，右边空出一大块 */
+.real-body { width: 100%; }
 .history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }.history-card { padding: 22px; border: 1px solid #dedbd1; border-radius: 16px; background: #fffefa; transition: .2s ease; cursor: pointer; }.history-card:hover { transform: translateY(-3px); box-shadow: 0 14px 36px #24332b14; }.history-top { display: flex; justify-content: space-between; align-items: center; color: #89918e; font-size: 11px; }.history-top-right { display: flex; align-items: center; gap: 8px; }
 /* 卡片上的删除入口：平时低调，悬停才显红，避免误触 */
 .card-delete-wrap { display: inline-flex; }.card-delete { padding: 2px 8px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: #a8a29a; font: inherit; font-size: 11px; cursor: pointer; transition: .15s ease; }.card-delete:hover { border-color: #e8c4c4; background: #fdf2f2; color: #b3261e; }.card-delete:disabled { opacity: .5; cursor: default; }.history-card h3 { margin: 22px 0 6px; }.history-card p { min-height: 36px; color: #79827f; }.history-card strong { color: #a06d16; font-size: 12px; }
@@ -89,6 +96,39 @@ main { height: calc(100vh - 72px); }
 .si-tools { display: flex; align-items: center; gap: 8px; }.si-count { color: #929a97; font-size: 12px; }
 /* 目录下多份自我介绍（技术面 / HR 面）时的切换器 */
 .si-file { width: 150px; }
+/* 简历编辑器：与自我介绍同一套三行布局（工具条 / 主体 / 路径），只是预览换成了真 PDF */
+.resume-editor { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.re-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.re-tools { display: flex; align-items: center; gap: 8px; }.re-count { color: #929a97; font-size: 12px; }
+.re-person { width: 110px; }.re-file { width: 220px; }
+.resume-editor > .n-spin-container, .resume-editor > .n-spin-container > .n-spin-content { height: 100%; min-height: 0; }
+.re-body { height: 100%; min-height: 0; }
+/* 分栏交给 NSplit：两栏各占满高度，内部再各自滚 */
+.re-body .n-split { height: 100%; }
+/* 拖动条：hover 时加一圈极淡的光晕，让"可以拖"这件事更好被发现 */
+.re-body .n-split__resize-trigger { transition: background-color .25s ease, box-shadow .25s ease; }
+.re-body .n-split__resize-trigger:hover, .re-body .n-split__resize-trigger--hover { box-shadow: 0 0 0 3px #c8dcd433; }
+.re-pane-slot { min-width: 0; min-height: 0; overflow: hidden; }
+.re-pane-slot > .re-pane { height: 100%; }
+/* 拖动期间盖住 iframe：iframe 会吞掉 mousemove，不挡就"脱手" */
+.re-drag-shield { position: absolute; inset: 0; z-index: 5; }
+.re-pane-slot { position: relative; }
+.re-pane { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid #dedbd1; border-radius: 14px; background: #fffefa; overflow: hidden; }
+.re-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px 8px 16px; border-bottom: 1px solid #f0ede4; color: #79827f; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+/* 预览区灰底衬纸：PDF 自带白纸，四周留一圈底色才看得出页边界 */
+/* 面板自己不再滚动：滚动交给 PDF 阅读器（它按 #zoom=100 显示真实大小），
+   否则面板的横向滚动条 + 阅读器的纵向滚动条会套成两条。 */
+.re-preview { min-height: 0; overflow: hidden; background: #ecebe6; display: grid; }
+.re-pdf { width: 100%; height: 100%; border: 0; display: block; }
+/* 自己画转圈：naive-ui 的 n-spin 在没有默认插槽时会套一层遮罩，位置不受这里控制 */
+.re-preview-loading { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #79827f; font-size: 13px; }
+.re-preview-loading p { margin: 0; }
+.re-spinner { width: 26px; height: 26px; border: 3px solid #dedbd1; border-top-color: #173f36; border-radius: 50%; animation: re-spin .8s linear infinite; }
+@keyframes re-spin { to { transform: rotate(360deg); } }
+.re-error { margin: 24px; color: #b3261e; font-size: 13px; line-height: 1.7; }
+.re-editor { width: 100%; height: 100%; padding: 14px 16px; border: 0; outline: none; resize: none; background: #fff; color: #2d3833; font: 12px/1.7 ui-monospace, monospace; }
+.re-export-label { display: block; margin: 12px 0 6px; color: #48534f; font-size: 12px; font-weight: 700; }
+
 .intro-switch { width: 180px; margin-bottom: 12px; }
 .selfintro > .n-spin-container, .selfintro > .n-spin-container > .n-spin-content { height: 100%; min-height: 0; }
 .si-body { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; }
@@ -100,12 +140,26 @@ main { height: calc(100vh - 72px); }
 /* 用原生 textarea 而不是 n-input：要撑满整栏高度，naive-ui 的 wrapper 反而不好控 */
 .si-editor { width: 100%; height: 100%; padding: 16px 18px; border: 0; outline: none; resize: none; background: transparent; color: #2d3833; font: inherit; font-size: 13px; line-height: 1.85; }
 .si-preview { padding: 16px 18px; overflow: auto; overscroll-behavior: contain; font-size: 13px; }
-.si-chat-pane { grid-template-rows: auto minmax(0, 1fr) auto; }
-.si-chat { padding: 12px 14px; overflow-y: auto; overscroll-behavior: contain; }
-.si-chat-hint { margin: 0; color: #929a97; font-size: 12px; line-height: 1.8; }
+/* 聊天栏：自我介绍页（.si-*）与简历页（.re-*）共用同一套规则 */
+.si-chat-pane, .re-chat-pane { grid-template-rows: auto minmax(0, 1fr) auto; }
+.si-chat, .re-chat { padding: 18px 18px 22px; overflow-y: auto; overscroll-behavior: contain; }
+.si-chat-hint { margin: 0; color: #79827f; font-size: 12px; line-height: 1.8; }
+/* 空态提示：标题 + 例句列表 + 尾注，比糊成一整段好读 */
+.si-chat-hint-title { margin: 0 0 10px; color: #48534f; font-size: 12px; font-weight: 700; }
+.si-chat-hint-list { margin: 0 0 10px; padding-left: 16px; color: #79827f; }
+.si-chat-hint-list li { margin-bottom: 6px; line-height: 1.7; }
+.si-chat-hint-foot { margin: 0; color: #929a97; line-height: 1.7; }
+.re-export-note { margin: -2px 0 0; color: #929a97; font-size: 12px; line-height: 1.6; }
+/* 导出目录：输入框 + 选择按钮同一行 */
+.re-dir-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+/* 锁定导出的开关：和旁边的按钮同一高度，锁上时变实心深色，一眼能看出状态 */
+.re-lock { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid #dfddd5; border-radius: 6px; background: #fff; color: #929a97; cursor: pointer; transition: .18s ease; }
+.re-lock:hover { border-color: #c8dcd4; background: #f3f8f5; color: #173f36; }
+.re-lock.locked { border-color: #173f36; background: #173f36; color: #f6d679; }
+.re-lock-icon { width: 13px; height: 13px; fill: currentColor; }
 .si-chat-item { margin-bottom: 10px; display: flex; gap: 8px; font-size: 12px; line-height: 1.7; }.si-chat-item.user { color: #173f36; }.si-chat-item.assistant { color: #56615d; }
 .si-chat-who { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; background: #e5e8df; color: #53605b; font-size: 10px; font-weight: 800; }.si-chat-item.assistant .si-chat-who { background: #173f36; color: #f6d679; }
-.si-chat-box { padding: 10px 12px; border-top: 1px solid #f0ede4; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }.si-chat-box > .n-input { width: 100%; }
+.si-chat-box { padding: 14px 14px 12px; border-top: 1px solid #f0ede4; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }.si-chat-box > .n-input { width: 100%; }
 .si-path { margin: 10px 0 0; font-size: 11px; word-break: break-all; }
 .si-history { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; min-height: 380px; }
 .si-history-list { max-height: 62vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }

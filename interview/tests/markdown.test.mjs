@@ -81,6 +81,36 @@ test("锚点写法固定为 **锚点**：`一行口诀`，写成「记忆锚点�
   assert.ok(validateQuestionBlock(withoutTicks).some((error) => /锚点/.test(error)), "锚点内容必须用反引号包住");
 });
 
+test("行为面答案：锚点 + 一段口语就算合规，不要求编号要点", () => {
+  const block = buildQuestionBlock({
+    title: "在校期间有没有担任学生干部？",
+    answer: "**锚点**：`没干部没竞赛，如实说`\n\n在校没有担任学生干部，也没参加过竞赛，这块我不编。",
+    historyUrl: "/private/series/答题历史/基础知识/非技术面试问答-答题记录.md#在校期间有没有担任学生干部",
+    prose: true,
+  });
+  assert.match(block, /这块我不编/);
+});
+
+test("行为面答案：分点、或口语超过 4 行，都算不合规", () => {
+  const wrap = (answer) => `## 题？\n\n${answer}\n\n→ [回答历史](/private/series/答题历史/基础知识/非技术面试问答-答题记录.md#题)\n`;
+  const bullets = wrap("**锚点**：`x`\n\n1. **要点**：短句");
+  assert.ok(validateQuestionBlock(bullets, { prose: true }).some((error) => /不要编号分点/.test(error)), "行为面不该分点");
+  const long = wrap(`**锚点**：\`x\`\n\n${["一", "二", "三", "四", "五"].map((n) => `第${n}段话`).join("\n")}`);
+  assert.ok(validateQuestionBlock(long, { prose: true }).some((error) => /不超过 4 行/.test(error)), "口语要短");
+});
+
+test("同一段口语：行为面形态放行，技术题形态仍要求编号要点", () => {
+  const block = `## 题？\n\n**锚点**：\`x\`\n\n就是一段口语，不分点。\n\n→ [回答历史](/private/series/答题历史/基础知识/非技术面试问答-答题记录.md#题)\n`;
+  assert.deepEqual(validateQuestionBlock(block, { prose: true }), []);
+  assert.ok(validateQuestionBlock(block).some((error) => /编号加粗要点/.test(error)), "技术题形态下这段口语应当不合格");
+});
+
+test("⭐ 是人工标的真题标记：新出的题不许带，重写已有题要放行", () => {
+  const block = `## ⭐题？\n\n**锚点**：\`x\`\n\n1. **要点**：短句\n\n→ [回答历史](/private/series/答题历史/基础知识/非技术面试问答-答题记录.md#题)\n`;
+  assert.ok(validateQuestionBlock(block).some((error) => /星标/.test(error)), "模型不该自己加星标");
+  assert.deepEqual(validateQuestionBlock(block, { allowStar: true }), [], "重写已标 ⭐ 的题不该被拦下");
+});
+
 test("rejects headings, stars and overlong answer cards", () => {
   const invalid = `## 1. ⭐坏问题？\n\n### 小节\n${Array.from({ length: 16 }, (_, i) => `${i + 1}. 内容`).join("\n")}\n`;
   const errors = validateQuestionBlock(invalid);

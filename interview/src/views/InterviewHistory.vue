@@ -9,7 +9,11 @@ interface Row {
   id: string; series: string; chapterPath: string; resumePath: string; mode: string; status: string;
   startedAt: string; durationMinutes: number; completedCount: number;
   questionCount: number; archivedCount: number; averageScore: number | null;
+  /** session = 演练台生成的模拟面试；real = src/private 下本人记录的真实面试 */
+  kind?: "session" | "real";
+  company?: string; role?: string; fileCount?: number;
 }
+const isReal = (row: Row) => row.kind === "real";
 
 /** 筛选条件持久化，下次打开还是上次筛的那一档 */
 interface Filters { series: string; person: string; status: string; range: [number, number] | null }
@@ -65,8 +69,9 @@ const statusMeta = (status: string) => STATUS_META[status as keyof typeof STATUS
 
 const visible = computed(() => rows.value.filter((row) => {
   if (seriesFilter.value && row.series !== seriesFilter.value) return false;
-  if (personFilter.value && personLabel(row.resumePath) !== personFilter.value) return false;
-  if (statusFilter.value && row.status !== statusFilter.value) return false;
+  if (personFilter.value && (isReal(row) || personLabel(row.resumePath) !== personFilter.value)) return false;
+  // 状态与简历是模拟场次才有的字段：筛它们时真实面试自然被排除，别混进来看不懂的结果
+  if (statusFilter.value && (isReal(row) || row.status !== statusFilter.value)) return false;
   if (rangeFilter.value) {
     const at = new Date(row.startedAt).getTime();
     const [from, to] = rangeFilter.value;
@@ -92,9 +97,13 @@ const deletingId = ref("");
  * naive-ui 的 NPopconfirm 依赖事件继续冒泡才能展开弹层（在 trigger 或外层 stop 掉就点不开），
  * 所以改成在这里按事件来源判断——点在删除那一块就只当删除，不跳详情。
  */
+function targetOf(row: Row) {
+  return isReal(row) ? `/real-interview/${encodeURIComponent(row.id)}` : `/history/${row.id}`;
+}
+
 function openRow(event: MouseEvent, row: Row) {
   if ((event.target as HTMLElement).closest(".card-delete-wrap")) return;
-  void router.push(`/history/${row.id}`);
+  void router.push(targetOf(row));
 }
 
 /** 删除一条历史记录：服务端只删这一场的 session/messages/attempts，已归档进知识库的题目不动 */
@@ -154,13 +163,16 @@ function resetFilters() {
     <n-spin :show="loading">
       <div v-if="visible.length" class="history-grid">
         <div v-for="row in visible" :key="row.id" class="history-card" role="link" tabindex="0"
-          @click="openRow($event, row)" @keydown.enter="router.push(`/history/${row.id}`)">
+          @click="openRow($event, row)" @keydown.enter="router.push(targetOf(row))">
           <div class="history-top">
-            <n-tag size="small" :type="statusMeta(row.status).type">{{ statusMeta(row.status).text }}</n-tag>
+            <n-tag size="small" :type="isReal(row) ? 'warning' : statusMeta(row.status).type">
+              {{ isReal(row) ? "真实面试" : statusMeta(row.status).text }}
+            </n-tag>
             <div class="history-top-right">
               <span>{{ timeLabel(row.startedAt) }}</span>
+              <!-- 真实面试是仓库里的文件，入口这边不提供删除 -->
               <!-- 这一块不拦冒泡：拦了 naive-ui 的弹层就展不开，改由 openRow 按事件来源忽略 -->
-              <span class="card-delete-wrap">
+              <span v-if="!isReal(row)" class="card-delete-wrap">
                 <n-popconfirm @positive-click="removeRow(row)">
                   <template #trigger>
                     <n-button size="tiny" quaternary :disabled="deletingId === row.id" title="删除这条历史记录">删除</n-button>
@@ -173,9 +185,12 @@ function resetFilters() {
               </span>
             </div>
           </div>
-          <h3>{{ topicLabel(row.series, row.chapterPath) }}</h3>
-          <p>{{ resumeLabel(row.resumePath) }}<span v-if="row.durationMinutes"> · {{ durationLabel(row.durationMinutes) }}</span></p>
-          <strong>{{ statLabel(row.averageScore, row.questionCount, row.archivedCount) }}</strong>
+          <h3 v-if="isReal(row)">{{ row.company }}<span v-if="row.role"> · {{ row.role }}</span></h3>
+          <h3 v-else>{{ topicLabel(row.series, row.chapterPath) }}</h3>
+          <p v-if="isReal(row)">本人记录</p>
+          <p v-else>{{ resumeLabel(row.resumePath) }}<span v-if="row.durationMinutes"> · {{ durationLabel(row.durationMinutes) }}</span></p>
+          <strong v-if="isReal(row)">共 {{ row.fileCount }} 份材料</strong>
+          <strong v-else>{{ statLabel(row.averageScore, row.questionCount, row.archivedCount) }}</strong>
         </div>
       </div>
       <n-empty v-else-if="!loading" :description="filtering ? '没有符合筛选条件的面试' : '还没有面试记录'" />

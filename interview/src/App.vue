@@ -27,7 +27,7 @@ const themeOverrides: GlobalThemeOverrides = {
             <span class="brand-mark">I</span>
             <span><strong>面试演练台</strong><small>把每次回答变成长期积累</small></span>
           </router-link>
-          <nav><router-link to="/">开始面试</router-link><router-link to="/self-intro">自我介绍</router-link><router-link to="/history">面试历史</router-link><router-link to="/review">复习</router-link><router-link to="/retrieval">检索预览</router-link></nav>
+          <nav><router-link to="/">开始面试</router-link><router-link to="/resume">我的简历</router-link><router-link to="/self-intro">自我介绍</router-link><router-link to="/history">面试历史</router-link><router-link to="/review">复习</router-link><router-link to="/retrieval">检索预览</router-link></nav>
         </header>
         <main><router-view /></main>
       </div>

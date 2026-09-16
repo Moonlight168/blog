@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +32,12 @@ export const config = {
   port: Number(process.env.INTERVIEW_PORT || 8890),
   // 简历默认放在博客仓库的私有目录下（src/private 不进版本库），.env 可覆盖
   resumeDir: process.env.INTERVIEW_RESUME_DIR || path.join(BLOG_ROOT, "src", "private", "resume"),
+  /** 真实面试记录的根目录（面试历史里与模拟面试并列展示） */
+  realInterviewDir: process.env.INTERVIEW_REAL_DIR || path.join(BLOG_ROOT, "src", "private", "hires", "个人简介", "面试经验"),
+  /** 简历导出的 PDF 落盘目录：默认 OneDrive 桌面（同名直接覆盖） */
+  resumeExportDir: process.env.INTERVIEW_RESUME_EXPORT_DIR || path.join(os.homedir(), "OneDrive", "桌面"),
+  /** 生成 PDF 用的浏览器；留空则按常见路径自动找 Chrome / Edge */
+  browserPath: process.env.INTERVIEW_BROWSER || "",
   // 题目里的「回答历史」是 VuePress 文档站的路径，页面里要拼上这个基址才能打开。
   // 8888 对应 src/.vuepress/config.ts 里的 port；那边改了这里也要跟着改。
   docsBaseUrl: (process.env.INTERVIEW_DOCS_BASE_URL || "http://127.0.0.1:8888").replace(/\/+$/, ""),

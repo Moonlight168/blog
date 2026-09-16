@@ -116,12 +116,23 @@ export function parseQuestions(markdown, sourcePath) {
   });
 }
 
-export function validateQuestionBlock(block) {
+/** 行为面（HR / 软素质）答案的行数上限：锚点之后就是一段口语，不该长篇分点 */
+export const MAX_PROSE_LINES = 4;
+
+/**
+ * @param block 完整题块
+ * @param prose 行为面形态：第一行锚点之后写成一段第一人称口语，不要求编号要点。
+ *              技术题仍走「1~6 个编号加粗要点」的卡片结构。
+ * @param allowStar 允许标题带 ⭐。⭐ 只能由人手动标注表示真题，所以模型新出的题一律不许带；
+ *                  但重写/补录一道已经标了 ⭐ 的题时得放行，否则那道题永远改不动。
+ */
+export function validateQuestionBlock(block, { prose = false, allowStar = false } = {}) {
   const errors = [];
   const lines = block.trim().split(/\r?\n/);
   const title = lines[0] ?? "";
   if (!/^##\s+[^#].*[？?]$/u.test(title)) errors.push("题目必须使用 H2 且以问号结尾");
-  if (/^##\s+\d+[.、]|⭐/u.test(title)) errors.push("题目不能编号或自动添加星标");
+  if (/^##\s+\d+[.、]/u.test(title)) errors.push("题目不能编号");
+  if (!allowStar && /⭐/u.test(title)) errors.push("题目不能自动添加星标");
   if (/[`#|]/u.test(title.slice(3))) errors.push("题目不能包含反引号、# 或竖线");
   if (/^#{3,}\s/m.test(block)) errors.push("答案只允许两级结构，不能使用三级标题");
 
@@ -138,21 +149,32 @@ export function validateQuestionBlock(block) {
   else if (!ANCHOR_LINE.test(answerLines[0])) {
     errors.push("答案第一行必须是锚点，写法固定为 **锚点**：`一行口诀`（例：**锚点**：`数组+链表+红黑树`）");
   }
-  const topLevel = answerLines.filter((line) => /^\d+\.\s+\*\*[^*]+\*\*/u.test(line));
-  if (!topLevel.length || topLevel.length > 6) errors.push("答案必须包含 1–6 个编号加粗要点");
-  // 主句上限按汉字当量算；报错要带上「第几条、超多少」，否则重写时模型不知道该改哪句
-  const overlong = topLevel
-    .map((line) => widthUnits(mainClause(line)))
-    .map((units, index) => ({ index: index + 1, units }))
-    .filter((item) => item.units > MAX_MAIN_UNITS);
-  if (overlong.length) {
-    const detail = overlong
-      .map((item) => `第 ${item.index} 条 ${item.units} 字、超 ${item.units - MAX_MAIN_UNITS}`)
-      .join("；");
-    errors.push(`一级要点主句不得超过 ${MAX_MAIN_UNITS} 字（汉字当量）：${detail}`);
-  }
-  if (answerLines.some((line) => /^\s+-\s/.test(line) && !/^ {3}-\s/.test(line))) {
-    errors.push("二级要点必须缩进 3 个空格");
+  if (prose) {
+    const body = answerLines.slice(1);
+    if (!body.length) errors.push("锚点之后必须有回答内容");
+    if (body.length > MAX_PROSE_LINES) {
+      errors.push(`行为面的回答要短：锚点之后不超过 ${MAX_PROSE_LINES} 行口语，现在 ${body.length} 行`);
+    }
+    if (body.some((line) => /^\d+\.|^\s+-|^#/u.test(line))) {
+      errors.push("行为面的回答写成一段口语即可，不要编号分点");
+    }
+  } else {
+    const topLevel = answerLines.filter((line) => /^\d+\.\s+\*\*[^*]+\*\*/u.test(line));
+    if (!topLevel.length || topLevel.length > 6) errors.push("答案必须包含 1–6 个编号加粗要点");
+    // 主句上限按汉字当量算；报错要带上「第几条、超多少」，否则重写时模型不知道该改哪句
+    const overlong = topLevel
+      .map((line) => widthUnits(mainClause(line)))
+      .map((units, index) => ({ index: index + 1, units }))
+      .filter((item) => item.units > MAX_MAIN_UNITS);
+    if (overlong.length) {
+      const detail = overlong
+        .map((item) => `第 ${item.index} 条 ${item.units} 字、超 ${item.units - MAX_MAIN_UNITS}`)
+        .join("；");
+      errors.push(`一级要点主句不得超过 ${MAX_MAIN_UNITS} 字（汉字当量）：${detail}`);
+    }
+    if (answerLines.some((line) => /^\s+-\s/.test(line) && !/^ {3}-\s/.test(line))) {
+      errors.push("二级要点必须缩进 3 个空格");
+    }
   }
   const fences = answerLines.reduce((state, line) => {
     if (line.trim().startsWith("```")) return { ...state, open: !state.open };
@@ -162,11 +184,11 @@ export function validateQuestionBlock(block) {
   return errors;
 }
 
-export function buildQuestionBlock({ title, answer, historyUrl }) {
+export function buildQuestionBlock({ title, answer, historyUrl, prose = false, allowStar = false }) {
   const normalizedTitle = title.trim().replace(/^#+\s*/, "");
   // 不加结尾的 `---`：现有题库的题与题之间只有空行，加 `---` 会多渲染一条 <hr>
   const block = `## ${normalizedTitle}\n\n${answer.trim()}\n\n→ [回答历史](${historyUrl})\n`;
-  const errors = validateQuestionBlock(block);
+  const errors = validateQuestionBlock(block, { prose, allowStar });
   if (errors.length) throw new Error(`题目不符合《面试宝典文章格式规范》：${errors.join("；")}`);
   return block;
 }
