@@ -4,6 +4,8 @@
 .tare/
 .qoder/
 .claude/
+# 浏览器自动化工具的临时产物：页面快照里会带上当时打开的简历文件名（含真名）
+.playwright-cli/
 # 忽略依赖包
 **/node_modules/
 

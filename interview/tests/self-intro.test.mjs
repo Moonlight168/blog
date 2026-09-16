@@ -13,6 +13,18 @@ import {
 const TECH = "技术面.md";
 const HR = "HR面.md";
 
+/** 临时改「人目录」，跑完还原——人目录名因人而异，不该在代码里写死 */
+function withPersonDir(name, run) {
+  const previous = process.env.INTERVIEW_PERSON_DIR;
+  process.env.INTERVIEW_PERSON_DIR = name;
+  try {
+    run();
+  } finally {
+    if (previous === undefined) delete process.env.INTERVIEW_PERSON_DIR;
+    else process.env.INTERVIEW_PERSON_DIR = previous;
+  }
+}
+
 /** 造一个和线上同构的环境：简历目录在一个独立 git 仓库里 */
 function makeRepo({ init = true, files = [TECH] } = {}) {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "selfintro-"));
@@ -46,15 +58,26 @@ test("扫描目录：列出所有 .md，按名字排序，忽略其它文件", (
   assert.ok(list.every((item) => fs.existsSync(item.path)));
 });
 
+test("人目录由 INTERVIEW_PERSON_DIR 决定，不写死在代码里", () => {
+  const resumeDir = path.join(os.tmpdir(), "selfintro-person");
+  withPersonDir("zhangsan", () => {
+    assert.equal(selfIntroDir(resumeDir), path.join(resumeDir, "zhangsan", "自我介绍"));
+  });
+  delete process.env.INTERVIEW_PERSON_DIR;
+  assert.equal(selfIntroDir(resumeDir), path.join(resumeDir, "me", "自我介绍"), "没配时用占位名，不用真人目录名");
+});
+
 test("目录还不存在时退回旧位置的单文件（改目录结构不会把内容读丢）", () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "selfintro-legacy-"));
   const resumeDir = path.join(repo, "resume");
-  fs.mkdirSync(path.join(resumeDir, "zhangsan"), { recursive: true });
-  fs.writeFileSync(path.join(resumeDir, "zhangsan", "自我介绍.md"), "老位置的内容\n", "utf8");
+  withPersonDir("zhangsan", () => {
+    fs.mkdirSync(path.join(resumeDir, "zhangsan"), { recursive: true });
+    fs.writeFileSync(path.join(resumeDir, "zhangsan", "自我介绍.md"), "老位置的内容\n", "utf8");
 
-  const list = listSelfIntros(resumeDir);
-  assert.equal(list.length, 1);
-  assert.equal(readSelfIntro(resumeDir, "").markdown, "老位置的内容\n");
+    const list = listSelfIntros(resumeDir);
+    assert.equal(list.length, 1);
+    assert.equal(readSelfIntro(resumeDir, "").markdown, "老位置的内容\n");
+  });
 });
 
 test("解析文件名：支持带后缀、不带后缀、留空取第一份；不认识的返回 null", () => {

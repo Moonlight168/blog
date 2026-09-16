@@ -9,13 +9,28 @@ import path from "node:path";
  * 独立的本地 git 仓库（无远程），所以「回滚」直接复用 git，而不是自己造一套备份。
  */
 
-/** 自我介绍目录（一个目录放多份，如 技术面 / HR面），相对简历目录 */
-export const SELF_INTRO_DIR = path.join("zhangsan", "自我介绍");
+/** 自我介绍目录名（一个目录放多份，如 技术面 / HR面） */
+const SELF_INTRO_NAME = "自我介绍";
 /** 目录化之前的老位置：目录不存在时退回这里读单文件 */
-const LEGACY_SELF_INTRO = path.join("zhangsan", "自我介绍.md");
+const LEGACY_SELF_INTRO_NAME = "自我介绍.md";
+/** 没配 INTERVIEW_PERSON_DIR 时的占位人目录名 */
+const DEFAULT_PERSON_DIR = "me";
 
+/**
+ * 简历所属人的目录名（如 zhangsan）。
+ *
+ * 一台机器上可能不止一个人的简历，所以这个目录名因人而异，**不能写死在代码里**——
+ * 换个人用（或把项目给别人用）改 .env 的 INTERVIEW_PERSON_DIR 即可。
+ *
+ * 惰性读取而不是模块顶层读：这样不依赖"config.mjs 先把 .env 加载进来"的导入顺序。
+ */
+function personDir() {
+  return String(process.env.INTERVIEW_PERSON_DIR ?? "").trim() || DEFAULT_PERSON_DIR;
+}
+
+/** 自我介绍目录：<简历目录>/<人目录>/自我介绍/ */
 export function selfIntroDir(resumeDir) {
-  return path.join(resumeDir, SELF_INTRO_DIR);
+  return path.join(resumeDir, personDir(), SELF_INTRO_NAME);
 }
 
 /**
@@ -30,7 +45,7 @@ export function listSelfIntros(resumeDir) {
       .map((entry) => ({ file: entry.name, name: path.basename(entry.name, ".md"), path: path.join(dir, entry.name) }))
       .sort((a, b) => a.name.localeCompare(b.name, "zh"));
   }
-  const legacy = path.join(resumeDir, LEGACY_SELF_INTRO);
+  const legacy = path.join(resumeDir, personDir(), LEGACY_SELF_INTRO_NAME);
   return fs.existsSync(legacy)
     ? [{ file: path.basename(legacy), name: path.basename(legacy, ".md"), path: legacy }]
     : [];

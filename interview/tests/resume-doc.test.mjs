@@ -30,9 +30,10 @@ test("按人分组：一级目录即一个人，人员名取简历文件名的�
     lisi: { "李四-文员-27届.html": HTML },
   });
   const groups = listResumeGroups(root);
-  assert.deepEqual(groups.map((g) => g.id), ["zhangsan", "lisi"]);
-  assert.deepEqual(groups.map((g) => g.label), ["张三", "李四"]);
-  assert.equal(groups[0].resumes.length, 2);
+  // 分组按目录名排序（lisi 在 zhangsan 前面）
+  assert.deepEqual(groups.map((g) => g.id), ["lisi", "zhangsan"]);
+  assert.deepEqual(groups.map((g) => g.label), ["李四", "张三"], "显示名取简历文件名的第一段");
+  assert.equal(groups.find((g) => g.id === "zhangsan").resumes.length, 2);
 });
 
 test("人员名推不出来时退回目录名，不硬猜", () => {
