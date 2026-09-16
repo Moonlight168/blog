@@ -1,5 +1,6 @@
 import {sidebar} from "vuepress-theme-hope";
 import {getBlogsSidebar} from "../presets/getBlogsSidebar.js";
+import {localSections} from "../utils/local-nav.js";
 
 export const zhSidebar = sidebar({
     "/": [
@@ -22,20 +23,19 @@ export const zhSidebar = sidebar({
     "/series/knowledge/": "structure",
     // 隐藏 series/ 下的答题历史目录（仅作为内部跳转目标，不在侧边栏展示）
     "/series/答题历史/": [],
-    // 仅在开发环境生效的布局配置（private 已迁入我的项目/关于我/data/scripts）
-    ...(process.env.NODE_ENV === "development"
-        ? {
-            "/private/finance/": "structure",
-            "/private/hires/": "structure",
-            "/private/实习笔记/": "structure",
-            "/private/ai/": "structure",
-            // 我的项目文档（FlowMind/淘票票等）
-            "/private/series/myprojects/": "structure",
-            // 我的项目面试题分类
-            "/private/series/knowledge-我的项目/": "structure",
-            // 隐藏答题历史（仅作为内部跳转目标）
-            "/private/series/答题历史/": [],
-            "/trash/": "structure",
-        }
-        : {}),
+    // private 已迁入我的项目/关于我/data/scripts，且不进版本库，
+    // 所以按「开发环境 + 目录确实存在」决定生效，换台没这份 private 的机器时自动消失
+    ...localSections({
+        "/private/finance/": "structure",
+        "/private/hires/": "structure",
+        "/private/实习笔记/": "structure",
+        "/private/ai/": "structure",
+        // 我的项目文档（FlowMind/淘票票等）
+        "/private/series/myprojects/": "structure",
+        // 我的项目面试题分类
+        "/private/series/knowledge-我的项目/": "structure",
+        // 隐藏答题历史（仅作为内部跳转目标）
+        "/private/series/答题历史/": [],
+        "/trash/": "structure",
+    }),
 });

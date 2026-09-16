@@ -1,4 +1,5 @@
 import { navbar } from "vuepress-theme-hope";
+import { localNav } from "../utils/local-nav.js";
 
 export const zhNavbar = navbar([
   // 主页（链接到中文首页）
@@ -14,13 +15,11 @@ export const zhNavbar = navbar([
     prefix: "/series/myprojects/",
     children: [
       { text: "FlowMind", icon: "/assets/icon/cloud_flow.png", link: "/series/myprojects/FlowMind/" },
-      // 本地开发额外显示其他项目（私有）
-      ...(process.env.NODE_ENV === "development"
-          ? [
-              { text: "淘票票", icon: "/assets/icon/淘票票icon.png", link: "/private/series/myprojects/淘票票/" },
-              { text: "OilGuard", icon: "/assets/icon/cloud.png", link: "/private/series/myprojects/OilGuard/" },
-            ]
-          : []),
+      // 本地开发额外显示其他项目（私有；目录不在就不显示）
+      ...localNav([
+        { text: "淘票票", icon: "/assets/icon/淘票票icon.png", link: "/private/series/myprojects/淘票票/" },
+        { text: "OilGuard", icon: "/assets/icon/cloud.png", link: "/private/series/myprojects/OilGuard/" },
+      ]),
     ],
   },
   // 博客（一级导航，按分类组织）
@@ -63,14 +62,12 @@ export const zhNavbar = navbar([
     prefix: "/series/knowledge/",
     children: [
       { text: "面试宝典",icon: "/assets/icon/书本.png", link: "/series/knowledge/index.md" },
-      ...(process.env.NODE_ENV === "development"
-          ? [
-              // 直接指向本地面试台（interview/ 里跑 npm run dev；5174 是 vite 热更新版）
-              { text: "模拟面试", icon: "/assets/icon/chat.svg", link: "http://127.0.0.1:5174/" }, // 本地显示
-              { text: "寻找 Offer", icon: "/assets/icon/招聘.png", link: "/private/hires/" },
-              { text: "秋招打卡", icon: "/assets/icon/轨迹.png", link: "/private/checkin/" },
-            ]
-          : []),
+      ...localNav([
+        // 直接指向本地面试台（interview/ 里跑 npm run dev；5174 是 vite 热更新版）
+        { text: "模拟面试", icon: "/assets/icon/chat.svg", link: "http://127.0.0.1:5174/" }, // 本地显示
+        { text: "寻找 Offer", icon: "/assets/icon/招聘.png", link: "/private/hires/" },
+        { text: "秋招打卡", icon: "/assets/icon/轨迹.png", link: "/private/checkin/" },
+      ]),
     ],
   },
   // 关于我（公开页面）
@@ -79,19 +76,17 @@ export const zhNavbar = navbar([
     icon: "/assets/icon/我.png",
     link: "/about/",
   },
-  // 私有导航项（仅本地开发时显示）
-  ...(process.env.NODE_ENV === "development"
-      ? [
-          { text: "投资理财", icon: "/assets/icon/finance.png", link: "/private/finance/README.md" }, // 本地显示
-          {
-            text: "人工智能",
-            icon: "/assets/icon/ai.png",
-            prefix: "/private/ai/",
-            children: [
-              { text: "AI发展历史", link: "/private/ai/AI发展历史.md" }
-            ]
-          },
-        ] // 本地显示
-      : []), // 构建时不显示
+  // 私有导航项（仅本地开发时显示，且东西真的在）
+  ...localNav([
+    { text: "投资理财", icon: "/assets/icon/finance.png", link: "/private/finance/README.md" }, // 本地显示
+    {
+      text: "人工智能",
+      icon: "/assets/icon/ai.png",
+      prefix: "/private/ai/",
+      children: [
+        { text: "AI发展历史", link: "/private/ai/AI发展历史.md" }
+      ]
+    },
+  ]), // 构建时不显示
 
 ]);
