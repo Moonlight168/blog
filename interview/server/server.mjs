@@ -458,8 +458,10 @@ async function api(request, response, url) {
     const html = String(input.html ?? "");
     if (!html.trim()) return json(response, 400, { error: "简历内容不能为空" });
     const out = path.join(os.tmpdir(), `resume-preview-${process.pid}-${Date.now()}.pdf`);
+    // 预览的是编辑器里还没保存的 HTML，但图片仍在简历目录里，得靠这份文件定位基准目录
+    const source = resolveResumeDoc(config.resumeDir, String(input.file ?? ""));
     try {
-      await htmlToPdf({ browser: config.browserPath, html, outPath: out });
+      await htmlToPdf({ browser: config.browserPath, html, outPath: out, sourceFile: source?.path });
       const bytes = fs.readFileSync(out);
       response.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": bytes.length, "Cache-Control": "no-store" });
       response.end(bytes);
@@ -506,7 +508,7 @@ async function api(request, response, url) {
     const name = pdfFileName(input.name, file.name);
     const out = path.join(config.resumeExportDir, name);
     try {
-      await htmlToPdf({ browser: config.browserPath, html, outPath: out });
+      await htmlToPdf({ browser: config.browserPath, html, outPath: out, sourceFile: file.path });
       return json(response, 200, { path: out, name, bytes: fs.statSync(out).size });
     } catch (error) {
       return json(response, 500, { error: error.message });

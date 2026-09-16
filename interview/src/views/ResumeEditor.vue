@@ -123,7 +123,8 @@ async function refreshPdf() {
     const response = await fetch("/api/resume-doc/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html: html.value }),
+      // 带上 file：照片是同目录下的相对路径，服务端要靠它把渲染基准钉回简历目录
+      body: JSON.stringify({ file: file.value, html: html.value }),
     });
     if (!response.ok) {
       const detail = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
