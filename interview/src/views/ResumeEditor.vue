@@ -359,7 +359,6 @@ onBeforeUnmount(() => {
       <div class="re-tools">
         <n-tag v-if="dirty" type="warning" size="small" round>未保存</n-tag>
         <n-tag v-else size="small" round>已保存</n-tag>
-        <span class="re-count">{{ html.length }} 字符</span>
         <n-button size="small" type="primary" :loading="saving" :disabled="!dirty" @click="save">保存</n-button>
         <n-button size="small" :loading="exporting" @click="openExport">导出 PDF</n-button>
         <button

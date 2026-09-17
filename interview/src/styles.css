@@ -99,7 +99,7 @@ main { height: calc(100vh - 72px); }
 /* 简历编辑器：与自我介绍同一套三行布局（工具条 / 主体 / 路径），只是预览换成了真 PDF */
 .resume-editor { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
 .re-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-.re-tools { display: flex; align-items: center; gap: 8px; }.re-count { color: #929a97; font-size: 12px; }
+.re-tools { display: flex; align-items: center; gap: 8px; }
 .re-person { width: 110px; }.re-file { width: 220px; }
 .resume-editor > .n-spin-container, .resume-editor > .n-spin-container > .n-spin-content { height: 100%; min-height: 0; }
 .re-body { height: 100%; min-height: 0; }
