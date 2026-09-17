@@ -80,8 +80,12 @@ async function syncFromDisk() {
 }
 
 async function toggleEditing() {
-  // 切到预览前先对齐磁盘：预览是给人看"现在文件长什么样"的
-  if (editing.value) await syncFromDisk();
+  // 切到预览前先对齐磁盘：预览是给人看"现在文件长什么样"的。
+  // 读不到也不能拦住切换——那是附带动作，不该让「编辑」按钮点不动（踩过：await 抛错
+  // 会让下面那行永远执行不到，表现成"点了没反应"）。
+  if (editing.value) {
+    try { await syncFromDisk(); } catch { /* 读不到就按内存里的走 */ }
+  }
   flushVersion();
   editing.value = !editing.value;
 }

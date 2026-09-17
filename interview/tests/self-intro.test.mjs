@@ -58,13 +58,44 @@ test("扫描目录：列出所有 .md，按名字排序，忽略其它文件", (
   assert.ok(list.every((item) => fs.existsSync(item.path)));
 });
 
-test("人目录由 INTERVIEW_PERSON_DIR 决定，不写死在代码里", () => {
+test("配了 INTERVIEW_PERSON_DIR 就听它的", () => {
   const resumeDir = path.join(os.tmpdir(), "selfintro-person");
   withPersonDir("zhangsan", () => {
     assert.equal(selfIntroDir(resumeDir), path.join(resumeDir, "zhangsan", "自我介绍"));
   });
+});
+
+test("没配时自动认人目录：哪个人下面有自我介绍就是谁", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "selfintro-auto-"));
+  fs.mkdirSync(path.join(root, "zhangsan", "自我介绍"), { recursive: true });
+  fs.mkdirSync(path.join(root, "lisi"), { recursive: true });
+  withPersonDir("", () => {
+    delete process.env.INTERVIEW_PERSON_DIR;
+    assert.equal(selfIntroDir(root), path.join(root, "zhangsan", "自我介绍"), "有稿子那位才是正在用的人");
+  });
+});
+
+test("都没稿子时退回第一个人目录（按名字排序，结果是确定的）", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "selfintro-first-"));
+  fs.mkdirSync(path.join(root, "zhangsan"));
+  fs.mkdirSync(path.join(root, "lisi"));
   delete process.env.INTERVIEW_PERSON_DIR;
-  assert.equal(selfIntroDir(resumeDir), path.join(resumeDir, "me", "自我介绍"), "没配时用占位名，不用真人目录名");
+  assert.equal(selfIntroDir(root), path.join(root, "lisi", "自我介绍"));
+});
+
+test("简历目录还空着才用占位名——不能因为认不出来就报错", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "selfintro-empty-"));
+  delete process.env.INTERVIEW_PERSON_DIR;
+  assert.equal(selfIntroDir(root), path.join(root, "me", "自我介绍"));
+});
+
+test("换台机器不配任何东西也能读到已有稿子（原先默认写死 me，落到不存在的目录）", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "selfintro-anywhere-"));
+  fs.mkdirSync(path.join(root, "hyl", "自我介绍"), { recursive: true });
+  fs.writeFileSync(path.join(root, "hyl", "自我介绍", "技术面.md"), "稿子内容\n", "utf8");
+  delete process.env.INTERVIEW_PERSON_DIR;
+  assert.equal(listSelfIntros(root).length, 1, "不配 .env 也该找得到");
+  assert.equal(readSelfIntro(root, "").markdown, "稿子内容\n");
 });
 
 test("目录还不存在时退回旧位置的单文件（改目录结构不会把内容读丢）", () => {

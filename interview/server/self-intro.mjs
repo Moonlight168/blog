@@ -13,24 +13,50 @@ import path from "node:path";
 const SELF_INTRO_NAME = "自我介绍";
 /** 目录化之前的老位置：目录不存在时退回这里读单文件 */
 const LEGACY_SELF_INTRO_NAME = "自我介绍.md";
-/** 没配 INTERVIEW_PERSON_DIR 时的占位人目录名 */
-const DEFAULT_PERSON_DIR = "me";
+/** 实在认不出来时（简历目录还空着）用的占位名 */
+const FALLBACK_PERSON_DIR = "me";
 
 /**
  * 简历所属人的目录名（如 zhangsan）。
  *
- * 一台机器上可能不止一个人的简历，所以这个目录名因人而异，**不能写死在代码里**——
- * 换个人用（或把项目给别人用）改 .env 的 INTERVIEW_PERSON_DIR 即可。
+ * 一台机器上可能不止一个人的简历，所以这个目录名因人而异，**不能写死在代码里**。
+ * 取值顺序：
+ *   ① .env 的 INTERVIEW_PERSON_DIR（显式配了就听它的）
+ *   ② **自动认**：哪个人目录下已经有「自我介绍」，那就是正在用的人
+ *   ③ 再退一步：第一个人目录
+ *   ④ 简历目录还空着，才用占位名
+ *
+ * ②③ 是必须的：原先默认写死占位名 `me`，换台机器就落到一个不存在的目录，
+ * 自我介绍一份都读不到——表现成"这个页面打不开/不可编辑"，而那些人根本没配过 .env。
+ * 自动识别让"把项目给别人用"这件事不需要任何配置。
  *
  * 惰性读取而不是模块顶层读：这样不依赖"config.mjs 先把 .env 加载进来"的导入顺序。
  */
-function personDir() {
-  return String(process.env.INTERVIEW_PERSON_DIR ?? "").trim() || DEFAULT_PERSON_DIR;
+function personDir(resumeDir) {
+  const configured = String(process.env.INTERVIEW_PERSON_DIR ?? "").trim();
+  if (configured) return configured;
+
+  let people = [];
+  try {
+    people = fs.readdirSync(resumeDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b, "zh"));
+  } catch {
+    return FALLBACK_PERSON_DIR;   // 简历目录还不存在
+  }
+  if (!people.length) return FALLBACK_PERSON_DIR;
+
+  const hasSelfIntro = (name) => {
+    const dir = path.join(resumeDir, name);
+    return fs.existsSync(path.join(dir, SELF_INTRO_NAME)) || fs.existsSync(path.join(dir, LEGACY_SELF_INTRO_NAME));
+  };
+  return people.find(hasSelfIntro) ?? people[0];
 }
 
 /** 自我介绍目录：<简历目录>/<人目录>/自我介绍/ */
 export function selfIntroDir(resumeDir) {
-  return path.join(resumeDir, personDir(), SELF_INTRO_NAME);
+  return path.join(resumeDir, personDir(resumeDir), SELF_INTRO_NAME);
 }
 
 /**
@@ -45,7 +71,7 @@ export function listSelfIntros(resumeDir) {
       .map((entry) => ({ file: entry.name, name: path.basename(entry.name, ".md"), path: path.join(dir, entry.name) }))
       .sort((a, b) => a.name.localeCompare(b.name, "zh"));
   }
-  const legacy = path.join(resumeDir, personDir(), LEGACY_SELF_INTRO_NAME);
+  const legacy = path.join(resumeDir, personDir(resumeDir), LEGACY_SELF_INTRO_NAME);
   return fs.existsSync(legacy)
     ? [{ file: path.basename(legacy), name: path.basename(legacy, ".md"), path: legacy }]
     : [];
