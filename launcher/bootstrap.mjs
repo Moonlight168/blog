@@ -80,6 +80,50 @@ function writeState(patch) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(next, null, 2), "utf8");
 }
 
+/** 端口上有东西在监听吗（用来看代理是不是真的开着） */
+function portListening(port) {
+  const netstat = spawnSync("netstat", ["-ano", "-p", "TCP"], { encoding: "utf8", windowsHide: true }).stdout ?? "";
+  return netstat.includes(`:${port} `);
+}
+
+/** 常见代理工具的默认混合端口：注册表读不到时的兜底 */
+const COMMON_PROXY_PORTS = [7890, 7897, 7891, 10809, 1080];
+
+/**
+ * 把 Windows 的系统代理读出来，喂给 git 和 npm。
+ *
+ * 它们**都不读** Windows 的代理设置（那个只有浏览器读）✗ 于是现象是
+ * 「浏览器能开 GitHub，git fetch 却报 Failed to connect to github.com:443」✗
+ * 用户明明开着 Clash，只是 git 不知道 ✓ 这里替它知道 ✓ 用户不用配任何东西 ✓
+ *
+ * 只在"代理端口真的在监听"时才用：注册表里常留着已经关掉的代理 ✓ 照搬会把
+ * 本来能直连的网络弄坏 ✗
+ */
+function systemProxy() {
+  if (process.platform !== "win32") return "";
+  const query = "Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings' | "
+    + "Select-Object -ExpandProperty ProxyServer -ErrorAction SilentlyContinue";
+  const server = spawnSync("powershell", ["-NoProfile", "-Command",
+    `if ((Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').ProxyEnable -eq 1) { ${query} }`,
+  ], { encoding: "utf8", windowsHide: true }).stdout?.trim() ?? "";
+
+  if (!server) {
+    const found = COMMON_PROXY_PORTS.find(portListening);
+    return found ? `http://127.0.0.1:${found}` : "";
+  }
+  const https = /https=([^;]+)/i.exec(server)?.[1];
+  const plain = /^[^;=]+$/.test(server) ? server : "";
+  const address = (https || plain).trim();
+  if (!address || !portListening(Number(address.split(":").pop()))) return "";
+  return address.includes("://") ? address : `http://${address}`;
+}
+
+/** git / npm 都要走这个（外壳也会传一份下来，两个来源取其一） */
+const PROXY = String(process.env.HTTPS_PROXY ?? "").trim() || systemProxy();
+const PROXY_ENV = PROXY
+  ? { HTTP_PROXY: PROXY, HTTPS_PROXY: PROXY, http_proxy: PROXY, https_proxy: PROXY }
+  : {};
+
 /**
  * 哪些命令必须经过 cmd。
  *
@@ -110,7 +154,7 @@ function commandFor(command, args) {
 /** 跑一条命令并把输出透到控制台（npm / git 的进度条才有意义） */
 function run(command, args, cwd) {
   const call = commandFor(command, args);
-  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", shell: call.shell });
+  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", shell: call.shell, env: { ...process.env, ...PROXY_ENV } });
   return new Promise((resolve, reject) => {
     child.on("error", reject);
     child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${command} 退出码 ${code}`))));
@@ -120,7 +164,7 @@ function run(command, args, cwd) {
 /** 跑一条命令、只要输出（用于 git 查询这类不该刷屏的调用）；失败返回空串 */
 function capture(command, args, cwd) {
   const call = commandFor(command, args);
-  const result = spawnSync(call.command, call.args, { cwd, encoding: "utf8", windowsHide: true, shell: call.shell });
+  const result = spawnSync(call.command, call.args, { cwd, encoding: "utf8", windowsHide: true, shell: call.shell, env: { ...process.env, ...PROXY_ENV } });
   return result.status === 0 ? String(result.stdout ?? "") : "";
 }
 
@@ -404,7 +448,7 @@ function startService({ title, command, args, cwd, port, url }) {
   }
   // node 直接起（它的路径可能含空格，走 shell 会被劈开）；npm 换成 cmd.exe /c
   const call = commandFor(command, args);
-  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", shell: call.shell });
+  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", shell: call.shell, env: { ...process.env, ...PROXY_ENV } });
   children.push({ child, title });
   child.on("exit", (code) => {
     if (code !== 0 && code !== null) log(`      ${title} 退出了（退出码 ${code}）`);
@@ -481,6 +525,7 @@ async function main() {
   const appDir = path.resolve(process.env.DESK_APP_DIR || path.join(HOME, "app"));
   const seedDir = path.resolve(process.env.DESK_SEED_DIR || path.join(HOME, "seed"));
   const settings = { appDir, seedDir };
+  if (PROXY) log(`  系统代理 ${PROXY}（git/npm 会走它）`);
 
   const steps = [
     ["检查运行环境", () => checkNode()],
