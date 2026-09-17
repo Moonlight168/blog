@@ -464,7 +464,8 @@ async function main() {
     ["检查更新", () => ensureUpToDate(settings)],
     ["安装依赖", () => ensureDeps(settings)],
     ["构建面试台", () => ensureBuild(settings)],
-    ["初始化个人目录", () => Promise.resolve(ensurePrivate(settings))],
+    // ensurePrivate 是同步的；await 一个普通值也能正常工作，不必包 Promise
+    ["初始化个人目录", () => ensurePrivate(settings)],
     ["配置模型密钥", () => ensureEnv(settings)],
   ];
 
