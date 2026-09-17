@@ -363,6 +363,21 @@ test("指定了具体章节时，提示词按老样子围绕那一章，不出�
   });
 });
 
+test("两处「让 AI 改」共用同一份判断规则，不能各写一份长歪", async () => {
+  await withStubbedChat({ action: "answer", reply: "……" }, async (agent, lastBody) => {
+    await agent.reviseResume({ html: "<html>原稿</html>", instruction: "这段会不会太长？" });
+    const resumeSystem = lastBody().messages[0].content;
+    await agent.reviseSelfIntro({ markdown: "# 稿子", instruction: "开场会不会太长？" });
+    const introSystem = lastBody().messages[0].content;
+
+    for (const [label, system] of [["简历", resumeSystem], ["自我介绍", introSystem]]) {
+      assert.match(system, /祈使句/, `${label}：判据是句式——祈使句=让改、疑问句=在问`);
+      assert.match(system, /先改个人优势/, `${label}：踩过的那句原话要写进规则，模型才认得出来`);
+      assert.match(system, /分不清就判 answer/, `${label}：兜底方向不能被改掉`);
+    }
+  });
+});
+
 test("改简历：模型判为「问意见」时不给改动，只给回复", async () => {
   await withStubbedChat({ action: "answer", reply: "这段确实偏长，建议压到两行。" }, async (agent) => {
     const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "这段会不会太长了？" });

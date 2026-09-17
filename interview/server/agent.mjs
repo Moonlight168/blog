@@ -9,6 +9,25 @@ import { friendlyNetworkError, httpStatusHint } from "./net.mjs";
 const STABLE_TEMPERATURE = 0.35;
 const CREATIVE_TEMPERATURE = 0.85;
 
+/**
+ * 「改稿还是答问」的判断规则，两个对话框共用——原来简历和自我介绍各写一份，
+ * 改一处漏一处迟早长歪。
+ *
+ * 关键是把**「改」这个字**和**改稿指令**分开：实测「如果投递的岗位是 agent 开发，
+ * 怎么修正比较好 先改个人优势」被当成了改稿指令，其实那是在问怎么改、并指出先说哪一段，
+ * 不是让人动手。
+ */
+const REVISE_DECISION_RULE = `先判断他这句话是在「让你去做」还是在「问你」——看句式最可靠：\n`
+  + `- revise：**祈使句**，他让你把某处改成某个样子。`
+  + `「把个人优势改成更贴合 Agent 岗位的写法」「压缩到两行」「删掉最后一条」「技能区调个顺序」都属于这类；`
+  + `说得粗（「把个人优势改改」）也算。照做：JSON 的正文里给改好的全文，reply 说清改了什么（口语，不要分点）。\n`
+  + `- answer：**疑问句**，或者陈述句里让你先分析、评估、比较。`
+  + `「怎么修正比较好」「要不要改」「会不会太长」「这样行不行」「该突出哪个」都属于这类。`
+  + `只写 reply，正文留空，**一个字都不要动稿子**。\n`
+  + `- 同一句里既有问又有指路时看主体：「如果投递 Agent 岗，怎么修正比较好 先改个人优势」主体是那个问，`
+  + `后面半句是在给分析划范围（先从个人优势说起），不是在让你动手——判 answer。\n`
+  + `- 分不清就判 answer：改稿有副作用（覆盖内容、要重新预览），宁可不改，等他明确要求。`;
+
 /** 已问题目清单只取标题、不带答案摘要——省 token，又足够让模型避开重复 */
 function askedBlock(session) {
   const asked = (session.askedQuestions ?? []).filter(Boolean);
@@ -348,13 +367,8 @@ export class InterviewAgent {
   async reviseSelfIntro({ markdown, instruction, spec = "", history = [] }) {
     return this.#revise({
       system: `你在帮候选人改他的面试自我介绍（一份 markdown）。`
-        + `这是个对话框：他可能让你改稿，也可能只是问你意见——先判断这次是哪一种。`
-        + `只返回 JSON：{"action":"revise|answer","reply":"…","markdown":"…"}。\n`
-        + `- revise：他明确要求你改（压缩、补全、删掉、换措辞…）→ markdown 给改好的**完整全文**，`
-        + `reply 用一句话说明你改了什么，口语，不要分点。\n`
-        + `- answer：他在问意见、求评价、问怎么改更好、让你看某段行不行 → reply 写你的回答，`
-        + `markdown 留空，**一个字都不要改动稿子**。\n`
-        + `- 分不清就判 answer：改稿是有副作用的操作（会覆盖内容），宁可不改，等他明确要求。`,
+        + `这是个对话框：他可能让你改稿，也可能只是问你意见。`
+        + `只返回 JSON：{"action":"revise|answer","reply":"…","markdown":"…"}。`,
       spec: spec ? `这份稿子要遵守的《自我介绍规范》：\n${spec}` : "",
       context: `当前的自我介绍全文：\n${markdown}`,
       history,
@@ -379,13 +393,8 @@ export class InterviewAgent {
   async reviseResume({ html, instruction, spec = "", history = [] }) {
     return this.#revise({
       system: `你在帮候选人改他的简历（一份自包含的 HTML）。`
-        + `这是个对话框：他可能让你改简历，也可能只是问你意见——先判断这次是哪一种。`
-        + `只返回 JSON：{"action":"revise|answer","reply":"…","html":"…"}。\n`
-        + `- revise：他明确要求你改（压缩、补全、删掉、换措辞…）→ html 给改好的**完整 HTML**，`
-        + `reply 用一句话说明你改了什么，口语，不要分点。\n`
-        + `- answer：他在问意见、求评价、问怎么改更好、让你看某段行不行 → reply 写你的回答，`
-        + `html 留空，**一个字都不要改动简历**。\n`
-        + `- 分不清就判 answer：改简历是有副作用的操作（会覆盖内容），宁可不改，等他明确要求。`,
+        + `这是个对话框：他可能让你改简历，也可能只是问你意见。`
+        + `只返回 JSON：{"action":"revise|answer","reply":"…","html":"…"}。`,
       // 规范由调用方读好传进来（简历设计规范.md，已剔掉投递策略那类无关章节）
       spec: spec ? `这份简历要遵守的《简历设计规范》：\n${spec}` : "",
       context: `当前的简历 HTML：\n${html}`,
@@ -450,7 +459,8 @@ export class InterviewAgent {
    */
   async #revise({ system, spec, context, history, instruction, rules, field, emptyError }) {
     const messages = [
-      { role: "system", content: [system, spec, rules, context].filter(Boolean).join("\n\n") },
+      // 顺序有意：规则/规范在一次会话里不变，放前面好命中缓存；当前文稿改一次变一次，放最后
+      { role: "system", content: [system, REVISE_DECISION_RULE, spec, rules, context].filter(Boolean).join("\n\n") },
       ...this.#turns(history),
       { role: "user", content: instruction },
     ];
