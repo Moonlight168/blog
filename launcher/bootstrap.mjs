@@ -182,29 +182,47 @@ function checkNode() {
 }
 
 /**
+ * 更新只覆盖这些路径：**功能代码和启动器脚本**。
+ *
+ * 为什么不整棵树一起更新（原来用 `git reset --hard`）：`src/` 下是博客内容，
+ * 那是使用者自己的东西——他改过的、删掉的都应该留着，不该被远端版本按回去。
+ * 而 `interview/` 和 `launcher/` 是功能代码，没人会在里面写自己的文档，尽管对齐。
+ */
+const SYNC_PATHS = ["interview", "launcher"];
+
+/**
  * 拉取最新代码。这是"重新执行就拿到最新"的实现处。
  *
- * 三条判断，都是为了不把别人的东西弄丢或卡住启动：
- * - 本地有未提交改动 → 跳过更新（宁可用旧版，也不覆盖人家改过的东西）
- * - 连不上远端 → 跳过更新（离线时照常启动，而不是报错干等）
- * - 拉完指纹没变 → 什么都不做
+ * 三条判断都是为了不把别人的东西弄丢、也不卡住启动：
+ * - 只在**要更新的那几个目录**有本地改动时才跳过（博客那边的改动不该拦住更新）
+ * - 连不上远端 → 用当前版本启动（离线照常能跑，而不是报错干等）
+ * - 已经同步过的提交 → 什么都不做
  */
+
+
 async function ensureUpToDate({ appDir }) {
   const git = (...args) => capture("git", ["-C", appDir, ...args]);
 
   if (!git("rev-parse", "--git-dir")) return "不是 git 仓库，跳过";
-  const dirty = git("status", "--porcelain").trim();
-  if (dirty) return "本地有改动，跳过更新";
 
   // --depth 1：这是个部署副本，不需要完整历史，拉得快也更省
   if (!capture("git", ["-C", appDir, "fetch", "--depth", "1", "origin", "main"])) {
     return "连不上远端，用当前版本启动";
   }
-  const local = git("rev-parse", "HEAD").trim();
   const remote = git("rev-parse", "FETCH_HEAD").trim();
-  if (!remote || local === remote) return "已是最新";
+  if (!remote) return "连不上远端，用当前版本启动";
 
-  await run("git", ["-C", appDir, "reset", "--hard", "FETCH_HEAD"], appDir);
+  // 用状态文件记"上次同步到哪个提交"，而不是拿 HEAD 比：
+  // 我们只对齐部分路径，HEAD 会一直停在旧提交上，比它永远算出"有更新"。
+  if (remote === String(readJson(STATE_FILE).syncedSha ?? "")) return "已是最新";
+
+  // 只在**要更新的那些路径**上有本地改动时才跳过——博客那边的改动不该拦住更新。
+  const dirty = git("status", "--porcelain", "--", ...SYNC_PATHS).trim();
+  if (dirty) return `${SYNC_PATHS.join(" / ")} 有本地改动，跳过更新`;
+
+  // 只把这些路径换成远端版本；其余（src/ 下的博客内容、私人目录）一律不动
+  await run("git", ["-C", appDir, "checkout", remote, "--", ...SYNC_PATHS], appDir);
+  writeState({ syncedSha: remote });
   return "已更新到最新";
 }
 
@@ -504,4 +522,4 @@ if (isMain) {
   main().then((code) => { if (typeof code === "number") process.exit(code); });
 }
 
-export { checkNode, copyMissing, ensurePrivate, lockFingerprint, newestMtime, portBusy };
+export { checkNode, copyMissing, ensurePrivate, ensureUpToDate, lockFingerprint, newestMtime, portBusy, SYNC_PATHS };
