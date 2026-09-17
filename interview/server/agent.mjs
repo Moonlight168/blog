@@ -55,7 +55,11 @@ export class InterviewAgent {
     this.questionIndex = questionIndex;
   }
 
-  async #json(system, user, temperature = STABLE_TEMPERATURE) {
+  /**
+   * 发一次对话请求。收**整个 messages 数组**，所以能承载真正的多轮对话——
+   * 「让 AI 改」那个对话框就是靠它跟人连续聊，而不是每句都从零开始。
+   */
+  async #chat(messages, temperature = STABLE_TEMPERATURE) {
     if (!this.config.baseUrl || !this.config.apiKey || !this.config.model) {
       throw new Error("尚未配置 INTERVIEW_CHAT_BASE_URL / API_KEY / MODEL");
     }
@@ -69,7 +73,7 @@ export class InterviewAgent {
           model: this.config.model,
           temperature,
           response_format: { type: "json_object" },
-          messages: [{ role: "system", content: system }, { role: "user", content: user }],
+          messages,
         }),
       });
     } catch (error) {
@@ -83,6 +87,11 @@ export class InterviewAgent {
     try { payload = await response.json(); }
     catch { throw new Error("对话模型返回的不是合法 JSON（可能网络中断），请重试"); }
     return parseJson(payload.choices?.[0]?.message?.content ?? "");
+  }
+
+  /** 单轮的便捷写法：一段系统提示 + 一句用户话 */
+  async #json(system, user, temperature = STABLE_TEMPERATURE) {
+    return this.#chat([{ role: "system", content: system }, { role: "user", content: user }], temperature);
   }
 
   async classify({ session, text }) {
@@ -132,18 +141,28 @@ export class InterviewAgent {
     if (session.mode === "hr") return this.#generateHrQuestion({ session });
     // 岗位定制模式没有指定章节，由模型判断这道题该归到哪个章节与分类
     const jdMode = session.mode === "jd";
+    // 「不指定章节」的两种：岗位定制（分类也归模型挑）和「全部」（分类由会话定、章节在本分类里挑）
+    const openMode = jdMode || !String(session.chapterPath ?? "").trim();
     // 分类连同其下已有章节一起给它：只给分类名的时候，模型看不见「集合」「多线程」已经存在，
     // 会把跨两章的问题合并成一个新章节名（实测造出过「Java 集合与并发」），于是知识库越分越碎。
-    const catalog = jdMode ? this.questionIndex.topics() : [];
+    // 岗位定制给全部分类；「全部」只给会话选定的那一个，免得题被归到别的分类下。
+    const catalog = jdMode
+      ? this.questionIndex.topics()
+      : (openMode ? this.questionIndex.topics().filter((item) => item.name === session.series) : []);
     const seriesNames = catalog.map((item) => item.name);
     const chapterCatalog = catalog
       .map((item) => `- ${item.name}：${(item.chapters ?? []).map((chapter) => chapter.name).join("、")}`)
       .join("\n");
+    // 「全部」模式下分类是锁死的，列章节名就够。带上「分类：」前缀会被模型照抄进 topic
+    // （实测返回过「Agent 开发：langgraph」），那会新建出一个带前缀的章节文件。
+    const scopedChapterNames = (catalog[0]?.chapters ?? []).map((chapter) => chapter.name).join("、");
 
     const system = `你是严格的中文技术面试官。`
       + (jdMode
         ? `围绕目标岗位 JD 与候选人简历生成一道新的、真实面试口吻的问题——考察 JD 里强调、而简历中值得深挖的能力。`
-        : `围绕指定章节并结合简历生成一道新的、真实面试口吻的问题。`)
+        : openMode
+          ? `围绕「${session.series}」这个方向**岗位上普遍要求的技能**，结合候选人简历生成一道新的、真实面试口吻的问题。`
+          : `围绕指定章节并结合简历生成一道新的、真实面试口吻的问题。`)
       + `不编号、不加星标、一次只问一个核心任务。`
       // 格式细节只保留在下方规则快照里一处，不再在正文重复一遍（原先两处都写，纯属重复注入）
       + `标准答案严格按下方「当前会话规则快照」里的格式写，不要加开场白或额外说明。`
@@ -151,19 +170,35 @@ export class InterviewAgent {
       + `标准答案用第一人称讲简历里真实做过的事（点名项目名、技术栈或具体业务场景），不要用“如订单列表…”这类占位示例；`
       // 只说「落到简历上」它会写成「对应简历那版…」——站在文档外面讲解，候选人当场没法这么说
       + `但不要出现“简历”“对应简历那版”这类旁白，也不要解释这道题在考什么，直接给当场能背出来的答案。`
-      + (jdMode
-        ? `另外判断这道题该归到哪个章节：topic 必填、不能为空。优先从下面列出的「各分类已有章节」里原样挑一个——`
+      + (openMode
+        ? `另外判断这道题该归到哪个章节：topic 必填、不能为空。优先从下面列出的已有章节里原样挑一个——`
           + `题目同时牵涉两个章节时，挑最贴近的那一个，不要合并两章造一个新名字；`
-          + `只有确实没有任何已有章节覆盖这道题时才新建，新章节名要简短。`
-          + `series 必须从这些现有知识分类里挑一个最贴近的：${seriesNames.join("、")}。\n`
-          + `各分类已有章节：\n${chapterCatalog}\n`
-          + `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案","topic":"章节名","series":"分类名"}。`
+          + (jdMode
+            ? `只有确实没有任何已有章节覆盖这道题时才新建，新章节名要简短。`
+              + `series 必须从这些现有知识分类里挑一个最贴近的：${seriesNames.join("、")}。\n`
+              + `各分类已有章节：\n${chapterCatalog}\n`
+              + `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案","topic":"章节名","series":"分类名"}。`
+            : // 选「全部」时已有章节只是**归档去处**，不该限制问什么：
+              // 选题依据是「这个方向的岗位普遍要求什么」，库里没有的就新建一个 topic 收下它
+              `本分类下已有的章节没覆盖到的，就为它新建一个 topic。\n`
+              + `注意：出什么题不受已有章节限制——已有章节是归档去处，不是选题范围；`
+              + `选题依据是「这个方向的岗位普遍要求什么技能」，市场常见而库里还没有的（比如新出的框架、工具），`
+              + `就新建一个简短的 topic 名（如「langchain」「向量数据库」）收下它。\n`
+              + `但别为了新而新：拿不准某个技能算不算这个方向的岗位必备时，宁可不问它。\n`
+              + (scopedChapterNames
+                ? `本分类已有章节（能归进去就归进去）：${scopedChapterNames}\n`
+                : `本分类下还没有章节，这道题直接新建一个。\n`)
+              + `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案","topic":"章节名"}。`)
         : `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案"}。`)
       + `给了目标岗位 JD 时，优先考察 JD 里强调的能力，不要问与该岗位无关的方向。\n`
       + `当前会话规则快照：\n${session.skillSnapshot}`;
     // 顺序是有意的：模式/简历/JD 在一次会话里都不变，放前面才能命中上下文缓存；
     // 每次都变的「已问过的题」追加在最末尾，只让尾巴变化。
-    const user = (jdMode ? `面试模式：岗位定制（不限定章节）\n` : `知识分类：${session.series}\n章节：${session.chapterPath}\n`)
+    const user = (jdMode
+      ? `面试模式：岗位定制（不限定章节）\n`
+      : openMode
+        ? `知识分类：${session.series}\n章节：不限（本分类下由你挑最贴切的一章）\n`
+        : `知识分类：${session.series}\n章节：${session.chapterPath}\n`)
       + `面试模式：${session.mode}\n`
       + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
       // 以下三块每次都变，放在稳定前缀之后，尽量保住缓存命中
@@ -177,7 +212,7 @@ export class InterviewAgent {
       result.standardAnswer = result.standardAnswer ?? result.standard_answer;
       const broken = !result.title?.match(/[？?]$/u) || !result.standardAnswer
         ? "模型生成的题目结构不完整"
-        : (jdMode && !String(result.topic ?? "").trim() ? "模型没有给出这道题归属的章节" : "");
+        : (openMode && !String(result.topic ?? "").trim() ? "模型没有给出这道题归属的章节" : "");
       if (!broken) return result;
       if (attempt === 2) throw new Error(broken);
     }
@@ -285,23 +320,30 @@ export class InterviewAgent {
    * 走「整篇返回」而不是 diff：文档才 2KB，一次往返成本可忽略，而 patch 的失败模式
    * （找不到锚点、上下文对不上）要多得多——改坏了有回撤栈和 git 兜着。
    */
-  async reviseSelfIntro({ markdown, instruction, spec = "" }) {
-    const result = await this.#json(
-      `你在帮候选人改他的面试自我介绍。按他的要求改这份 markdown，只返回 JSON：{"markdown":"改好的完整 markdown"}。\n`
-      + (spec ? `这份稿子要遵守的《自我介绍规范》：\n${spec}\n\n` : "")
-      + `要求：\n`
-      + `- 第一行是这份稿子的链路锚点（形如「> 开场 → 实习 → …」），**必须原样保留**，`
-      + `小节有增减时同步更新它；实测它被当成冗余删掉过，那是这份稿子的记忆索引，不能丢。\n`
-      + `- 保持原文的小节骨架与「**一、开场**」这类小标题写法，编号要连续，除非他明确要求调整结构。\n`
-      + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
-      + `- 不新增原文里没有的经历、数字或技术栈——原文就是事实来源。\n`
-      + `- 返回完整全文，不是 diff、不是片段，开头也不要加任何解释。`,
-      `当前自我介绍：\n${markdown}\n\n修改要求：${instruction}`,
-      CREATIVE_TEMPERATURE,
-    );
-    const revised = String(result.markdown ?? "").trim();
-    if (!revised) throw new Error("模型没有返回改写后的自我介绍");
-    return revised;
+  async reviseSelfIntro({ markdown, instruction, spec = "", history = [] }) {
+    return this.#revise({
+      system: `你在帮候选人改他的面试自我介绍（一份 markdown）。`
+        + `这是个对话框：他可能让你改稿，也可能只是问你意见——先判断这次是哪一种。`
+        + `只返回 JSON：{"action":"revise|answer","reply":"…","markdown":"…"}。\n`
+        + `- revise：他明确要求你改（压缩、补全、删掉、换措辞…）→ markdown 给改好的**完整全文**，`
+        + `reply 用一句话说明你改了什么，口语，不要分点。\n`
+        + `- answer：他在问意见、求评价、问怎么改更好、让你看某段行不行 → reply 写你的回答，`
+        + `markdown 留空，**一个字都不要改动稿子**。\n`
+        + `- 分不清就判 answer：改稿是有副作用的操作（会覆盖内容），宁可不改，等他明确要求。`,
+      spec: spec ? `这份稿子要遵守的《自我介绍规范》：\n${spec}` : "",
+      context: `当前的自我介绍全文：\n${markdown}`,
+      history,
+      instruction,
+      rules: `改写时的要求：\n`
+        + `- 第一行是这份稿子的链路锚点（形如「> 开场 → 实习 → …」），**必须原样保留**，`
+        + `小节有增减时同步更新它；实测它被当成冗余删掉过，那是这份稿子的记忆索引，不能丢。\n`
+        + `- 保持原文的小节骨架与「**一、开场**」这类小标题写法，编号要连续，除非他明确要求调整结构。\n`
+        + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
+        + `- 不新增原文里没有的经历、数字或技术栈——原文就是事实来源。\n`
+        + `- markdown 要给完整全文，不是 diff、不是片段，开头也不要加任何解释。`,
+      field: "markdown",
+      emptyError: "模型说要改，但没返回改写后的自我介绍",
+    });
   }
 
   /**
@@ -309,22 +351,75 @@ export class InterviewAgent {
    * 简历是自包含 HTML（样式内联、带 A4 打印规则），所以只动**正文内容**，
    * 不碰 <style> 与结构——一改样式，导出 PDF 的样子就变了。
    */
-  async reviseResume({ html, instruction, spec = "" }) {
-    const result = await this.#json(
-      `你在帮候选人改他的简历。简历是一份**自包含的 HTML**，按他的要求改其中的正文内容，只返回 JSON：{"html":"改好的完整 HTML"}。\n`
+  async reviseResume({ html, instruction, spec = "", history = [] }) {
+    return this.#revise({
+      system: `你在帮候选人改他的简历（一份自包含的 HTML）。`
+        + `这是个对话框：他可能让你改简历，也可能只是问你意见——先判断这次是哪一种。`
+        + `只返回 JSON：{"action":"revise|answer","reply":"…","html":"…"}。\n`
+        + `- revise：他明确要求你改（压缩、补全、删掉、换措辞…）→ html 给改好的**完整 HTML**，`
+        + `reply 用一句话说明你改了什么，口语，不要分点。\n`
+        + `- answer：他在问意见、求评价、问怎么改更好、让你看某段行不行 → reply 写你的回答，`
+        + `html 留空，**一个字都不要改动简历**。\n`
+        + `- 分不清就判 answer：改简历是有副作用的操作（会覆盖内容），宁可不改，等他明确要求。`,
       // 规范由调用方读好传进来（简历设计规范.md，已剔掉投递策略那类无关章节）
-      + (spec ? `这份简历要遵守的《简历设计规范》：\n${spec}\n\n` : "")
-      + `要求：\n`
-      + `- <style> 里的样式、@page 打印规则、整体结构（层级与区块顺序）**一律不动**。\n`
-      + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
-      + `- 不新增原文里没有的经历、数字或技术栈——原文就是事实来源。\n`
-      + `- 返回完整 HTML 全文，不是 diff、不是片段，开头不要加解释、不要包 markdown 代码块。`,
-      `当前简历 HTML：\n${html}\n\n修改要求：${instruction}`,
-      CREATIVE_TEMPERATURE,
-    );
-    const revised = String(result.html ?? "").trim();
-    if (!revised) throw new Error("模型没有返回改写后的简历");
-    return revised;
+      spec: spec ? `这份简历要遵守的《简历设计规范》：\n${spec}` : "",
+      context: `当前的简历 HTML：\n${html}`,
+      history,
+      instruction,
+      rules: `改写时的要求：\n`
+        + `- <style> 里的样式、@page 打印规则、整体结构（层级与区块顺序）**一律不动**。\n`
+        + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
+        + `- 不新增原文里没有的经历、数字或技术栈——原文就是事实来源。\n`
+        + `- html 要给完整全文，不是 diff、不是片段，开头不要加解释、不要包 markdown 代码块。`,
+      field: "html",
+      emptyError: "模型说要改，但没返回改写后的简历",
+    });
+  }
+
+  /**
+   * 判断这句是「让你改」还是「问意见」。
+   * 兜底方向很关键：**拿不准就当 answer**——改稿是有副作用的操作（会覆盖内容、会提示刷新预览），
+   * 宁可不改，等他明确要求。没给 action 字段时按有没有稿子推断，兼容模型漏字段的情况。
+   */
+  #decideAction(rawAction, revised) {
+    const explicit = String(rawAction ?? "").trim().toLowerCase();
+    if (explicit === "revise") return "revise";
+    if (explicit === "answer") return "answer";
+    return revised ? "revise" : "answer";
+  }
+
+  /**
+   * 对话框里的那些话，原样变成消息（顺序和角色都对得上）。
+   * 空消息和报错气泡要滤掉，别把「这次没改成：连不上服务」当成模型说过的话喂回去。
+   */
+  #turns(history = []) {
+    return (Array.isArray(history) ? history : [])
+      .filter((turn) => turn && !turn.error && String(turn.text ?? "").trim())
+      .map((turn) => ({ role: turn.role === "user" ? "user" : "assistant", content: String(turn.text).trim() }));
+  }
+
+  /**
+   * 「让 AI 改」对话框的公共逻辑：把对话历史拼成**真正的多轮 messages**，
+   * 让模型自己判断这句是「让我改」还是「问意见」。简历和自我介绍共用这一套，
+   * 免得两边的判断规则各写一遍、行为长歪。
+   *
+   * 结构跟人聊天一样：
+   *   system —— 规则 + 规范 + 当前文稿
+   *   user/assistant 交替 —— 之前的每一轮，内容就是对话框里看到的那些话
+   *   最后一条 user —— 他这次说的
+   * 只有这样，「那教育经历那段呢」这类追问才接得上；每句都单发一条消息会失忆。
+   */
+  async #revise({ system, spec, context, history, instruction, rules, field, emptyError }) {
+    const messages = [
+      { role: "system", content: [system, spec, rules, context].filter(Boolean).join("\n\n") },
+      ...this.#turns(history),
+      { role: "user", content: instruction },
+    ];
+    const result = await this.#chat(messages, CREATIVE_TEMPERATURE);
+    const revised = String(result[field] ?? "").trim();
+    const action = this.#decideAction(result.action, revised);
+    if (action === "revise" && !revised) throw new Error(emptyError);
+    return { action, reply: String(result.reply ?? "").trim(), [field]: revised };
   }
 
   /**

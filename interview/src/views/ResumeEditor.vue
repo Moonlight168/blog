@@ -298,28 +298,38 @@ async function doExport(nameOverride?: string) {
 
 // 与面试台、自我介绍一致：Enter 发送，Shift+Enter 换行
 const instruction = ref("");
-const chatLog = ref<{ role: "user" | "assistant"; text: string }[]>([]);
+const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean }[]>([]);
+const chatBox = ref<HTMLElement | null>(null);
 
 async function revise() {
   const ask = instruction.value.trim();
   if (!ask || revising.value) return;
+  // 先把历史快照出来再推入这句——否则历史里会多一条和这次重复的「他」说的话
+  const history = chatLog.value.slice();
   chatLog.value.push({ role: "user", text: ask });
   instruction.value = "";
   revising.value = true;
   try {
-    const data = await api<{ html: string }>("/api/resume-doc/revise", {
+    const data = await api<{ action: "revise" | "answer"; reply: string; html?: string }>("/api/resume-doc/revise", {
       method: "POST",
-      body: JSON.stringify({ html: html.value, instruction: ask }),
+      body: JSON.stringify({ html: html.value, instruction: ask, history }),
     });
-    html.value = data.html;
-    pushVersion(data.html);
-    stalePreview.value = true;
-    editing.value = false;
-    chatLog.value.push({ role: "assistant", text: "改好了，点「刷新预览」看效果（约 2~3 秒）。不满意就点「回撤」。" });
+    // action=answer 表示他只是在问意见：简历一个字都不动，也不提示刷新预览
+    if (data.action === "revise" && data.html) {
+      html.value = data.html;
+      pushVersion(data.html);
+      stalePreview.value = true;
+      editing.value = false;
+    }
+    chatLog.value.push({
+      role: "assistant",
+      text: data.reply || (data.action === "revise" ? "改好了，点「刷新预览」看效果。" : "（模型这次没给出内容）"),
+    });
   } catch (error) {
-    chatLog.value.push({ role: "assistant", text: `这次没改成：${(error as Error).message}` });
+    chatLog.value.push({ role: "assistant", text: `这次没成功：${(error as Error).message}`, error: true });
   } finally {
     revising.value = false;
+    void Promise.resolve().then(() => chatBox.value?.scrollTo({ top: chatBox.value.scrollHeight, behavior: "smooth" }));
   }
 }
 
@@ -407,15 +417,16 @@ onBeforeUnmount(() => {
         <template #2>
         <aside class="re-pane re-chat-pane">
           <div class="re-pane-head">让 AI 改</div>
-          <div class="re-chat">
+          <div ref="chatBox" class="re-chat">
             <div v-if="!chatLog.length" class="si-chat-hint">
-              <p class="si-chat-hint-title">用一句话说你想怎么改</p>
+              <p class="si-chat-hint-title">让它改，或者直接问它意见</p>
               <ul class="si-chat-hint-list">
                 <li>实习那段压缩到两行</li>
                 <li>把 FlowMind 的技术栈补全</li>
-                <li>去掉最后一门课程</li>
+                <li>这段实习会不会写太长了？</li>
+                <li>几段经历里你觉得该突出哪个？</li>
               </ul>
-              <p class="si-chat-hint-foot">改完点「刷新预览」看效果（约 2~3 秒）。</p>
+              <p class="si-chat-hint-foot">要它改的，改完点「刷新预览」看效果；只是问它的话，它不会动你的简历。</p>
             </div>
             <div v-for="(entry, index) in chatLog" :key="index" class="si-chat-item" :class="entry.role">
               <span class="si-chat-who">{{ entry.role === "user" ? "我" : "AI" }}</span>

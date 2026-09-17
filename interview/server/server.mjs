@@ -255,7 +255,8 @@ async function api(request, response, url) {
     const instruction = String(input.instruction ?? "").trim();
     if (!instruction) return json(response, 400, { error: "请说明想怎么改" });
     try {
-      return json(response, 200, { markdown: await agent.reviseSelfIntro({ markdown, instruction, spec: editingSpecs().intro }) });
+      // history 是对话框里已有的那些话：带上它，模型才把「那教育经历那段呢」当成一句追问
+      return json(response, 200, await agent.reviseSelfIntro({ markdown, instruction, spec: editingSpecs().intro, history: input.history }));
     } catch (error) {
       return json(response, 502, { error: error.message });
     }
@@ -311,15 +312,22 @@ async function api(request, response, url) {
     }
     if (jdMode && !jdPath) return json(response, 400, { error: "岗位定制面试需要先选择目标岗位" });
 
-    // 岗位定制模式不限定章节（由模型按题目内容决定归档位置），所以跳过章节校验
+    // 岗位定制、「全部」章节（chapterPath 留空）都不指定具体章节，由模型按题目内容决定归档位置。
+    // 但「全部」仍然锁着分类，分类必须真实存在——否则会凭空造出一个新分类出来。
     if (!jdMode && !hrMode) {
-      const validTopic = questionIndex.topics().some((series) => series.name === input.series && series.chapters.some((chapter) => chapter.path === input.chapterPath));
-      if (!validTopic) return json(response, 400, { error: "请选择有效的知识分类章节" });
+      if (!questionIndex.topics().some((series) => series.name === input.series)) {
+        return json(response, 400, { error: "请选择有效的知识分类" });
+      }
+      const wanted = String(input.chapterPath ?? "").trim();
+      const validChapter = !wanted
+        || questionIndex.topics().some((series) => series.name === input.series && series.chapters.some((chapter) => chapter.path === wanted));
+      if (!validChapter) return json(response, 400, { error: "请选择有效的知识分类章节" });
     }
     const session = {
       id: randomUUID(), resumePath: input.resumePath,
       series: jdMode ? "岗位定制" : hrMode ? HR_SERIES : input.series,
-      chapterPath: jdMode ? "" : hrMode ? HR_CHAPTER : input.chapterPath,
+      // 留空 = 选的是「全部」：本分类下由模型挑章节。岗位定制同样是空，只是它的分类也归模型定
+      chapterPath: jdMode ? "" : hrMode ? HR_CHAPTER : String(input.chapterPath ?? "").trim(),
       mode,
       durationMinutes: Math.min(180, Math.max(5, Number(input.durationMinutes) || 30)), status: "active",
       startedAt: new Date().toISOString(), endedAt: null, currentQuestion: null, answerFragments: [], completedCount: 0,
@@ -447,7 +455,8 @@ async function api(request, response, url) {
     const instruction = String(input.instruction ?? "").trim();
     if (!instruction) return json(response, 400, { error: "请说明想怎么改" });
     try {
-      return json(response, 200, { html: await agent.reviseResume({ html: String(input.html ?? ""), instruction, spec: editingSpecs().resume }) });
+      // history 是对话框里已有的那些话：带上它，模型才把「那教育经历那段呢」当成一句追问
+      return json(response, 200, await agent.reviseResume({ html: String(input.html ?? ""), instruction, spec: editingSpecs().resume, history: input.history }));
     } catch (error) {
       return json(response, 502, { error: error.message });
     }

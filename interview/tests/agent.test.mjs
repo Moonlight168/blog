@@ -269,6 +269,129 @@ test("改自我介绍时同样带上《自我介绍规范》", async () => {
   });
 });
 
+test("选「全部」：不受已有章节限制，按岗位普遍要求的技能出题，库里没有的可新建 topic", async () => {
+  await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句", topic: "langchain" }, async (agent, lastBody) => {
+    const question = await agent.generateQuestion({
+      session: { mode: "interview", series: "Java", chapterPath: "", resumeExcerpt: "简历", skillSnapshot: "" },
+    });
+    assert.equal(question.topic, "langchain", "模型自报的新 topic 要传出来，归档要靠它");
+    const system = lastBody().messages[0].content;
+    assert.match(system, /岗位上普遍要求的技能/, "选题依据是市场要求，不是库里现有什么");
+    assert.match(system, /不受已有章节限制/, "已有章节是归档去处，不是选题范围");
+    assert.match(system, /新建一个 topic/, "库里没有的技能要能新建收下");
+    assert.match(system, /别为了新而新/, "要有反向约束：拿不准算不算岗位必备就别问");
+    assert.match(system, /本分类已有章节/, "仍要把已有章节列出来给它当归档去处");
+    assert.doesNotMatch(system, /岗位定制/, "别串到岗位定制那套措辞上去");
+  });
+});
+
+test("选「全部」给的是本分类的章节，不是全库的分类（否则题会归到别的分类去）", async () => {
+  await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句", topic: "集合" }, async (agent, lastBody) => {
+    await agent.generateQuestion({
+      session: { mode: "interview", series: "Java", chapterPath: "", resumeExcerpt: "简历", skillSnapshot: "" },
+    });
+    const system = lastBody().messages[0].content;
+    // 只列章节名、不带「分类：」前缀——带了会被模型照抄进 topic（实测返回过「Agent 开发：langgraph」）
+    assert.match(system, /本分类已有章节（能归进去就归进去）：集合、多线程/);
+    assert.doesNotMatch(system, /spring/, "别的分类的章节不该出现——分类是锁死的");
+  });
+});
+
+test("指定了具体章节时，提示词按老样子围绕那一章，不出现「不受已有章节限制」", async () => {
+  await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句" }, async (agent, lastBody) => {
+    await agent.generateQuestion({
+      session: { mode: "interview", series: "Java", chapterPath: "Java/集合.md", resumeExcerpt: "简历", skillSnapshot: "" },
+    });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /围绕指定章节/, "有指定章节就走原路");
+    assert.doesNotMatch(system, /不受已有章节限制/);
+  });
+});
+
+test("改简历：模型判为「问意见」时不给改动，只给回复", async () => {
+  await withStubbedChat({ action: "answer", reply: "这段确实偏长，建议压到两行。" }, async (agent) => {
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "这段会不会太长了？" });
+    assert.equal(result.action, "answer");
+    assert.equal(result.html, "", "问意见时不该返回改动");
+    assert.match(result.reply, /偏长/);
+  });
+});
+
+test("改简历：模型判为「让你改」时返回完整正文", async () => {
+  await withStubbedChat({ action: "revise", reply: "压缩了实习那段。", html: "<html>改后</html>" }, async (agent) => {
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "实习那段压缩到两行" });
+    assert.equal(result.action, "revise");
+    assert.equal(result.html, "<html>改后</html>");
+  });
+});
+
+test("改简历：模型没表态也没给稿子时按「问意见」处理，绝不擅自改动", async () => {
+  await withStubbedChat({ reply: "……" }, async (agent) => {
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "嗯" });
+    assert.equal(result.action, "answer", "拿不准就该不动手——改稿是有副作用的");
+  });
+});
+
+test("改简历：模型漏了 action 但给了稿子，仍按改稿处理（兼容漏字段）", async () => {
+  await withStubbedChat({ html: "<html>改后</html>" }, async (agent) => {
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" });
+    assert.equal(result.action, "revise");
+  });
+});
+
+test("改简历：说了要改却没给稿子，要报错而不是假装改过", async () => {
+  await withStubbedChat({ action: "revise", reply: "好了" }, async (agent) => {
+    await assert.rejects(
+      () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
+      /没返回/,
+    );
+  });
+});
+
+test("自我介绍走同一套判断（两边行为不能长歪）", async () => {
+  await withStubbedChat({ action: "answer", reply: "开场有点长。" }, async (agent) => {
+    const result = await agent.reviseSelfIntro({
+      markdown: "> 开场 → 实习\n\n正文", instruction: "开场是不是太长了？",
+    });
+    assert.equal(result.action, "answer");
+    assert.equal(result.markdown, "", "问意见时不该返回改动");
+    assert.match(result.reply, /开场/);
+    const revised = await (async () => {
+      const previous = globalThis.fetch;
+      globalThis.fetch = async () => new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"action":"revise","reply":"好了","markdown":"> 开场 → 实习\\n\\n改后"}' } }] }),
+        { status: 200 });
+      try { return await agent.reviseSelfIntro({ markdown: "旧", instruction: "压短点" }); }
+      finally { globalThis.fetch = previous; }
+    })();
+    assert.equal(revised.action, "revise");
+    assert.equal(revised.markdown, "> 开场 → 实习\n\n改后");
+  });
+});
+
+test("对话框历史还原成真正的多轮消息，报错气泡不喂回模型", async () => {
+  await withStubbedChat({ action: "answer", reply: "……" }, async (agent, lastBody) => {
+    await agent.reviseResume({
+      html: "<html>原稿</html>",
+      instruction: "那教育经历那段呢？",
+      history: [
+        { role: "user", text: "实习那段会不会太长？" },
+        { role: "assistant", text: "确实偏长，建议压到两行。" },
+        { role: "assistant", text: "这次没成功：连不上对话模型服务", error: true },
+      ],
+    });
+    const messages = lastBody().messages;
+    assert.equal(messages[0].role, "system");
+    assert.deepEqual(
+      messages.slice(1).map((m) => m.role),
+      ["user", "assistant", "user"],
+      "历史要按 user/assistant 交替还原，最后一条是他这次说的",
+    );
+    assert.equal(messages.at(-1).content, "那教育经历那段呢？");
+    assert.doesNotMatch(JSON.stringify(messages), /连不上对话模型服务/, "报错气泡不该当成模型说过的话");
+  });
+});
+
 test("出题不再注入「章节已有题目样例」（该功能已移除）", async () => {
   await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句" }, async (agent, lastBody) => {
     await agent.generateQuestion({

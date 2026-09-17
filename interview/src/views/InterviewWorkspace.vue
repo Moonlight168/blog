@@ -45,9 +45,35 @@ const autoTarget = computed(() => jdMode.value || hrMode.value);
 const HR_TARGET = { series: "基础知识", chapterPath: "基础知识/协作交流.md" };
 // 岗位定制是「模型来定」，无从显示，留空 + 提示；人事面试是确定的，显示真值
 const seriesShown = computed(() => (hrMode.value ? HR_TARGET.series : jdMode.value ? null : series.value));
-const chapterShown = computed(() => (hrMode.value ? HR_TARGET.chapterPath : jdMode.value ? null : chapterPath.value));
+/**
+ * 「全部」在下拉里的哨兵值。不能直接用空串：naive-ui 把空值当成「没选」，
+ * 只会显示 placeholder（而且这里 placeholder 也是空的），结果就是下拉框一片空白。
+ */
+const ALL_CHAPTERS = "__all__";
+const chapterShown = computed(() => (hrMode.value ? HR_TARGET.chapterPath : jdMode.value ? null : (chapterPath.value || ALL_CHAPTERS)));
 /** 章节下拉要按「显示出来的分类」取，否则人事面试下列表里根本没有 协作交流 这一项 */
 const shownChapters = computed<Chapter[]>(() => topics.value.find((item) => item.name === seriesShown.value)?.chapters ?? []);
+/**
+ * 章节下拉的第一项是「全部」：不指定具体章节，让模型在本分类里挑最贴切的一章出题，
+ * 归档也按它自报的章节走。留空值就是它——后端把空章节当成「开放章节」处理。
+ */
+const chapterOptions = computed(() => [
+  { label: "全部", value: ALL_CHAPTERS },
+  ...shownChapters.value.map((chapter) => ({ label: chapter.name, value: chapter.path })),
+]);
+
+/**
+ * 会话头标题。章节为空时不能再按 `${series} · ${chapter}` 拼——那会留下一个孤零零的「·」
+ * （岗位定制一直有这毛病）。空章节分两种，读法不同：岗位定制是「分类即模式」，
+ * 而选「全部」是「这个分类下哪一章都可能」，所以补个「全部」说清楚。
+ */
+const sessionTitle = computed(() => {
+  const current = session.value;
+  if (!current) return "等待开始";
+  const chapter = current.chapterPath ? (current.chapterPath.split("/").at(-1)?.replace(".md", "") ?? "") : "";
+  if (chapter) return `${current.series} · ${chapter}`;
+  return current.mode === "jd" ? current.series : `${current.series} · 全部`;
+});
 // 简历按一级子目录（每个人一个目录）分组，先选目录再看该目录下的简历
 const resumeGroups = computed(() => [...new Set(resumes.value.map((item) => item.dir))]);
 const visibleResumes = computed(() => (resumeGroup.value ? resumes.value.filter((item) => item.dir === resumeGroup.value) : resumes.value));
@@ -119,7 +145,8 @@ async function loadBootstrap() {
     if (prefs.mode) mode.value = prefs.mode;
     // 分类/章节始终恢复到上次的值（岗位定制模式下只是不显示，切回来就能接着用）
     series.value = topics.value.some((item) => item.name === prefs.series) ? (prefs.series ?? "") : (topics.value[0]?.name ?? "");
-    chapterPath.value = chapters.value.some((item) => item.path === prefs.chapterPath) ? (prefs.chapterPath ?? "") : (chapters.value[0]?.path ?? "");
+    // 恢复上次选的章节；空串是合法的「全部」，所以恢复不到具体章节时就落回它
+    chapterPath.value = chapters.value.some((item) => item.path === prefs.chapterPath) ? (prefs.chapterPath ?? "") : "";
     if (prefs.durationMinutes) durationMinutes.value = prefs.durationMinutes;
     if (prefs.autoSpeak !== undefined) autoSpeak.value = prefs.autoSpeak;
     if (prefs.speakRate) speakRate.value = prefs.speakRate;
@@ -621,7 +648,8 @@ async function syncExpiredSession() {
 async function start() {
   if (!resumePath.value) return toast.warning("请先选择简历");
   // 岗位定制与人事面试都不用手选章节，这两项空着也能开
-  if (!autoTarget.value && (!series.value || !chapterPath.value)) return toast.warning("请先选好面试章节");
+  // 章节可以留空（= 全部），这时不需要拦
+  if (!autoTarget.value && !series.value) return toast.warning("请先选好知识分类");
   if (jdMode.value && !jdPath.value) return toast.warning("岗位定制需要先选目标岗位");
   sending.value = true;
   try {
@@ -706,9 +734,11 @@ function newInterview() { session.value = null; messages.value = []; localStorag
 //（见下面模板的 :value），这样来回切换能保留各自上次的选择。
 function pickSeries(value: string) {
   series.value = value;
-  chapterPath.value = topics.value.find((item) => item.name === value)?.chapters[0]?.path ?? "";
+  // 换分类后默认回到「全部」：新分类下从零挑一章没有依据，全交给模型更省事
+  chapterPath.value = "";
 }
-function pickChapter(value: string) { chapterPath.value = value; }
+// 哨兵值落到内部状态时还原成空串——后端把空章节当作「开放章节」
+function pickChapter(value: string) { chapterPath.value = value === ALL_CHAPTERS ? "" : value; }
 
 // 任何一项改动都自动记住，下次打开直接恢复
 watch([resumeGroup, resumePath, series, chapterPath, mode, durationMinutes, jdPath, autoSpeak, speakRate, voiceEngine], savePrefs);
@@ -752,7 +782,7 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
             </div>
             <div>
               <label>章节（面试主题）</label>
-              <n-select :value="chapterShown" :disabled="locked || autoTarget" :placeholder="jdMode ? '岗位定制不需要选' : ''" filterable :options="shownChapters.map(c => ({ label: c.name, value: c.path }))" @update:value="pickChapter" />
+              <n-select :value="chapterShown" :disabled="locked || autoTarget" :placeholder="jdMode ? '岗位定制不需要选' : ''" filterable :options="chapterOptions" @update:value="pickChapter" />
             </div>
           </div>
           <div class="two-cols">
@@ -779,7 +809,7 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
 
     <section class="chat-panel">
       <div class="chat-head">
-        <div><div class="eyebrow">LIVE SESSION</div><h2>{{ session ? `${session.series} · ${session.chapterPath.split('/').at(-1)?.replace('.md','')}` : '等待开始' }}</h2></div>
+        <div><div class="eyebrow">LIVE SESSION</div><h2>{{ sessionTitle }}</h2></div>
         <div class="session-meta">
           <n-button size="tiny" quaternary :loading="introLoading" @click="openIntro()">自我介绍</n-button>
           <n-tag v-if="session" :type="statusType">{{ statusText }}</n-tag><span v-if="session && !finished" class="timer" :class="{ paused }">{{ timerText }}</span>

@@ -67,26 +67,44 @@ function chaptersBySeries(knowledgeRoot) {
 }
 
 /**
- * 岗位定制模式下没有指定章节，由模型给出的 topic / series 决定归档位置：
- * 全库已有同名章节就归过去；名字对不上但该分类下有章节能覆盖，就归到那一章；
- * 都不是才在它选的分类下新建。
+ * 没有指定章节时，由题目自报的 topic 决定归档位置：
+ * 已有同名章节就归过去；名字对不上但该分类下有章节能覆盖，就归到那一章；
+ * 都不是才新建。两种模式共用这一段，差别只在分类能不能自己挑：
+ *
+ * - 岗位定制（`seriesScope` 为空）：分类也由模型定，所以全库找同名章节
+ * - 「全部」章节（`seriesScope` = 会话选的分类）：分类锁死，只在该分类下找和建，
+ *   否则选着 Java 却在框架里落了一个文件，人会以为归档错了
  */
-async function resolveJdTarget({ question, knowledgeRoot, agent }) {
-  const topic = String(question.topic ?? "").trim();
-  const series = String(question.series ?? "").trim();
-  if (!topic) throw new Error("岗位定制模式下缺少题目归属的章节");
+/**
+ * 模型偶尔会把分类名一起写进 topic（实测返回过「Agent 开发：langgraph」），
+ * 不剥掉就会新建出一个带前缀的怪章节文件。只剥开头的「分类：」这一种，别的一概不动。
+ */
+export function stripSeriesPrefix(topic, series) {
+  if (!series) return topic;
+  for (const separator of ["：", ":"]) {
+    const prefix = series + separator;
+    if (topic.startsWith(prefix)) return topic.slice(prefix.length).trim() || topic;
+  }
+  return topic;
+}
+
+async function resolveOpenTarget({ question, knowledgeRoot, agent, seriesScope = "" }) {
+  const series = seriesScope || String(question.series ?? "").trim();
+  const topic = stripSeriesPrefix(String(question.topic ?? "").trim(), series);
+  if (!topic) throw new Error("缺少题目归属的章节");
   if (/[\\/]/.test(topic)) throw new Error(`章节名不能包含路径分隔符：${topic}`);
 
   const bySeries = chaptersBySeries(knowledgeRoot);
   const wanted = topic.toLowerCase();
-  for (const chapters of bySeries.values()) {
+  const scoped = seriesScope ? (bySeries.get(seriesScope) ?? []) : null;
+  for (const chapters of scoped ? [scoped] : bySeries.values()) {
     const exact = chapters.find((chapter) => chapter.name.toLowerCase() === wanted);
     if (exact) return exact.path;
   }
 
   // 模型会把跨两章的问题合并成一个新名字（实测造出过「Java 集合与并发」，而「集合」「多线程」都在）。
   // 新建之前先让它在已有章节里挑一次，避免知识库被近义章节越切越碎。
-  const candidates = bySeries.get(series) ?? [];
+  const candidates = scoped ?? (bySeries.get(series) ?? []);
   if (candidates.length) {
     const picked = await agent.matchChapter({ topic, series, chapters: candidates.map((chapter) => chapter.name) });
     const hit = candidates.find((chapter) => chapter.name === picked);
@@ -172,9 +190,15 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
     const exact = candidates.find((candidate) => candidate.normalized_title === normalizeTitle(question.title));
     const decision = exact ? { kind: "existing", questionId: exact.id } : await agent.judgeDuplicate({ title: question.title, candidates });
     const existing = decision.kind === "existing" ? questionIndex.getById(decision.questionId) : null;
-    // 岗位定制模式没有指定章节，改由题目自带的 topic/series 决定归档位置
+    // 会话指定了章节就归到那一章；没指定（岗位定制、「全部」）则由题目自带的 topic 定位：
+    // 岗位定制的分类也由模型定，「全部」则锁死在会话选的分类里
     const sourceRelative = existing?.source_path
-      ?? (session.mode === "jd" ? await resolveJdTarget({ question, knowledgeRoot, agent }) : session.chapterPath);
+      ?? (session.chapterPath
+        ? session.chapterPath
+        : await resolveOpenTarget({
+            question, knowledgeRoot, agent,
+            seriesScope: session.mode === "jd" ? "" : session.series,
+          }));
     const sourceFile = path.join(knowledgeRoot, sourceRelative);
     ensureInside(knowledgeRoot, sourceFile);
     const series = sourceRelative.split("/")[0];

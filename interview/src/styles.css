@@ -157,7 +157,13 @@ main { height: calc(100vh - 72px); }
 .re-lock:hover { border-color: #c8dcd4; background: #f3f8f5; color: #173f36; }
 .re-lock.locked { border-color: #173f36; background: #173f36; color: #f6d679; }
 .re-lock-icon { width: 13px; height: 13px; fill: currentColor; }
-.si-chat-item { margin-bottom: 10px; display: flex; gap: 8px; font-size: 12px; line-height: 1.7; }.si-chat-item.user { color: #173f36; }.si-chat-item.assistant { color: #56615d; }
+.si-chat-item { margin-bottom: 10px; display: flex; gap: 8px; font-size: 12px; line-height: 1.7; }
+/* 聊天惯例：自己在右、对方在左。row-reverse 让第一个子元素（徽标）落到行尾，
+   同时整行贴右；文字本身仍左对齐——长句子右对齐反而难读。
+   fit-content + max-width 让长消息也离左边留出余量，否则一条长消息会横向铺满，
+   看起来和 AI 那侧只差徽标位置，分不出"这是我说的话"。 */
+.si-chat-item.user { flex-direction: row-reverse; width: fit-content; max-width: 88%; margin-left: auto; color: #173f36; }
+.si-chat-item.assistant { color: #56615d; }
 .si-chat-who { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; background: #e5e8df; color: #53605b; font-size: 10px; font-weight: 800; }.si-chat-item.assistant .si-chat-who { background: #173f36; color: #f6d679; }
 .si-chat-box { padding: 14px 14px 12px; border-top: 1px solid #f0ede4; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }.si-chat-box > .n-input { width: 100%; }
 .si-path { margin: 10px 0 0; font-size: 11px; word-break: break-all; }

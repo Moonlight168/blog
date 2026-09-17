@@ -116,37 +116,43 @@ async function save() {
 
 // 与面试台一致：Enter 发送指令，Shift+Enter 换行
 const instruction = ref("");
-const chatLog = ref<{ role: "user" | "assistant"; text: string }[]>([]);
+const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean }[]>([]);
 const chatBox = ref<HTMLElement | null>(null);
 
 async function revise() {
   const ask = instruction.value.trim();
   if (!ask || revising.value) return;
+  // 先把历史快照出来再推入这句——否则历史里会多一条和这次重复的「他」说的话
+  const history = chatLog.value.slice();
   chatLog.value.push({ role: "user", text: ask });
   instruction.value = "";
   revising.value = true;
   try {
     const before = text.value;
-    const data = await api<{ markdown: string }>("/api/self-intro/revise", {
+    const data = await api<{ action: "revise" | "answer"; reply: string; markdown?: string }>("/api/self-intro/revise", {
       method: "POST",
-      body: JSON.stringify({ markdown: before, instruction: ask }),
+      body: JSON.stringify({ markdown: before, instruction: ask, history }),
     });
-    text.value = data.markdown;
-    pushVersion(data.markdown);
-    // 改完切回预览：内容变了，让人直接看到结果，而不是停在编辑框
-    editing.value = false;
+    // action=answer 表示他只是在问意见：稿子一个字都不动
+    const revised = data.action === "revise" && data.markdown ? data.markdown : "";
+    if (revised) {
+      text.value = revised;
+      pushVersion(revised);
+      // 改完切回预览：内容变了，让人直接看到结果，而不是停在编辑框
+      editing.value = false;
+    }
     // 实测模型会把开头的链路锚点当冗余删掉（`> 开场 → 实习 → …` 那行），
     // 提示词已经要求保留，这里再兜一道——丢了要说出来，别让人自己发现
     const anchor = (value: string) => value.split("\n").find((line) => line.trim())?.trim() ?? "";
-    const lostAnchor = anchor(before).startsWith(">") && !anchor(data.markdown).startsWith(">");
+    const lostAnchor = Boolean(revised) && anchor(before).startsWith(">") && !anchor(revised).startsWith(">");
     chatLog.value.push({
       role: "assistant",
       text: lostAnchor
         ? "改好了，但这次把开头的链路锚点弄丢了——建议点「回撤」退回，或直接让它「把第一行的链路锚点补回去」。"
-        : "已按你的要求改好，看左边预览。不满意就点「回撤」。",
+        : data.reply || (revised ? "已按你的要求改好，看左边预览。" : "（模型这次没给出内容）"),
     });
   } catch (error) {
-    chatLog.value.push({ role: "assistant", text: `这次没改成：${(error as Error).message}` });
+    chatLog.value.push({ role: "assistant", text: `这次没成功：${(error as Error).message}`, error: true });
   } finally {
     revising.value = false;
     void Promise.resolve().then(() => chatBox.value?.scrollTo({ top: chatBox.value.scrollHeight }));
@@ -253,10 +259,11 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
         </section>
 
         <aside class="si-pane si-chat-pane">
-          <div class="si-pane-head">让模型改</div>
+          <div class="si-pane-head">让 AI 改</div>
           <div ref="chatBox" class="si-chat">
             <p v-if="!chatLog.length" class="si-chat-hint">
-              内容只通过模型改：用一句话说怎么改，比如「FlowMind 那段再具体一点」「开场压缩到两句」「实习那段加上 SQL 脚本维护」。
+              让它改，或者直接问它意见。比如「FlowMind 那段再具体一点」「开场压缩到两句」是要它改；
+              「开场是不是太长了？」「这段和实习那段是不是重复了？」只是问它——问的时候它不会动你的稿子。
               改完看左边预览，不满意点「回撤」。
             </p>
             <div v-for="(entry, index) in chatLog" :key="index" class="si-chat-item" :class="entry.role">

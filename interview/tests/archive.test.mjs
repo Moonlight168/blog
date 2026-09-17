@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createArchive, refileQuestion } from "../server/archive.mjs";
+import { createArchive, refileQuestion, stripSeriesPrefix } from "../server/archive.mjs";
 import { openDatabase } from "../server/db.mjs";
 
 const SESSION = { id: "session-1", completedCount: 0, chapterPath: "Java/多线程.md" };
@@ -48,6 +48,48 @@ function makeEnv({ candidates = [], existing = null, reformat = null, matchChapt
 
 const COMPLIANT = "**锚点**：`状态定边界`\n\n1. **边界清晰**：用状态约束流程";
 const JD_SESSION = { id: "session-jd", completedCount: 0, mode: "jd", chapterPath: "" };
+/** 选了「全部」章节：分类由会话定，章节由模型自报 */
+const ALL_SESSION = { id: "session-all", completedCount: 0, mode: "interview", series: "Java", chapterPath: "" };
+
+test("剥掉模型误带上的分类前缀（实测返回过「Agent 开发：langgraph」）", () => {
+  assert.equal(stripSeriesPrefix("Java：多线程", "Java"), "多线程");
+  assert.equal(stripSeriesPrefix("Java:多线程", "Java"), "多线程");
+  assert.equal(stripSeriesPrefix("多线程", "Java"), "多线程", "没前缀就原样");
+  assert.equal(stripSeriesPrefix("Java 8 新特性", "Java"), "Java 8 新特性", "别把正文里的 Java 也当成前缀");
+  assert.equal(stripSeriesPrefix("Java：", "Java"), "Java：", "剥完是空就退回原值，别把章节名清没了");
+});
+
+test("选「全部」：分类锁死，别的分类有同名章节也不跑过去", async () => {
+  const env = makeEnv();
+  fs.mkdirSync(path.join(env.knowledgeRoot, "框架"), { recursive: true });
+  fs.writeFileSync(path.join(env.knowledgeRoot, "框架", "spring.md"), "# spring\n", "utf8");
+
+  const result = await env.archive({
+    session: ALL_SESSION,
+    question: { title: "spring 和 springboot 什么关系？", standardAnswer: COMPLIANT, topic: "spring" },
+    rawAnswer: "回答", evaluation: { score: 80, comment: "清楚" },
+  });
+
+  assert.equal(result?.notice, undefined);
+  assert.ok(fs.existsSync(path.join(env.knowledgeRoot, "Java", "spring.md")), "应在会话选的 Java 下新建");
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(env.knowledgeRoot, "框架", "spring.md"), "utf8"),
+    /spring 和 springboot 什么关系/,
+    "不该跑到别的分类去",
+  );
+});
+
+test("选「全部」：模型自报的章节命中已有文件时归过去（带分类前缀也认）", async () => {
+  const env = makeEnv();
+  const result = await env.archive({
+    session: ALL_SESSION,
+    question: { title: "线程池怎么设参数？", standardAnswer: COMPLIANT, topic: "Java：多线程" },
+    rawAnswer: "回答", evaluation: { score: 80, comment: "清楚" },
+  });
+
+  assert.equal(result?.notice, undefined);
+  assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /## 线程池怎么设参数？/, "剥掉前缀后应归到已有的 多线程.md");
+});
 
 test("岗位定制：已有同名章节时归到那个文件", async () => {
   const env = makeEnv();
