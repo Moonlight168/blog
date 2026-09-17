@@ -241,7 +241,14 @@ async function ensureDeps({ appDir }) {
 
   for (const target of targets) {
     log(`      安装${target.label}依赖${missing.length ? "" : "（依赖清单有更新）"}...`);
-    await run("npm", ["install", "--no-audit", "--no-fund"], target.dir);
+    try {
+      await run("npm", ["install", "--no-audit", "--no-fund"], target.dir);
+    } catch {
+      // 国内直连 registry.npmjs.org 常常慢到超时。换国内镜像再试一次，
+      // 比让人对着 ETIMEDOUT 干等强——这一步是她那边唯一还需要联网的地方。
+      log(`      直连 npm 源失败，换国内镜像重试...`);
+      await run("npm", ["install", "--no-audit", "--no-fund", "--registry=https://registry.npmmirror.com"], target.dir);
+    }
   }
   writeState({ depsFingerprint: fingerprint });
   return "安装完成";
