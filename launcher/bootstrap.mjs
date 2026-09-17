@@ -237,6 +237,80 @@ function checkNode() {
  */
 const SYNC_PATHS = ["interview", "launcher"];
 
+/** HTTPS 远端地址 → 对应的 SSH 地址（`git@github.com:owner/repo.git`） */
+function sshUrlOf(httpsUrl) {
+  const match = /^https?:\/\/([^/]+)\/(.+?)(\.git)?$/i.exec(String(httpsUrl ?? "").trim());
+  return match ? `git@${match[1]}:${match[2]}${match[3] ?? ""}` : "";
+}
+
+/**
+ * SSH 远端地址 → 对应的 HTTPS 地址。**要双向转换**：远端的写法因人而异，
+ * 实测有的机器 origin 本来就是 `git@github.com:…` ✗ 只做单向的话，
+ * "SSH 失败退回 HTTPS"这条退路就等于不存在。
+ */
+function httpsUrlOf(sshUrl) {
+  const match = /^git@([^:]+):(.+)$/.exec(String(sshUrl ?? "").trim());
+  return match ? `https://${match[1]}/${match[2]}` : "";
+}
+
+/** 像 capture，但失败时把 stderr 最后一行也带回来——"为什么没拉下来"只能靠它 */
+function captureDetailed(command, args, cwd) {
+  const call = commandFor(command, args);
+  const result = spawnSync(call.command, call.args, {
+    cwd, encoding: "utf8", windowsHide: true, shell: call.shell, env: { ...process.env, ...PROXY_ENV },
+  });
+  return {
+    ok: result.status === 0,
+    err: String(result.stderr ?? "").trim().split("\n").at(-1) ?? "",
+  };
+}
+
+/** 有没有 SSH 私钥——没有就别浪费那 30 秒去试 SSH */
+function hasSshKey() {
+  try {
+    return fs.readdirSync(path.join(os.homedir(), ".ssh"))
+      .some((name) => /^id_(rsa|ed25519|ecdsa)$/.test(name));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 拉取远端，**优先 SSH**。
+ *
+ * 为什么 SSH 优先：它不走 HTTP 代理 ✓ 也不经 Windows 原生 TLS（schannel）——
+ * 而 schannel 过代理时有已知的握手坑 ✗ 实测报
+ * 「schannel: failed to receive handshake, SSL/TLS connection」✗
+ * SSH 把这两个问题一起绕过去了 ✓ 实测 22 和 443 两个端口都通 ✓
+ *
+ * HTTPS 只留**一个**尝试，且固定用 openssl 后端——schannel 那个是已知会失败的，
+ * 试它等于白等一轮。两者之间等 30 秒：那类网络的干扰是**间歇性**的 ✗
+ * 立刻重试没用 ✓ 隔一会儿才可能命中 ✓
+ */
+async function tryFetch(appDir) {
+  // 远端的写法因人而异：有的是 https://…，有的本来就是 git@…。
+  // 两种都要能推出另一种，否则"SSH 失败退到 HTTPS"这条退路等于不存在。
+  const origin = capture("git", ["-C", appDir, "remote", "get-url", "origin"]).trim();
+  const looksSsh = /^git@/.test(origin);
+  const ssh = looksSsh ? origin : sshUrlOf(origin);
+  const https = looksSsh ? httpsUrlOf(origin) : origin;
+
+  const attempts = [];
+  if (ssh && hasSshKey()) attempts.push({ label: "SSH", args: [], url: ssh });
+  if (https) attempts.push({ label: "HTTPS", args: ["-c", "http.sslBackend=openssl"], url: https });
+
+  for (const [index, attempt] of attempts.entries()) {
+    if (index > 0) {
+      log(`      ${attempts[index - 1].label} 没成，等 30 秒再试 ${attempt.label}...`);
+      await new Promise((resolve) => setTimeout(resolve, 30_000));
+    }
+    const result = captureDetailed("git", ["-C", appDir, ...attempt.args, "fetch", "--depth", "1", attempt.url, "main"], appDir);
+    if (result.ok) return { label: attempt.label, ok: true };
+    log(`      ${attempt.label} 没成：${result.err.slice(0, 120)}`);
+  }
+  return { label: attempts.at(-1)?.label ?? "", ok: false };
+}
+
 /**
  * 拉取最新代码。这是"重新执行就拿到最新"的实现处。
  *
@@ -252,15 +326,9 @@ async function ensureUpToDate({ appDir }) {
 
   if (!git("rev-parse", "--git-dir")) return "不是 git 仓库，跳过";
 
-  // --depth 1：这是个部署副本，不需要完整历史，拉得快也更省
-  if (!capture("git", ["-C", appDir, "fetch", "--depth", "1", "origin", "main"])) {
-    // 走代理时 Windows 原生 TLS（schannel）有已知的握手问题：
-    // 「schannel: failed to receive handshake, SSL/TLS connection」。
-    // git 自带两个后端，换 openssl 再试一次就能过——别让人自己去查这个。
-    if (!capture("git", ["-C", appDir, "-c", "http.sslBackend=openssl", "fetch", "--depth", "1", "origin", "main"])) {
-      return "连不上远端，用当前版本启动";
-    }
-  }
+  // 先 SSH、再 HTTPS，中间隔 30 秒（见 tryFetch 的注释）
+  const fetched = await tryFetch(appDir);
+  if (!fetched.ok) return "连不上远端，用当前版本启动";
   const remote = git("rev-parse", "FETCH_HEAD").trim();
   if (!remote) return "连不上远端，用当前版本启动";
 
