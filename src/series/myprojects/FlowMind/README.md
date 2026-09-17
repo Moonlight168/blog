@@ -270,7 +270,7 @@ poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 | 全局 AI 助手 | 对话历史管理 |
 | --- | --- |
-| ![全局AI助手](../imges/FlowMind/README/全局ai助手.png) | ![对话历史管理](../imges/FlowMind/README/对话历史管理.png) |
+| ![全局AI助手](../imges/FlowMind/README/全局ai助手.jpg) | ![对话历史管理](../imges/FlowMind/README/对话历史管理.png) |
 
 | AI 设计分类 | AI 生成流程 |
 | --- | --- |
@@ -290,7 +290,7 @@ poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 | 流程分类 | 流程设计 |
 | --- | --- |
-| ![流程分类](../imges/FlowMind/README/流程分类.png) | ![流程设计](../imges/FlowMind/README/流程设计.png) |
+| ![流程分类](../imges/FlowMind/README/流程分类.png) | ![流程设计](../imges/FlowMind/README/流程设计.jpg) |
 
 | 流程部署 | 表单编辑 |
 | --- | --- |
