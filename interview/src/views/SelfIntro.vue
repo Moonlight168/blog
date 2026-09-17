@@ -56,7 +56,32 @@ function onInput(event: Event) {
   window.clearTimeout(snapshotTimer);
   snapshotTimer = window.setTimeout(() => pushVersion(text.value), 800);
 }
-function toggleEditing() {
+/**
+ * 没有未保存改动时，把文件重新读一遍。两处需要它：
+ *
+ * - **切到预览之前**：否则显示的是内存里那份，外部改过也看不到
+ * - **让 AI 改之前**（更要紧）：模型基于陈旧内容改写，结果一保存就把外面的改动
+ *   覆盖掉，而人完全不会察觉
+ *
+ * 有未保存改动时不读——那才是他正在编辑、正要保存的东西。
+ */
+async function syncFromDisk() {
+  if (dirty.value || !currentFile.value) return false;
+  const latest = await api<{ markdown: string; mtime: number | null }>(
+    `/api/self-intro?file=${encodeURIComponent(currentFile.value)}`,
+  );
+  if (latest.mtime === baseMtime.value) return false;
+  text.value = latest.markdown;
+  saved.value = latest.markdown;
+  baseMtime.value = latest.mtime;
+  resetVersions(latest.markdown);
+  toast.info("文件在外部被改过，已重新载入");
+  return true;
+}
+
+async function toggleEditing() {
+  // 切到预览前先对齐磁盘：预览是给人看"现在文件长什么样"的
+  if (editing.value) await syncFromDisk();
   flushVersion();
   editing.value = !editing.value;
 }
@@ -124,6 +149,8 @@ const chatBox = ref<HTMLElement | null>(null);
 async function revise() {
   const ask = instruction.value.trim();
   if (!ask || revising.value) return;
+  // 先对齐磁盘：模型必须基于"文件里现在真实的内容"改写，否则一保存就把外面的改动盖掉了
+  try { await syncFromDisk(); } catch { /* 读不到就按内存里的走，别为此拦住 */ }
   // 先把历史快照出来再推入这句——否则历史里会多一条和这次重复的「他」说的话
   const history = chatLog.value.slice();
   chatLog.value.push({ role: "user", text: ask });

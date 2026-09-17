@@ -111,15 +111,42 @@ async function switchFile(next: string) {
 }
 
 /**
+ * 没有未保存改动时，把文件重新读一遍。两处需要它：
+ *
+ * - **刷新预览之前**：否则渲染的是编辑器内存里那份，在外面（编辑器、别的工具）
+ *   改过文件也看不到——而人点「刷新」的心理预期正是「让我看看现在文件长什么样」
+ * - **让 AI 改之前**（更要紧）：模型基于陈旧内容改写，结果一保存就把外面的改动
+ *   覆盖掉，而人完全不会察觉
+ *
+ * 有未保存改动时不读——那才是他正在编辑、正要保存的东西。
+ */
+async function syncFromDisk() {
+  if (dirty.value || !file.value) return false;
+  const latest = await api<{ html: string; mtime: number | null }>(
+    `/api/resume-doc?file=${encodeURIComponent(file.value)}`,
+  );
+  if (latest.mtime === baseMtime.value) return false;
+  html.value = latest.html;
+  saved.value = latest.html;
+  baseMtime.value = latest.mtime;
+  resetVersions(latest.html);
+  toast.info("文件在外部被改过，已重新载入");
+  return true;
+}
+
+/**
  * 生成预览用的 PDF。
  * 每次约 2～3 秒（Chrome 的打印排版本身就这么慢），所以不做逐键实时，
  * 由「刷新预览」按钮和保存动作触发。
  */
 async function refreshPdf() {
-  if (!html.value.trim() || rendering.value) return;
+  if (rendering.value) return;
   rendering.value = true;
   pdfError.value = "";
   try {
+    await syncFromDisk();
+    if (!html.value.trim()) return;
+
     const response = await fetch("/api/resume-doc/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -306,6 +333,8 @@ const chatBox = ref<HTMLElement | null>(null);
 async function revise() {
   const ask = instruction.value.trim();
   if (!ask || revising.value) return;
+  // 先对齐磁盘：模型必须基于"文件里现在真实的内容"改写，否则一保存就把外面的改动盖掉了
+  try { await syncFromDisk(); } catch { /* 读不到就按内存里的走，别为此拦住 */ }
   // 先把历史快照出来再推入这句——否则历史里会多一条和这次重复的「他」说的话
   const history = chatLog.value.slice();
   chatLog.value.push({ role: "user", text: ask });
