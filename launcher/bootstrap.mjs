@@ -207,7 +207,12 @@ async function ensureUpToDate({ appDir }) {
 
   // --depth 1：这是个部署副本，不需要完整历史，拉得快也更省
   if (!capture("git", ["-C", appDir, "fetch", "--depth", "1", "origin", "main"])) {
-    return "连不上远端，用当前版本启动";
+    // 走代理时 Windows 原生 TLS（schannel）有已知的握手问题：
+    // 「schannel: failed to receive handshake, SSL/TLS connection」。
+    // git 自带两个后端，换 openssl 再试一次就能过——别让人自己去查这个。
+    if (!capture("git", ["-C", appDir, "-c", "http.sslBackend=openssl", "fetch", "--depth", "1", "origin", "main"])) {
+      return "连不上远端，用当前版本启动";
+    }
   }
   const remote = git("rev-parse", "FETCH_HEAD").trim();
   if (!remote) return "连不上远端，用当前版本启动";
