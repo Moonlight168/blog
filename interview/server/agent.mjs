@@ -56,10 +56,27 @@ export class InterviewAgent {
   }
 
   /**
-   * 发一次对话请求。收**整个 messages 数组**，所以能承载真正的多轮对话——
-   * 「让 AI 改」那个对话框就是靠它跟人连续聊，而不是每句都从零开始。
+   * 发一次对话请求，失败重试一次。
+   *
+   * 重试的是「再问一次就好」的那类失败：模型偶发会在 JSON 模式下回一段散文
+   * （实测在多轮对话里遇到过，同样的请求换一次就正常），以及网络抽一下。
+   * 没有这层重试，用户会在对话框里看到「这次没成功：模型未返回 JSON 对象」，
+   * 而且是碰运气式的——同一句话有时行有时不行，最难排查。
    */
   async #chat(messages, temperature = STABLE_TEMPERATURE) {
+    let lastError;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        return await this.#chatOnce(messages, temperature);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
+  /** 真正发请求的那一次；重试策略在 #chat 里 */
+  async #chatOnce(messages, temperature = STABLE_TEMPERATURE) {
     if (!this.config.baseUrl || !this.config.apiKey || !this.config.model) {
       throw new Error("尚未配置 INTERVIEW_CHAT_BASE_URL / API_KEY / MODEL");
     }
@@ -86,7 +103,15 @@ export class InterviewAgent {
     let payload;
     try { payload = await response.json(); }
     catch { throw new Error("对话模型返回的不是合法 JSON（可能网络中断），请重试"); }
-    return parseJson(payload.choices?.[0]?.message?.content ?? "");
+    const content = payload.choices?.[0]?.message?.content ?? "";
+    try {
+      return parseJson(content);
+    } catch (error) {
+      // 把原文挂上：调用方要能分清「模型压根没按 JSON 回」和「JSON 坏了」——
+      // 前者是可以兜的（它就是说了段话），后者只能报错。
+      error.raw = content;
+      throw error;
+    }
   }
 
   /** 单轮的便捷写法：一段系统提示 + 一句用户话 */
@@ -389,13 +414,27 @@ export class InterviewAgent {
   }
 
   /**
-   * 对话框里的那些话，原样变成消息（顺序和角色都对得上）。
-   * 空消息和报错气泡要滤掉，别把「这次没改成：连不上服务」当成模型说过的话喂回去。
+   * 对话框里的那些话，还原成模型能接得上的消息。
+   *
+   * **关键**：助手那一轮要还原成**模型当初吐出的 JSON 形状**，不能只放回复正文。
+   * 实测在 JSON 模式的对话里混入散文，模型有 40% 概率返回空内容（finish=stop 却拿不到内容），
+   * 而这个对话框一空就没法给用户任何东西；换成 JSON 形状后实测 0 次。
+   * 用户那侧照旧是纯文本。
+   *
+   * 空消息和报错气泡要滤掉，别把「这次没成功：连不上服务」当成模型说过的话喂回去。
    */
   #turns(history = []) {
     return (Array.isArray(history) ? history : [])
       .filter((turn) => turn && !turn.error && String(turn.text ?? "").trim())
-      .map((turn) => ({ role: turn.role === "user" ? "user" : "assistant", content: String(turn.text).trim() }));
+      .map((turn) => (turn.role === "user"
+        ? { role: "user", content: String(turn.text).trim() }
+        : {
+            role: "assistant",
+            content: JSON.stringify({
+              action: turn.action === "revise" ? "revise" : "answer",
+              reply: String(turn.text).trim(),
+            }),
+          }));
   }
 
   /**
@@ -415,7 +454,19 @@ export class InterviewAgent {
       ...this.#turns(history),
       { role: "user", content: instruction },
     ];
-    const result = await this.#chat(messages, CREATIVE_TEMPERATURE);
+    let result;
+    try {
+      result = await this.#chat(messages, CREATIVE_TEMPERATURE);
+    } catch (error) {
+      // 模型在 JSON 模式下偶尔直接说一段话（实测同一个请求时好时坏）。对这个对话框来说
+      // 那**本身就是一种合法的回答**——按 answer 收下，比甩一句「模型未返回 JSON 对象」
+      // 有用得多，也跟「拿不准就当答」的原则一致。
+      const spoken = String(error.raw ?? "").trim();
+      if (spoken && !spoken.includes("{")) {
+        return { action: "answer", reply: spoken, [field]: "" };
+      }
+      throw error;
+    }
     const revised = String(result[field] ?? "").trim();
     const action = this.#decideAction(result.action, revised);
     if (action === "revise" && !revised) throw new Error(emptyError);

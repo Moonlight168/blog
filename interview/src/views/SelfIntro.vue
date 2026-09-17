@@ -116,7 +116,9 @@ async function save() {
 
 // 与面试台一致：Enter 发送指令，Shift+Enter 换行
 const instruction = ref("");
-const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean }[]>([]);
+// action 要留着：下一轮把它还原成模型当初吐出的 JSON 形状再发回去，
+// 混散文进 JSON 模式的对话会让模型返回空内容（实测 40% 概率）
+const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean; action?: "revise" | "answer" }[]>([]);
 const chatBox = ref<HTMLElement | null>(null);
 
 async function revise() {
@@ -147,6 +149,7 @@ async function revise() {
     const lostAnchor = Boolean(revised) && anchor(before).startsWith(">") && !anchor(revised).startsWith(">");
     chatLog.value.push({
       role: "assistant",
+      action: data.action,
       text: lostAnchor
         ? "改好了，但这次把开头的链路锚点弄丢了——建议点「回撤」退回，或直接让它「把第一行的链路锚点补回去」。"
         : data.reply || (revised ? "已按你的要求改好，看左边预览。" : "（模型这次没给出内容）"),

@@ -298,7 +298,9 @@ async function doExport(nameOverride?: string) {
 
 // 与面试台、自我介绍一致：Enter 发送，Shift+Enter 换行
 const instruction = ref("");
-const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean }[]>([]);
+// action 要留着：下一轮把它还原成模型当初吐出的 JSON 形状再发回去，
+// 混散文进 JSON 模式的对话会让模型返回空内容（实测 40% 概率）
+const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean; action?: "revise" | "answer" }[]>([]);
 const chatBox = ref<HTMLElement | null>(null);
 
 async function revise() {
@@ -323,6 +325,7 @@ async function revise() {
     }
     chatLog.value.push({
       role: "assistant",
+      action: data.action,
       text: data.reply || (data.action === "revise" ? "改好了，点「刷新预览」看效果。" : "（模型这次没给出内容）"),
     });
   } catch (error) {

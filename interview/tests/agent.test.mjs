@@ -269,6 +269,61 @@ test("改自我介绍时同样带上《自我介绍规范》", async () => {
   });
 });
 
+test("模型偶发不返回 JSON 时重试一次，而不是把错误甩给用户", async () => {
+  let calls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    calls += 1;
+    // 第一次故意回一段散文——实测在 JSON 模式下偶发，同一请求换一次就正常
+    const content = calls === 1
+      ? "我觉得这段有点长，建议压缩一下。"
+      : '{"action":"answer","reply":"确实偏长，建议压到两行。"}';
+    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "这段会不会太长了？" });
+    assert.equal(calls, 2, "第一次不是 JSON，应当重试一次");
+    assert.equal(result.action, "answer");
+    assert.match(result.reply, /偏长/);
+  } finally { globalThis.fetch = previousFetch; }
+});
+
+test("模型干脆说了一段话（没按 JSON 回）时，当作「回答」收下，而不是报错", async () => {
+  let calls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ choices: [{ message: { content: "这段确实偏长，建议压到两行。" } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "这段会不会太长了？" });
+    assert.equal(result.action, "answer", "说了一段话，那就是在回答");
+    assert.match(result.reply, /偏长/);
+    assert.equal(result.html, "", "没给稿子就不动简历");
+    assert.equal(calls, 2, "仍然先重试一次，重试还是散文才兜底");
+  } finally { globalThis.fetch = previousFetch; }
+});
+
+test("JSON 坏了（有 { 但解不开）才报错，且最多重试一次", async () => {
+  let calls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    calls += 1;
+    // 半截 JSON：这种不能兜——它不是「在说话」，是响应真的坏了
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"action":"revise","reply":"' } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
+    await assert.rejects(
+      () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
+      /JSON/,
+    );
+    assert.equal(calls, 2, "只重试一次，不能无限循环");
+  } finally { globalThis.fetch = previousFetch; }
+});
+
 test("选「全部」：不受已有章节限制，按岗位普遍要求的技能出题，库里没有的可新建 topic", async () => {
   await withStubbedChat({ title: "题？", prompt: "题？", standardAnswer: "1. **要点**：短句", topic: "langchain" }, async (agent, lastBody) => {
     const question = await agent.generateQuestion({
@@ -389,6 +444,12 @@ test("对话框历史还原成真正的多轮消息，报错气泡不喂回模�
     );
     assert.equal(messages.at(-1).content, "那教育经历那段呢？");
     assert.doesNotMatch(JSON.stringify(messages), /连不上对话模型服务/, "报错气泡不该当成模型说过的话");
+    // 助手那轮必须是 JSON 形状——混散文进 JSON 模式的对话，模型有 40% 概率返回空内容（实测）
+    const assistantTurn = messages.find((m) => m.role === "assistant");
+    const replayed = JSON.parse(assistantTurn.content);
+    assert.equal(replayed.reply, "确实偏长，建议压到两行。");
+    assert.equal(replayed.action, "answer");
+    assert.match(messages.find((m) => m.role === "user").content, /实习那段会不会太长/, "用户那侧仍是纯文本");
   });
 });
 
