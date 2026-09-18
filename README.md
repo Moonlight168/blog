@@ -48,6 +48,15 @@
 
 ### 启动
 
+Windows 下可在仓库根目录直接双击：
+
+- `launcher\start.bat`：自动更新功能代码并以热更新模式启动面试台。
+- `launcher\start-blog.bat`：自动更新功能代码并以热更新模式启动博客。
+
+默认读取与 `blog` 同级的 `seed` 目录；私人资料和模型配置的目录结构、合并规则见 [launcher/SEED.md](launcher/SEED.md)。首次使用只需克隆仓库、准备可选的 `seed`，以后每次启动都会先尝试自动更新。更新按 SSH、HTTPS 的顺序尝试；远程暂时不可用时使用当前版本继续启动。
+
+也可以手动启动面试台：
+
 ```bash
 cd interview
 cp .env.example .env    # 填写对话模型；Embedding 可选，不配则退化为关键词检索

@@ -1,59 +1,51 @@
 #!/usr/bin/env node
 /**
- * 面试台启动器 —— 启动和更新都在这儿。
+ * 本地启动器：启动前更新功能代码、导入可选 seed，再启动热更新服务。
  *
- * ```
- * interview-desk/                      ← 交付文件夹（可整体拷走）
- * ├── 启动.cmd                         入口：设好 DESK_HOME，直接跑本文件
- * ├── seed/                             私有资料，首次运行合并进 app/src/private
- * └── app/                              仓库 ← **第一次要手动放进来**
- *     └── launcher/bootstrap.mjs        ← 本文件
- * ```
- *
- * 这一份干两件事：**把仓库更新到最新**（第 2 步）、**把服务起起来**（第 7 步）。
- *
- * 为什么没有"自动克隆"：那台机器连不上 github.com ✗ 自动克隆只会失败得莫名其妙 ✗
- * 所以第一次由人手把仓库放进 `app\`（git clone 或直接拷 ✓）。之后就不用了——
- * 本文件的更新逻辑会把 `interview/` 和 `launcher/` 对齐到远端 ✓ **包括它自己** ✓
- *
- * ## 约定
- *
- * - **所有中文提示都在这个文件里**：外面的 `启动.cmd` 保持纯 ASCII——cmd 默认 GBK
- *   代码页，批处理里写中文要么乱码、要么得配 chcp + 存盘编码，怎么弄都是坑。
- * - **每一步都幂等**：已经做过的跳过，重复双击不会重复干活。
- * - 路径从 `DESK_HOME`（交付文件夹）推；不设时退回"本文件的上一级目录"。
- * - **只更新 `interview/` 和 `launcher/`**：`src/` 下是博客内容，那是使用者自己的东西，
- *   他改的、删的都要留着。
+ * 对外只有两个模式：
+ *   node launcher/bootstrap.mjs interview
+ *   node launcher/bootstrap.mjs blog
  */
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
-import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
-const SELF_DIR = path.dirname(fileURLToPath(import.meta.url));
-/** 启动器文件夹（放 启动.cmd 的地方）：日志和状态跟它走，不跟仓库走 */
-const HOME = path.resolve(process.env.DESK_HOME || path.dirname(SELF_DIR));
-const STATE_DIR = path.join(HOME, ".launcher");
+const SELF_FILE = fileURLToPath(import.meta.url);
+const SELF_DIR = path.dirname(SELF_FILE);
+const APP_DIR = path.resolve(process.env.DESK_APP_DIR || path.dirname(SELF_DIR));
+const SEED_DIR = path.resolve(process.env.DESK_SEED_DIR || path.join(path.dirname(APP_DIR), "seed"));
+const STATE_DIR = path.join(APP_DIR, ".launcher");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
 const LOG_FILE = path.join(STATE_DIR, "launcher.log");
 
-// 这个目录必须先建出来：log() 从第一步就开始往里写，否则中间所有日志都会因为
-// 目录不存在被 catch 静默吞掉，失败时那句"详细日志见 …"就成了一句空话。
+const INTERVIEW_API_PORT = 8890;
+const INTERVIEW_WEB_PORT = 5174;
+const BLOG_PORT = 8888;
+
+/**
+ * 远程优先覆盖的功能文件。博客正文、题库、私人资料、运行数据和 .env 不在这里。
+ * 面试台会读取文章格式规范，因此它虽然是 Markdown，也属于运行时契约。
+ */
+const SYNC_PATHS = [
+  "launcher",
+  "interview",
+  "data",
+  "src/.vuepress",
+  ".gitignore",
+  ".nvmrc",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  "CNAME",
+  "面试宝典文章格式规范.md",
+];
+
 fs.mkdirSync(STATE_DIR, { recursive: true });
-
-/** Node 至少要到这个版本：node:sqlite 需要 22.5+ */
-const MIN_NODE_MAJOR = 22;
-const MIN_NODE_MINOR = 5;
-
-const INTERVIEW_PORT = 8890;   // 后端 API（也是 dist 静态站）
-const VITE_PORT = 5174;        // 面试台前端热更新
-const BLOG_PORT = 8888;        // 博客
-
-// ---------------------------------------------------------------- 基础设施
 
 function log(message = "") {
   const line = String(message);
@@ -61,12 +53,8 @@ function log(message = "") {
   try {
     fs.appendFileSync(LOG_FILE, `${new Date().toISOString()} ${line}\n`, "utf8");
   } catch {
-    /* 日志写不进去不该让启动失败 */
+    // 日志失败不应阻止服务启动。
   }
-}
-
-function step(index, total, title) {
-  process.stdout.write(`\n[${index}/${total}] ${title}\n`);
 }
 
 function readJson(file, fallback = {}) {
@@ -79,193 +67,106 @@ function readJson(file, fallback = {}) {
 
 function writeState(patch) {
   const next = { ...readJson(STATE_FILE), ...patch };
-  fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.writeFileSync(STATE_FILE, JSON.stringify(next, null, 2), "utf8");
 }
 
-/** 端口上有东西在监听吗（用来看代理是不是真的开着） */
-function portListening(port) {
-  const netstat = spawnSync("netstat", ["-ano", "-p", "TCP"], { encoding: "utf8", windowsHide: true }).stdout ?? "";
-  return netstat.includes(`:${port} `);
-}
-
-/** 常见代理工具的默认混合端口：注册表读不到时的兜底 */
-const COMMON_PROXY_PORTS = [7890, 7897, 7891, 10809, 1080];
-
-/**
- * 把 Windows 的系统代理读出来，喂给 git 和 npm。
- *
- * 它们**都不读** Windows 的代理设置（那个只有浏览器读）✗ 于是现象是
- * 「浏览器能开 GitHub，git fetch 却报 Failed to connect to github.com:443」✗
- * 用户明明开着 Clash，只是 git 不知道 ✓ 这里替它知道 ✓ 用户不用配任何东西 ✓
- *
- * 只在"代理端口真的在监听"时才用：注册表里常留着已经关掉的代理 ✓ 照搬会把
- * 本来能直连的网络弄坏 ✗
- */
-function systemProxy() {
-  if (process.platform !== "win32") return "";
-  const query = "Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings' | "
-    + "Select-Object -ExpandProperty ProxyServer -ErrorAction SilentlyContinue";
-  const server = spawnSync("powershell", ["-NoProfile", "-Command",
-    `if ((Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings').ProxyEnable -eq 1) { ${query} }`,
-  ], { encoding: "utf8", windowsHide: true }).stdout?.trim() ?? "";
-
-  if (!server) {
-    const found = COMMON_PROXY_PORTS.find(portListening);
-    return found ? `http://127.0.0.1:${found}` : "";
-  }
-  const https = /https=([^;]+)/i.exec(server)?.[1];
-  const plain = /^[^;=]+$/.test(server) ? server : "";
-  const address = (https || plain).trim();
-  if (!address || !portListening(Number(address.split(":").pop()))) return "";
-  return address.includes("://") ? address : `http://${address}`;
-}
-
-/** git / npm 都要走这个（外壳也会传一份下来，两个来源取其一） */
-const PROXY = String(process.env.HTTPS_PROXY ?? "").trim() || systemProxy();
-const PROXY_ENV = PROXY
-  ? { HTTP_PROXY: PROXY, HTTPS_PROXY: PROXY, http_proxy: PROXY, https_proxy: PROXY }
-  : {};
-
-/**
- * 哪些命令必须经过 cmd。
- *
- * Windows 上 npm/npx 是 .cmd，Node 从 20 起禁止不经 shell 直接 spawn .cmd（安全修复），
- * 所以这两个必须走 shell；**其余一律不走**——走 shell 时 Node 只把命令与参数
- * **拼接**、不加引号（它自己会发 DeprecationWarning 提醒这点），路径里一旦有空格
- * 就被 cmd 从空格处劈开：实测 node 装在 `C:\Program Files\` 时报
- * 「'C:\Program' 不是内部或外部命令」，两个服务直接起不来。
- */
-const needsCmd = (command) => process.platform === "win32" && /^(npm|npx)$/i.test(path.basename(command));
-
-/**
- * 需要经 cmd 的命令，显式换成 `cmd.exe /c npm …`。
- *
- * 不用 `shell: true`：那会让 Node 自己把命令和参数拼成一个字符串（还会发
- * DeprecationWarning 提醒参数没被转义），路径里有空格就被劈开。显式起 cmd.exe 更清楚，
- * 参数仍按 argv 传递——唯一要守的规矩是**参数里不能有带空格的路径**（我们这些都没有）。
- */
 function commandFor(command, args) {
-  if (needsCmd(command)) {
-    const risky = args.find((arg) => /\s/.test(arg));
-    if (risky) throw new Error(`参数含空格，经过 cmd 会被劈开，请改调用方式：${risky}`);
-    return { command: "cmd.exe", args: ["/c", command, ...args], shell: false };
+  if (process.platform === "win32" && /^(npm|npx)$/i.test(path.basename(command))) {
+    return { command: "cmd.exe", args: ["/d", "/s", "/c", command, ...args] };
   }
-  return { command, args, shell: false };
+  return { command, args };
 }
 
-/** 跑一条命令并把输出透到控制台（npm / git 的进度条才有意义） */
-function run(command, args, cwd) {
-  const call = commandFor(command, args);
-  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", shell: call.shell, env: { ...process.env, ...PROXY_ENV } });
-  return new Promise((resolve, reject) => {
-    child.on("error", reject);
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${command} 退出码 ${code}`))));
-  });
-}
-
-/** 跑一条命令、只要输出（用于 git 查询这类不该刷屏的调用）；失败返回空串 */
-function capture(command, args, cwd) {
-  const call = commandFor(command, args);
-  const result = spawnSync(call.command, call.args, { cwd, encoding: "utf8", windowsHide: true, shell: call.shell, env: { ...process.env, ...PROXY_ENV } });
-  return result.status === 0 ? String(result.stdout ?? "") : "";
-}
+const COMMON_PROXY_PORTS = [7890, 7897, 7891, 10809, 1080];
 
 function portBusy(port) {
   try {
-    // Windows 上用 netstat 比开 socket 探测更可靠（不会踩到 TIME_WAIT）
     const out = execFileSync("netstat", ["-ano", "-p", "TCP"], { encoding: "utf8", windowsHide: true });
-    return out.split("\n").some((line) => line.includes("LISTENING") && line.includes(`:${port} `));
+    return out.split(/\r?\n/).some((line) => line.includes("LISTENING") && line.includes(`:${port} `));
   } catch {
     return false;
   }
 }
 
-async function waitForHttp(url, timeoutMs = 120_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const ok = await new Promise((resolve) => {
-      const request = http.get(url, (response) => {
-        response.resume();
-        resolve(response.statusCode < 500);
-      });
-      request.on("error", () => resolve(false));
-      request.setTimeout(2000, () => { request.destroy(); resolve(false); });
-    });
-    if (ok) return true;
-    await new Promise((resolve) => setTimeout(resolve, 700));
+function systemProxy() {
+  if (process.platform !== "win32") return "";
+  const script = "$p=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings';"
+    + "if($p.ProxyEnable -eq 1){$p.ProxyServer}";
+  const server = spawnSync("powershell", ["-NoProfile", "-Command", script], {
+    encoding: "utf8",
+    windowsHide: true,
+  }).stdout?.trim() ?? "";
+
+  if (!server) {
+    const found = COMMON_PROXY_PORTS.find(portBusy);
+    return found ? `http://127.0.0.1:${found}` : "";
   }
-  return false;
+  const https = /https=([^;]+)/i.exec(server)?.[1];
+  const plain = /^[^;=]+$/.test(server) ? server : "";
+  const address = (https || plain).trim();
+  if (!address || !portBusy(Number(address.split(":").pop()))) return "";
+  return address.includes("://") ? address : `http://${address}`;
 }
 
-/** 目录里最新的修改时间（用于判断产物是不是比源码旧）；不存在返回 0 */
-function newestMtime(target) {
-  let newest = 0;
-  const visit = (entry) => {
-    let stat;
-    try {
-      stat = fs.statSync(entry);
-    } catch {
-      return;
-    }
-    if (stat.isDirectory()) {
-      for (const name of fs.readdirSync(entry)) visit(path.join(entry, name));
-    } else {
-      newest = Math.max(newest, stat.mtimeMs);
-    }
+const PROXY = String(process.env.HTTPS_PROXY ?? "").trim() || systemProxy();
+const COMMAND_ENV = {
+  ...process.env,
+  ...(PROXY ? { HTTP_PROXY: PROXY, HTTPS_PROXY: PROXY, http_proxy: PROXY, https_proxy: PROXY } : {}),
+};
+
+function capture(command, args, cwd = APP_DIR) {
+  const call = commandFor(command, args);
+  const result = spawnSync(call.command, call.args, {
+    cwd,
+    encoding: "utf8",
+    windowsHide: true,
+    env: COMMAND_ENV,
+  });
+  return result.status === 0 ? String(result.stdout ?? "") : "";
+}
+
+function captureDetailed(command, args, cwd = APP_DIR) {
+  const call = commandFor(command, args);
+  const result = spawnSync(call.command, call.args, {
+    cwd,
+    encoding: "utf8",
+    windowsHide: true,
+    env: COMMAND_ENV,
+  });
+  return {
+    ok: result.status === 0,
+    error: String(result.stderr || result.error?.message || "").trim().split(/\r?\n/).at(-1) || "未知错误",
   };
-  visit(target);
-  return newest;
 }
 
-// ---------------------------------------------------------------- 各步骤
+function run(command, args, cwd = APP_DIR) {
+  const call = commandFor(command, args);
+  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", env: COMMAND_ENV });
+  return new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`${command} 退出码 ${code}`)));
+  });
+}
 
-function checkNode() {
+function checkNode(mode) {
   const [major, minor] = process.versions.node.split(".").map(Number);
-  if (major < MIN_NODE_MAJOR || (major === MIN_NODE_MAJOR && minor < MIN_NODE_MINOR)) {
-    throw new Error(`Node 版本过低（当前 v${process.versions.node}），需要 ${MIN_NODE_MAJOR}.${MIN_NODE_MINOR}+`);
+  const required = mode === "interview" ? [22, 5] : [20, 19];
+  if (major < required[0] || (major === required[0] && minor < required[1])) {
+    throw new Error(`Node 版本过低（当前 v${process.versions.node}），${mode === "interview" ? "面试台" : "博客"}需要 ${required.join(".")}+`);
   }
   return `Node v${process.versions.node}`;
 }
 
-/**
- * 更新只覆盖这些路径：**功能代码和启动器脚本**。
- *
- * 为什么不整棵树一起更新（原来用 `git reset --hard`）：`src/` 下是博客内容，
- * 那是使用者自己的东西——他改过的、删掉的都应该留着，不该被远端版本按回去。
- * 而 `interview/` 和 `launcher/` 是功能代码，没人会在里面写自己的文档，尽管对齐。
- */
-const SYNC_PATHS = ["interview", "launcher"];
-
-/** HTTPS 远端地址 → 对应的 SSH 地址（`git@github.com:owner/repo.git`） */
-function sshUrlOf(httpsUrl) {
-  const match = /^https?:\/\/([^/]+)\/(.+?)(\.git)?$/i.exec(String(httpsUrl ?? "").trim());
-  return match ? `git@${match[1]}:${match[2]}${match[3] ?? ""}` : "";
+function sshUrlOf(url) {
+  const match = /^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/i.exec(String(url ?? "").trim());
+  return match ? `git@${match[1]}:${match[2]}.git` : "";
 }
 
-/**
- * SSH 远端地址 → 对应的 HTTPS 地址。**要双向转换**：远端的写法因人而异，
- * 实测有的机器 origin 本来就是 `git@github.com:…` ✗ 只做单向的话，
- * "SSH 失败退回 HTTPS"这条退路就等于不存在。
- */
-function httpsUrlOf(sshUrl) {
-  const match = /^git@([^:]+):(.+)$/.exec(String(sshUrl ?? "").trim());
+function httpsUrlOf(url) {
+  const match = /^git@([^:]+):(.+)$/.exec(String(url ?? "").trim());
   return match ? `https://${match[1]}/${match[2]}` : "";
 }
 
-/** 像 capture，但失败时把 stderr 最后一行也带回来——"为什么没拉下来"只能靠它 */
-function captureDetailed(command, args, cwd) {
-  const call = commandFor(command, args);
-  const result = spawnSync(call.command, call.args, {
-    cwd, encoding: "utf8", windowsHide: true, shell: call.shell, env: { ...process.env, ...PROXY_ENV },
-  });
-  return {
-    ok: result.status === 0,
-    err: String(result.stderr ?? "").trim().split("\n").at(-1) ?? "",
-  };
-}
-
-/** 有没有 SSH 私钥——没有就别浪费那 30 秒去试 SSH */
 function hasSshKey() {
   try {
     return fs.readdirSync(path.join(os.homedir(), ".ssh"))
@@ -275,213 +176,170 @@ function hasSshKey() {
   }
 }
 
-/**
- * 拉取远端，**优先 SSH**。
- *
- * 为什么 SSH 优先：它不走 HTTP 代理 ✓ 也不经 Windows 原生 TLS（schannel）——
- * 而 schannel 过代理时有已知的握手坑 ✗ 实测报
- * 「schannel: failed to receive handshake, SSL/TLS connection」✗
- * SSH 把这两个问题一起绕过去了 ✓ 实测 22 和 443 两个端口都通 ✓
- *
- * HTTPS 只留**一个**尝试，且固定用 openssl 后端——schannel 那个是已知会失败的，
- * 试它等于白等一轮。两者之间等 30 秒：那类网络的干扰是**间歇性**的 ✗
- * 立刻重试没用 ✓ 隔一会儿才可能命中 ✓
- */
-async function tryFetch(appDir) {
-  // 远端的写法因人而异：有的是 https://…，有的本来就是 git@…。
-  // 两种都要能推出另一种，否则"SSH 失败退到 HTTPS"这条退路等于不存在。
-  const origin = capture("git", ["-C", appDir, "remote", "get-url", "origin"]).trim();
-  const looksSsh = /^git@/.test(origin);
-  const ssh = looksSsh ? origin : sshUrlOf(origin);
-  const https = looksSsh ? httpsUrlOf(origin) : origin;
-
+/** SSH 可用时优先；失败后立即回退 HTTPS，不额外等待。 */
+function tryFetch(appDir) {
+  const origin = capture("git", ["-C", appDir, "remote", "get-url", "origin"], appDir).trim();
+  const originIsSsh = /^git@/.test(origin);
+  const ssh = originIsSsh ? origin : sshUrlOf(origin);
+  const https = originIsSsh ? httpsUrlOf(origin) : origin;
   const attempts = [];
-  if (ssh && hasSshKey()) attempts.push({ label: "SSH", args: [], url: ssh });
-  if (https) attempts.push({ label: "HTTPS", args: ["-c", "http.sslBackend=openssl"], url: https });
 
-  for (const [index, attempt] of attempts.entries()) {
-    if (index > 0) {
-      log(`      ${attempts[index - 1].label} 没成，等 30 秒再试 ${attempt.label}...`);
-      await new Promise((resolve) => setTimeout(resolve, 30_000));
-    }
-    const result = captureDetailed("git", ["-C", appDir, ...attempt.args, "fetch", "--depth", "1", attempt.url, "main"], appDir);
-    if (result.ok) return { label: attempt.label, ok: true };
-    log(`      ${attempt.label} 没成：${result.err.slice(0, 120)}`);
+  if (ssh && hasSshKey()) {
+    attempts.push({
+      label: "SSH",
+      args: ["-c", "core.sshCommand=ssh -o BatchMode=yes -o ConnectTimeout=5", "fetch", ssh, "main"],
+    });
   }
-  return { label: attempts.at(-1)?.label ?? "", ok: false };
+  if (https) {
+    attempts.push({ label: "HTTPS", args: ["-c", "http.sslBackend=openssl", "fetch", https, "main"] });
+  }
+
+  for (const attempt of attempts) {
+    log(`      使用 ${attempt.label} 检查远程更新...`);
+    const result = captureDetailed("git", ["-C", appDir, ...attempt.args], appDir);
+    if (result.ok) return { ok: true, transport: attempt.label };
+    log(`      ${attempt.label} 失败：${result.error.slice(0, 160)}`);
+  }
+  return { ok: false, transport: "" };
 }
 
-/**
- * 拉取最新代码。这是"重新执行就拿到最新"的实现处。
- *
- * 三条判断都是为了不把别人的东西弄丢、也不卡住启动：
- * - 只在**要更新的那几个目录**有本地改动时才跳过（博客那边的改动不该拦住更新）
- * - 连不上远端 → 用当前版本启动（离线照常能跑，而不是报错干等）
- * - 已经同步过的提交 → 什么都不做
- */
+function fileHash(file) {
+  if (!fs.existsSync(file)) return "";
+  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
 
+function backupLocalChanges(appDir, baseline) {
+  const diff = capture("git", ["-C", appDir, "diff", "--binary", baseline, "--", ...SYNC_PATHS], appDir);
+  if (!diff.trim()) return "";
+  const backupDir = path.join(STATE_DIR, "backups");
+  fs.mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const file = path.join(backupDir, `${stamp}.patch`);
+  fs.writeFileSync(file, diff, "utf8");
+  return file;
+}
 
 async function ensureUpToDate({ appDir }) {
-  const git = (...args) => capture("git", ["-C", appDir, ...args]);
+  const git = (...args) => capture("git", ["-C", appDir, ...args], appDir).trim();
+  if (!git("rev-parse", "--git-dir")) return { detail: "不是 Git 仓库，跳过更新", changed: false };
 
-  if (!git("rev-parse", "--git-dir")) return "不是 git 仓库，跳过";
+  const fetched = tryFetch(appDir);
+  if (!fetched.ok) return { detail: "远程不可用，使用当前版本", changed: false };
+  const remote = git("rev-parse", "FETCH_HEAD");
+  if (!remote) return { detail: "未取得远程版本，使用当前版本", changed: false };
 
-  // 先 SSH、再 HTTPS，中间隔 30 秒（见 tryFetch 的注释）
-  const fetched = await tryFetch(appDir);
-  if (!fetched.ok) return "连不上远端，用当前版本启动";
-  const remote = git("rev-parse", "FETCH_HEAD").trim();
-  if (!remote) return "连不上远端，用当前版本启动";
+  const state = readJson(STATE_FILE);
+  if (remote === state.syncedSha) return { detail: `已是最新（${fetched.transport}）`, changed: false, remote };
 
-  // 用状态文件记"上次同步到哪个提交"，而不是拿 HEAD 比：
-  // 我们只对齐部分路径，HEAD 会一直停在旧提交上，比它永远算出"有更新"。
-  if (remote === String(readJson(STATE_FILE).syncedSha ?? "")) return "已是最新";
+  const before = fileHash(path.join(appDir, "launcher", "bootstrap.mjs"));
+  const baselineExists = state.syncedSha
+    && captureDetailed("git", ["-C", appDir, "cat-file", "-e", `${state.syncedSha}^{commit}`], appDir).ok;
+  const baseline = baselineExists ? state.syncedSha : "HEAD";
+  const backup = backupLocalChanges(appDir, baseline);
+  if (backup) log(`      功能目录的本地差异已备份到 ${backup}`);
 
-  // 只在**要更新的那些路径**上有本地改动时才跳过——博客那边的改动不该拦住更新。
-  const dirty = git("status", "--porcelain", "--", ...SYNC_PATHS).trim();
-  if (dirty) return `${SYNC_PATHS.join(" / ")} 有本地改动，跳过更新`;
-
-  // 只把这些路径换成远端版本；其余（src/ 下的博客内容、私人目录）一律不动
-  await run("git", ["-C", appDir, "checkout", remote, "--", ...SYNC_PATHS], appDir);
-  writeState({ syncedSha: remote });
-  return "已更新到最新";
+  await run("git", ["-C", appDir, "restore", `--source=${remote}`, "--worktree", "--no-overlay", "--", ...SYNC_PATHS], appDir);
+  writeState({ syncedSha: remote, syncedAt: new Date().toISOString() });
+  const bootstrapChanged = before !== fileHash(path.join(appDir, "launcher", "bootstrap.mjs"));
+  return { detail: `已通过 ${fetched.transport} 更新功能代码`, changed: true, bootstrapChanged, remote };
 }
 
-/** package-lock 的指纹：变了才说明依赖真的需要重装 */
-function lockFingerprint(appDir) {
-  const hash = crypto.createHash("sha1");
-  for (const lock of [path.join(appDir, "package-lock.json"), path.join(appDir, "interview", "package-lock.json")]) {
-    hash.update(fs.existsSync(lock) ? fs.readFileSync(lock) : Buffer.from("(无)"));
-  }
-  return hash.digest("hex");
+function dependencyFingerprint(dir) {
+  const lock = path.join(dir, "package-lock.json");
+  return crypto.createHash("sha256").update(fs.existsSync(lock) ? fs.readFileSync(lock) : Buffer.from("missing")).digest("hex");
 }
 
-/**
- * 依赖：node_modules 在、且 package-lock 没变就跳过。
- * 只看"装没装过"是不够的——更新完代码常常带着新的依赖，那时必须重装。
- */
-async function ensureDeps({ appDir }) {
-  const targets = [
-    { dir: appDir, label: "博客" },
-    { dir: path.join(appDir, "interview"), label: "面试台" },
-  ];
-  const fingerprint = lockFingerprint(appDir);
-  const recorded = readJson(STATE_FILE).depsFingerprint;
-  const missing = targets.filter((target) => !fs.existsSync(path.join(target.dir, "node_modules")));
+async function ensureDependencies(mode, appDir) {
+  const dir = mode === "interview" ? path.join(appDir, "interview") : appDir;
+  const stateKey = `${mode}DepsFingerprint`;
+  const fingerprint = dependencyFingerprint(dir);
+  const installed = fs.existsSync(path.join(dir, "node_modules"));
+  const recorded = readJson(STATE_FILE)[stateKey];
 
-  // 都装好了、只是没记过指纹（第一次跑，或清过 .launcher）：把现状记下就走。
-  // 否则会在已经装好的开发机上白跑一次 npm install——实测那次把博客依赖动了
-  // （added 75 packages, removed 2 packages），一个谁都没料到的副作用。
-  if (!missing.length && !recorded) {
-    writeState({ depsFingerprint: fingerprint });
-    return "已安装（首次记录依赖状态）";
-  }
-  if (!missing.length && fingerprint === recorded) return "已安装";
+  if (installed && recorded === fingerprint) return "已安装";
 
-  for (const target of targets) {
-    log(`      安装${target.label}依赖${missing.length ? "" : "（依赖清单有更新）"}...`);
-    try {
-      await run("npm", ["install", "--no-audit", "--no-fund"], target.dir);
-    } catch {
-      // 国内直连 registry.npmjs.org 常常慢到超时。换国内镜像再试一次，
-      // 比让人对着 ETIMEDOUT 干等强——这一步是她那边唯一还需要联网的地方。
-      log(`      直连 npm 源失败，换国内镜像重试...`);
-      await run("npm", ["install", "--no-audit", "--no-fund", "--registry=https://registry.npmmirror.com"], target.dir);
-    }
+  log(`      安装${mode === "interview" ? "面试台" : "博客"}依赖...`);
+  try {
+    await run("npm", ["install", "--no-audit", "--no-fund"], dir);
+  } catch {
+    log("      默认 npm 源失败，切换镜像重试...");
+    await run("npm", ["install", "--no-audit", "--no-fund", "--registry=https://registry.npmmirror.com"], dir);
   }
-  writeState({ depsFingerprint: fingerprint });
+  writeState({ [stateKey]: dependencyFingerprint(dir) });
   return "安装完成";
 }
 
-/**
- * 面试台前端产物：8890 直接服务 dist。
- *
- * 判据是**产物是不是比源码旧**，而不是"产物在不在"——不然更新完代码界面还是旧的，
- * 这种"代码更新了但界面没变"最难排查。
- */
-async function ensureBuild({ appDir }) {
-  const interview = path.join(appDir, "interview");
-  const out = path.join(interview, "dist", "index.html");
-  const sources = ["src", "index.html", "package.json", "vite.config.ts"].map((name) => path.join(interview, name));
-  if (fs.existsSync(out) && newestMtime(out) >= Math.max(...sources.map(newestMtime))) return "已构建";
-
-  log("      构建面试台前端...");
-  await run("npm", ["run", "build"], interview);
-  return "构建完成";
-}
-
-/**
- * 私有目录：只建**空骨架**，再把 seed\ 里的东西原样拷进去。
- * 已存在的文件一律不覆盖——那可能是人家自己写的内容。
- */
-function ensurePrivate({ appDir, seedDir }) {
-  const privateRoot = path.join(appDir, "src", "private");
-  const skeleton = [
-    path.join("resume"),
-    path.join("hires", "个人简介", "面试经验"),
-    path.join("series", "答题历史"),
-  ];
-  let created = 0;
-  for (const rel of skeleton) {
-    const dir = path.join(privateRoot, rel);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      created += 1;
-    }
-  }
-
-  // seed\private\ 下的内容按原样合并进来（这是使用者自己的资料，随启动器一起带过来）
-  let copied = 0;
-  const seedPrivate = path.join(seedDir, "private");
-  if (fs.existsSync(seedPrivate)) copied = copyMissing(seedPrivate, privateRoot);
-
-  if (!created && !copied) return "已存在";
-  return `新建 ${created} 个目录${copied ? `，导入 ${copied} 个文件` : ""}`;
-}
-
-/** 递归复制，但**只补不覆盖**：目标已存在的文件跳过 */
 function copyMissing(from, to) {
   let count = 0;
   fs.mkdirSync(to, { recursive: true });
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
-    const src = path.join(from, entry.name);
-    const dst = path.join(to, entry.name);
-    if (entry.isDirectory()) count += copyMissing(src, dst);
-    else if (!fs.existsSync(dst)) {
-      fs.copyFileSync(src, dst);
+    const source = path.join(from, entry.name);
+    const target = path.join(to, entry.name);
+    if (entry.isDirectory()) count += copyMissing(source, target);
+    else if (!fs.existsSync(target)) {
+      fs.copyFileSync(source, target);
       count += 1;
     }
   }
   return count;
 }
 
-/** 配置文件：没有就从模板生成，缺密钥就当场问（输入不回显、不写进日志） */
-async function ensureEnv({ appDir }) {
-  const interview = path.join(appDir, "interview");
-  const envFile = path.join(interview, ".env");
-  if (!fs.existsSync(envFile)) {
-    const example = path.join(interview, ".env.example");
-    if (fs.existsSync(example)) fs.copyFileSync(example, envFile);
-    else fs.writeFileSync(envFile, "", "utf8");
+function ensurePrivate({ appDir, seedDir }) {
+  const privateRoot = path.join(appDir, "src", "private");
+  const skeleton = ["resume", path.join("hires", "个人简介", "面试经验"), path.join("series", "答题历史")];
+  let created = 0;
+  for (const relative of skeleton) {
+    const directory = path.join(privateRoot, relative);
+    if (!fs.existsSync(directory)) {
+      fs.mkdirSync(directory, { recursive: true });
+      created += 1;
+    }
   }
-  const content = fs.readFileSync(envFile, "utf8");
-  if (/^INTERVIEW_CHAT_API_KEY=\S+/m.test(content)) return "已配置";
-  if (!process.stdin.isTTY) return "跳过（非交互环境，没法问密钥）";
-
-  const key = await askSecret("      请输入对话模型的 API Key（粘贴后回车，不会显示）：");
-  if (!key) return "跳过（没有密钥，出题功能不可用）";
-  const next = /^INTERVIEW_CHAT_API_KEY=/m.test(content)
-    ? content.replace(/^INTERVIEW_CHAT_API_KEY=.*$/m, `INTERVIEW_CHAT_API_KEY=${key}`)
-    : `${content.trimEnd()}\nINTERVIEW_CHAT_API_KEY=${key}\n`;
-  fs.writeFileSync(envFile, next, "utf8");
-  return "已写入（保存在本机 .env，不会上传）";
+  const seedPrivate = path.join(seedDir, "private");
+  const copied = fs.existsSync(seedPrivate) ? copyMissing(seedPrivate, privateRoot) : 0;
+  return `个人目录已就绪${copied ? `，从 seed 导入 ${copied} 个文件` : ""}${created ? `，新建 ${created} 个目录` : ""}`;
 }
 
-/**
- * 问一个不回显的输入——密钥不能出现在屏幕上，也不能进日志。
- *
- * 用 stdin 的**原始模式**：它本就不回显，不用去擦 readline 已经打出来的字符
- * （那样每按一键都要重画提示，界面会花）。顺带处理退格和 Ctrl+C。
- */
+function envEntries(content) {
+  const entries = new Map();
+  for (const line of content.split(/\r?\n/)) {
+    if (/^\s*#/.test(line)) continue;
+    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+    if (match) entries.set(match[1], { line, value: match[2].trim() });
+  }
+  return entries;
+}
+
+function mergeEnvContent(targetContent, seedContent) {
+  let content = targetContent;
+  let imported = 0;
+  const target = envEntries(content);
+  for (const [key, seed] of envEntries(seedContent)) {
+    if (!seed.value || (target.has(key) && target.get(key).value)) continue;
+    if (target.has(key)) {
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      content = content.replace(new RegExp(`^\\s*${escaped}=.*$`, "m"), seed.line);
+    } else {
+      content = `${content.trimEnd()}${content.trim() ? "\n" : ""}${seed.line}\n`;
+    }
+    target.set(key, seed);
+    imported += 1;
+  }
+  return { content, imported };
+}
+
+function initializeEnv({ appDir, seedDir }) {
+  const envFile = path.join(appDir, "interview", ".env");
+  const example = path.join(appDir, "interview", ".env.example");
+  if (!fs.existsSync(envFile)) fs.copyFileSync(example, envFile);
+
+  const seedEnv = path.join(seedDir, "interview", ".env");
+  if (!fs.existsSync(seedEnv)) return { envFile, imported: 0 };
+  const merged = mergeEnvContent(fs.readFileSync(envFile, "utf8"), fs.readFileSync(seedEnv, "utf8"));
+  if (merged.imported) fs.writeFileSync(envFile, merged.content, "utf8");
+  return { envFile, imported: merged.imported };
+}
+
 function askSecret(question) {
   return new Promise((resolve) => {
     process.stdout.write(question);
@@ -497,7 +355,7 @@ function askSecret(question) {
     const onData = (chunk) => {
       for (const char of chunk.toString("utf8")) {
         if (char === "\r" || char === "\n") return finish(buffer.trim());
-        if (char === "\u0003") return finish("");                    // Ctrl+C：当作放弃
+        if (char === "\u0003") return finish("");
         if (char === "\u007f" || char === "\b") buffer = buffer.slice(0, -1);
         else buffer += char;
       }
@@ -508,139 +366,169 @@ function askSecret(question) {
   });
 }
 
-// ---------------------------------------------------------------- 起服务
+async function ensureInterviewKey(envFile) {
+  let content = fs.readFileSync(envFile, "utf8");
+  if (/^INTERVIEW_CHAT_API_KEY=\S+/m.test(content)) return "模型配置已就绪";
+  if (!process.stdin.isTTY) return "未配置模型密钥（非交互环境，已跳过询问）";
+
+  const key = await askSecret("      请输入对话模型 API Key（输入不回显，直接回车可跳过）：");
+  if (!key) return "未配置模型密钥，AI 出题功能暂不可用";
+  content = /^INTERVIEW_CHAT_API_KEY=/m.test(content)
+    ? content.replace(/^INTERVIEW_CHAT_API_KEY=.*$/m, `INTERVIEW_CHAT_API_KEY=${key}`)
+    : `${content.trimEnd()}\nINTERVIEW_CHAT_API_KEY=${key}\n`;
+  fs.writeFileSync(envFile, content, "utf8");
+  return "模型密钥已写入本机 interview/.env";
+}
+
+async function waitForHttp(url, timeoutMs = 180_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await new Promise((resolve) => {
+      const request = http.get(url, (response) => {
+        response.resume();
+        resolve(response.statusCode < 500);
+      });
+      request.on("error", () => resolve(false));
+      request.setTimeout(2_000, () => { request.destroy(); resolve(false); });
+    });
+    if (ready) return true;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+  return false;
+}
 
 const children = [];
 
-function startService({ title, command, args, cwd, port, url }) {
-  if (portBusy(port)) {
-    log(`      ${title}：${port} 端口已在运行，跳过启动（复用现有的）`);
-    return;
-  }
-  // node 直接起（它的路径可能含空格，走 shell 会被劈开）；npm 换成 cmd.exe /c
+function startChild(title, command, args, cwd) {
   const call = commandFor(command, args);
-  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", shell: call.shell, env: { ...process.env, ...PROXY_ENV } });
-  children.push({ child, title });
+  const child = spawn(call.command, call.args, { cwd, stdio: "inherit", env: COMMAND_ENV });
+  children.push(child);
+  child.on("error", (error) => log(`      ${title}启动失败：${error.message}`));
   child.on("exit", (code) => {
-    if (code !== 0 && code !== null) log(`      ${title} 退出了（退出码 ${code}）`);
+    if (code !== 0 && code !== null) log(`      ${title}已退出（退出码 ${code}）`);
   });
-  log(`      ${title}：已启动（${url}）`);
+}
+
+async function startMode(mode, appDir) {
+  const interviewDir = path.join(appDir, "interview");
+  if (mode === "interview") {
+    const apiBusy = portBusy(INTERVIEW_API_PORT);
+    const webBusy = portBusy(INTERVIEW_WEB_PORT);
+    if (apiBusy !== webBusy) throw new Error("面试台只有一个端口被占用，请先关闭占用 8890 或 5174 的进程");
+    if (!apiBusy) startChild("面试台", "npm", ["run", "dev"], interviewDir);
+    else log("      面试台端口已在运行，复用现有服务");
+    return { url: `http://127.0.0.1:${INTERVIEW_WEB_PORT}/`, label: "面试台" };
+  }
+
+  if (!portBusy(BLOG_PORT)) startChild("博客", "npm", ["run", "docs:dev"], appDir);
+  else log("      博客端口已在运行，复用现有服务");
+  return { url: `http://127.0.0.1:${BLOG_PORT}/`, label: "博客" };
 }
 
 function stopAll() {
-  for (const { child } of children) {
+  for (const child of children) {
     if (!child.pid) continue;
     try {
-      // Windows 上必须连子进程树一起杀，否则 npm 会留下孤儿进程占着端口
       if (process.platform === "win32") execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
       else child.kill("SIGTERM");
     } catch {
-      /* 已经退出了就算了 */
+      // 子进程已经退出。
     }
   }
 }
 
-async function startAll({ appDir }) {
-  const node = process.execPath;
-  startService({
-    title: "面试台接口",
-    command: node,
-    args: ["server/server.mjs"],
-    cwd: path.join(appDir, "interview"),
-    port: INTERVIEW_PORT,
-    url: `http://127.0.0.1:${INTERVIEW_PORT}`,
-  });
-  startService({
-    title: "面试台界面",
-    command: node,
-    args: [path.join(appDir, "interview", "node_modules", "vite", "bin", "vite.js")],
-    cwd: path.join(appDir, "interview"),
-    port: VITE_PORT,
-    url: `http://127.0.0.1:${VITE_PORT}`,
-  });
-  startService({
-    title: "博客",
-    command: "npm",
-    args: ["run", "docs:dev"],
-    cwd: appDir,
-    port: BLOG_PORT,
-    url: `http://127.0.0.1:${BLOG_PORT}`,
-  });
-
-  log(`\n      等待服务就绪...`);
-  if (!(await waitForHttp(`http://127.0.0.1:${VITE_PORT}/`, 180_000))) {
-    log(`      ⚠ 前端还没起来。VuePress 首次启动要预构建缓存，可能要等一两分钟——`);
-    log(`        浏览器如果打不开，稍等片刻手动刷新即可。`);
-  }
-}
-
-/** 打开浏览器；设 DESK_NO_BROWSER=1 可跳过（不想被打断时用） */
 function openBrowser(url) {
-  if (String(process.env.DESK_NO_BROWSER ?? "").trim() === "1") return;
+  if (String(process.env.DESK_NO_BROWSER ?? "") === "1") return;
   try {
-    // 写全 cmd.exe：execFileSync 不走 shell，光写 cmd 在 Windows 上解析不到
     if (process.platform === "win32") execFileSync("cmd.exe", ["/c", "start", "", url], { stdio: "ignore", windowsHide: true });
     else execFileSync(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" });
   } catch {
-    log(`      （自动打开浏览器失败，手动访问 ${url}）`);
+    log(`      自动打开浏览器失败，请手动访问 ${url}`);
   }
 }
 
-// ---------------------------------------------------------------- 主流程
+function restartWithUpdatedBootstrap(mode, remote) {
+  if (process.env.DESK_BOOTSTRAP_RESTARTED === remote) return null;
+  log("      启动器已更新，使用新版本继续...");
+  const result = spawnSync(process.execPath, [path.join(APP_DIR, "launcher", "bootstrap.mjs"), mode], {
+    cwd: APP_DIR,
+    stdio: "inherit",
+    env: { ...process.env, DESK_BOOTSTRAP_RESTARTED: remote },
+  });
+  return result.status ?? 1;
+}
 
-async function main() {
+async function runStep(index, total, title, action) {
+  process.stdout.write(`\n[${index}/${total}] ${title}\n`);
+  const detail = await action();
+  log(`      完成${detail ? `（${detail}）` : ""}`);
+  return detail;
+}
+
+async function main(argv = process.argv.slice(2)) {
+  const mode = argv[0];
+  if (!new Set(["interview", "blog"]).has(mode)) {
+    log("用法：node launcher/bootstrap.mjs <interview|blog>");
+    return 2;
+  }
+
   log("============================================");
-  log("  面试台 启动器");
+  log(`  ${mode === "interview" ? "面试台" : "博客"}启动器`);
   log("============================================");
+  log(`  仓库：${APP_DIR}`);
+  log(`  Seed：${SEED_DIR}${fs.existsSync(SEED_DIR) ? "" : "（未提供，跳过导入）"}`);
+  if (PROXY) log(`  代理：${PROXY}`);
 
-  const appDir = path.resolve(process.env.DESK_APP_DIR || path.join(HOME, "app"));
-  const seedDir = path.resolve(process.env.DESK_SEED_DIR || path.join(HOME, "seed"));
-  const settings = { appDir, seedDir };
-  if (PROXY) log(`  系统代理 ${PROXY}（git/npm 会走它）`);
+  const total = mode === "interview" ? 6 : 5;
+  try {
+    await runStep(1, total, "检查运行环境", () => checkNode(mode));
+    process.stdout.write(`\n[2/${total}] 检查功能更新\n`);
+    const update = await ensureUpToDate({ appDir: APP_DIR });
+    log(`      完成（${update.detail}）`);
+    if (update.bootstrapChanged) return restartWithUpdatedBootstrap(mode, update.remote);
 
-  const steps = [
-    ["检查运行环境", () => checkNode()],
-    ["检查更新", () => ensureUpToDate(settings)],
-    ["安装依赖", () => ensureDeps(settings)],
-    ["构建面试台", () => ensureBuild(settings)],
-    // ensurePrivate 是同步的；await 一个普通值也能正常工作，不必包 Promise
-    ["初始化个人目录", () => ensurePrivate(settings)],
-    ["配置模型密钥", () => ensureEnv(settings)],
-  ];
+    await runStep(3, total, "安装依赖", () => ensureDependencies(mode, APP_DIR));
+    await runStep(4, total, "导入 Seed", () => ensurePrivate({ appDir: APP_DIR, seedDir: SEED_DIR }));
+    const env = initializeEnv({ appDir: APP_DIR, seedDir: SEED_DIR });
+    if (env.imported) log(`      从 seed 导入 ${env.imported} 项面试台配置（配置值未写入日志）`);
 
-  for (const [index, [title, action]] of steps.entries()) {
-    step(index + 1, steps.length + 1, title);
-    try {
-      const detail = await action();
-      log(`      完成${detail ? `（${detail}）` : ""}`);
-    } catch (error) {
-      log(`\n✗ 卡在「${title}」：${error.message}`);
-      log(`  详细日志：${LOG_FILE}`);
-      log(`  常见原因：网络/代理不通、磁盘空间不足、目录被占用。`);
-      return 1;
+    if (mode === "interview") {
+      await runStep(5, total, "检查模型配置", () => ensureInterviewKey(env.envFile));
     }
+
+    process.stdout.write(`\n[${total}/${total}] 启动热更新服务\n`);
+    const service = await startMode(mode, APP_DIR);
+    log("      等待服务就绪...");
+    const ready = await waitForHttp(service.url);
+    log(ready ? `      ${service.label}已就绪：${service.url}` : `      服务尚未响应，请稍后手动访问 ${service.url}`);
+    writeState({ [`${mode}LastRun`]: new Date().toISOString(), appDir: APP_DIR, seedDir: SEED_DIR });
+    openBrowser(service.url);
+  } catch (error) {
+    log(`\n✗ 启动失败：${error.message}`);
+    log(`  详细日志：${LOG_FILE}`);
+    stopAll();
+    return 1;
   }
 
-  step(steps.length + 1, steps.length + 1, "启动服务");
-  await startAll(settings);
-
-  writeState({ lastRun: new Date().toISOString(), appDir });
-
-  log("");
-  log("============================================");
-  log(`  面试台  http://127.0.0.1:${VITE_PORT}`);
-  log(`  博客    http://127.0.0.1:${BLOG_PORT}`);
-  log("============================================");
-  log("  这个窗口不要关，关掉服务就停了。");
-  openBrowser(`http://127.0.0.1:${VITE_PORT}/`);
-
+  if (!children.length) return 0;
+  log("  保持此窗口开启；关闭窗口会停止本次启动的服务。");
   process.on("SIGINT", () => { stopAll(); process.exit(0); });
-  return new Promise(() => {});   // 挂着不退，等服务自然结束
+  process.on("SIGTERM", () => { stopAll(); process.exit(0); });
+  return new Promise(() => {});
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
-if (isMain) {
-  main().then((code) => { if (typeof code === "number") process.exit(code); });
-}
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(SELF_FILE);
+if (isMain) main().then((code) => { if (typeof code === "number") process.exitCode = code; });
 
-export { checkNode, copyMissing, ensurePrivate, ensureUpToDate, lockFingerprint, newestMtime, portBusy, SYNC_PATHS };
+export {
+  APP_DIR,
+  SEED_DIR,
+  SYNC_PATHS,
+  checkNode,
+  copyMissing,
+  ensurePrivate,
+  envEntries,
+  httpsUrlOf,
+  mergeEnvContent,
+  sshUrlOf,
+};
