@@ -118,6 +118,8 @@ async function load(file = "") {
 async function switchFile(file: string) {
   if (!file || file === currentFile.value) return;
   if (dirty.value && !window.confirm(`「${nameOf(currentFile.value)}」还有未保存的改动，切换会丢掉，确定吗？`)) return;
+  chatLog.value = [];
+  instruction.value = "";
   await load(file);
 }
 
@@ -156,7 +158,8 @@ async function revise() {
   // 先对齐磁盘：模型必须基于"文件里现在真实的内容"改写，否则一保存就把外面的改动盖掉了
   try { await syncFromDisk(); } catch { /* 读不到就按内存里的走，别为此拦住 */ }
   // 先把历史快照出来再推入这句——否则历史里会多一条和这次重复的「他」说的话
-  const history = chatLog.value.slice();
+  // 当前正文已包含更早改动，只保留最近 6 轮用于指代消解，避免上下文无限增长。
+  const history = chatLog.value.slice(-12);
   chatLog.value.push({ role: "user", text: ask });
   instruction.value = "";
   revising.value = true;

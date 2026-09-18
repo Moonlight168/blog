@@ -8,11 +8,12 @@ import { InterviewAgent } from "./agent.mjs";
 import { createArchive, refileQuestion } from "./archive.mjs";
 import { asrEnabled, transcribe } from "./asr.mjs";
 import { config } from "./config.mjs";
-import { addMessage, openDatabase, rowToSession, saveSession } from "./db.mjs";
+import { addMessage, agentHistory, agentMemory, openDatabase, rowToSession, saveAgentMemory, saveSession } from "./db.mjs";
 import { EmbeddingClient } from "./embedding-client.mjs";
 import { ensurePlan, focusPayload, resumeSlice, takeFocuses } from "./focus-plan.mjs";
 import { readHistorySection } from "./history.mjs";
-import { InterviewEngine } from "./interview-engine.mjs";
+import { advanceInterview, handleInterviewMessage } from "./interview-flow.mjs";
+import { compactHistoryText, PiInteractionAgent } from "./pi-interaction-agent.mjs";
 import { QuestionIndex } from "./question-index.mjs";
 import { pickPath } from "./picker.mjs";
 import { listRealInterviews, readRealInterview } from "./real-interview.mjs";
@@ -34,7 +35,36 @@ fs.watch(config.knowledgeRoot, { recursive: true }, (_event, filename) => {
   refreshTimer = setTimeout(() => questionIndex.refresh().catch((error) => console.error("题库热更新失败", error)), 350);
 });
 const agent = new InterviewAgent({ config: config.chat, questionIndex });
-const archive = createArchive({ questionIndex, agent, knowledgeRoot: config.knowledgeRoot, privateHistoryRoot: config.privateHistoryRoot, db });
+const piAgent = new PiInteractionAgent({ config: config.chat, questionIndex });
+const archiveWriter = createArchive({ questionIndex, agent, knowledgeRoot: config.knowledgeRoot, privateHistoryRoot: config.privateHistoryRoot, db });
+let archiveTail = Promise.resolve();
+async function acquireArchiveLock() {
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  const previous = archiveTail;
+  archiveTail = current;
+  await previous;
+  return release;
+}
+async function archive(input) {
+  const release = await acquireArchiveLock();
+  let settled = false;
+  const unlock = () => { if (!settled) { settled = true; release(); } };
+  try {
+    const result = await archiveWriter(input);
+    return {
+      ...result,
+      commit: unlock,
+      rollback: async () => {
+        try { await result?.rollback?.(); }
+        finally { unlock(); }
+      },
+    };
+  } catch (error) {
+    unlock();
+    throw error;
+  }
+}
 function listAttempts(sessionId) {
   return db.prepare("SELECT question_title AS title, evaluation FROM attempts WHERE session_id=? ORDER BY id").all(sessionId)
     .map((row) => {
@@ -48,6 +78,19 @@ function listAttempts(sessionId) {
         };
       } catch { return { title: row.title, score: 0, comment: "" }; }
     });
+}
+
+function persistTurn(session, userContent, messages) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    if (userContent !== null) addMessage(db, session.id, { role: "user", kind: "text", content: userContent });
+    saveSession(db, session);
+    messages.forEach((message) => addMessage(db, session.id, message));
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 /** 每场面试的「题目数 / 已归档题目数 / 场均分」，列表和详情都用它，避免两处算法不一致。 */
 function attemptStats(sessionIds) {
@@ -70,8 +113,6 @@ function averageScore(scores = []) {
   return scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null;
 }
 
-// 总评要拿到本场逐题得分，否则只能生成空泛的鼓励
-const engine = new InterviewEngine({ agent, archive, listAttempts });
 const sessionLocks = new Set();
 
 function json(response, status, value) {
@@ -179,6 +220,25 @@ async function prepareGeneration(session, count = 1) {
 function messagesFor(sessionId) {
   return db.prepare("SELECT id,role,kind,content,payload,created_at AS createdAt FROM messages WHERE session_id=? ORDER BY id").all(sessionId)
     .map((row) => ({ ...row, payload: row.payload ? JSON.parse(row.payload) : null }));
+}
+
+async function conversationContext(sessionId, signal) {
+  const memory = agentMemory(db, sessionId);
+  const rows = agentHistory(db, sessionId, memory.throughMessageId);
+  let state = compactHistoryText(rows, memory.summary);
+  if (!state.compacted || rows.length <= 8) return state.context;
+
+  const older = rows.slice(0, -8);
+  let summary;
+  try {
+    summary = await piAgent.compact(older, memory.summary, signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    console.warn(`会话 ${sessionId} 上下文压缩失败，使用裁剪兜底`, error);
+    summary = compactHistoryText(older, memory.summary, 8_000).context;
+  }
+  saveAgentMemory(db, sessionId, summary, older.at(-1).id);
+  return compactHistoryText(rows.slice(-8), summary).context;
 }
 
 async function api(request, response, url) {
@@ -359,6 +419,7 @@ async function api(request, response, url) {
   if (request.method === "POST" && messageMatch) {
     if (sessionLocks.has(messageMatch[1])) return json(response, 409, { error: "当前会话正在处理上一条消息，请稍后重试" });
     sessionLocks.add(messageMatch[1]);
+    let streamResponse = false;
     try {
     const session = rowToSession(db.prepare("SELECT * FROM sessions WHERE id=?").get(messageMatch[1]));
     if (!session) return json(response, 404, { error: "面试记录不存在" });
@@ -367,6 +428,15 @@ async function api(request, response, url) {
     if (session.status === "paused") return json(response, 409, { error: "面试已暂停，请先点「继续」" });
     if (session.status !== "active") return json(response, 409, { error: "面试已结束" });
     const input = await body(request);
+    streamResponse = input.stream === true;
+    const requestController = new AbortController();
+    request.once("aborted", () => requestController.abort());
+    response.once("close", () => { if (!response.writableEnded) requestController.abort(); });
+    const emit = (event) => {
+      if (!streamResponse || response.destroyed || response.writableEnded) return;
+      if (!response.headersSent) response.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", Connection: "keep-alive" });
+      response.write(`${JSON.stringify(event)}\n`);
+    };
     // 界面上「下一题」「结束」是按钮，直接指定动作，不经模型判断
     const action = input.action === "next" || input.action === "end" ? input.action : null;
     const content = String(input.content ?? "").trim();
@@ -374,13 +444,33 @@ async function api(request, response, url) {
 
     // 只有「下一题」会出题；出题前把已问过的题和本轮考点挂到 session 上供提示词使用
     if (action === "next") await prepareGeneration(session, 1);
+    const history = action ? "" : await conversationContext(session.id, requestController.signal);
+    const wasExpired = !action && expired(session);
     const result = action
-      ? await engine.advance(session, action === "end")
-      : await engine.handle(session, expired(session) ? "结束" : content);
-    if (!action) addMessage(db, session.id, { role: "user", kind: "text", content });
-    saveSession(db, result.session);
-    result.messages.forEach((message) => addMessage(db, session.id, message));
-    return json(response, 200, { session: result.session, messages: messagesFor(session.id) });
+      ? await advanceInterview({ session, ending: action === "end", agent, listAttempts })
+      : await handleInterviewMessage({ session, text: content, piAgent, agent, archive, listAttempts, history, onEvent: emit, signal: requestController.signal });
+    try {
+      if (wasExpired && result.session.status === "active") {
+        const ended = await advanceInterview({ session: result.session, ending: true, agent, listAttempts });
+        result.messages.push(...ended.messages);
+      }
+      persistTurn(result.session, action ? null : content, result.messages);
+      result.commitArchive?.();
+    }
+    catch (error) {
+      await result.rollbackArchive?.();
+      throw error;
+    }
+    const payload = { session: result.session, messages: messagesFor(session.id) };
+    if (streamResponse) { emit({ type: "result", data: payload }); response.end(); return; }
+    return json(response, 200, payload);
+    } catch (error) {
+      if (streamResponse) {
+        if (!response.headersSent) response.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" });
+        response.end(`${JSON.stringify({ type: "error", error: error.message || "AI 处理失败" })}\n`);
+        return;
+      }
+      throw error;
     } finally { sessionLocks.delete(messageMatch[1]); }
   }
   // 暂停 / 继续：只改会话状态与暂停计时，不调用模型
@@ -411,6 +501,7 @@ async function api(request, response, url) {
     if (!session) return json(response, 404, { error: "面试记录不存在" });
     db.prepare("DELETE FROM messages WHERE session_id=?").run(session.id);
     db.prepare("DELETE FROM attempts WHERE session_id=?").run(session.id);
+    db.prepare("DELETE FROM agent_memories WHERE session_id=?").run(session.id);
     db.prepare("DELETE FROM sessions WHERE id=?").run(session.id);
     return json(response, 200, { discarded: true });
   }
@@ -601,10 +692,14 @@ async function api(request, response, url) {
     if (!standardAnswer) return json(response, 400, { error: "这题的标准答案没有留存，无法补录" });
 
     try {
-      const result = await refileQuestion({
-        agent, questionIndex, knowledgeRoot: config.knowledgeRoot, privateHistoryRoot: config.privateHistoryRoot,
-        chapterPath: session.chapterPath, title: attempt.question_title, standardAnswer,
-      });
+      const release = await acquireArchiveLock();
+      let result;
+      try {
+        result = await refileQuestion({
+          agent, questionIndex, knowledgeRoot: config.knowledgeRoot, privateHistoryRoot: config.privateHistoryRoot,
+          chapterPath: session.chapterPath, title: attempt.question_title, standardAnswer,
+        });
+      } finally { release(); }
       if (!result.ok) return json(response, 400, { error: `补录失败：${result.reason}` });
       if (!attempt.standard_answer) db.prepare("UPDATE attempts SET standard_answer=? WHERE id=?").run(standardAnswer, attempt.id);
       return json(response, 200, { historyUrl: result.historyUrl, sourcePath: session.chapterPath });
@@ -699,9 +794,8 @@ setInterval(async () => {
     if (!expired(session) || sessionLocks.has(session.id)) continue;
     sessionLocks.add(session.id);
     try {
-      const result = await engine.handle(session, "结束");
-      saveSession(db, result.session);
-      result.messages.forEach((message) => addMessage(db, session.id, message));
+      const result = await advanceInterview({ session, ending: true, agent, listAttempts });
+      persistTurn(result.session, null, result.messages);
     } catch (error) {
       console.error(`会话 ${session.id} 自动结束失败`, error);
     } finally { sessionLocks.delete(session.id); }

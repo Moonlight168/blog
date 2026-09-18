@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { InterviewEngine } from "../server/interview-engine.mjs";
+import { advanceInterview, handleInterviewMessage } from "../server/interview-flow.mjs";
 
 const QUESTION = { title: "当前题？", standardAnswer: "**锚点**：`短句`\n\n1. **要点**：短句" };
 const session = () => ({ id: "s1", status: "active", currentQuestion: { ...QUESTION } });
@@ -16,20 +16,25 @@ function makeEngine({
   attempts = [],
 } = {}) {
   const calls = [];
-  const engine = new InterviewEngine({
-    agent: {
-      async classify() { calls.push("classify"); return { action: classifyAction }; },
-      async evaluate() { calls.push("evaluate"); return evaluateResult; },
+  const agent = {
       async answerFollowup() { calls.push("answerFollowup"); return "答疑内容"; },
       async generateQuestion() {
         calls.push("generateQuestion");
         return { title: "下一题？", prompt: "下一题？", standardAnswer: "1. **要点**：x" };
       },
       async summarize() { calls.push("summarize"); return summarizeResult; },
-    },
-    archive: async () => { calls.push("archive"); if (archiveError) throw archiveError; return archiveResult; },
-    listAttempts: (id) => { calls.push("listAttempts:" + id); return attempts; },
-  });
+  };
+  const piAgent = { async run() {
+    calls.push("piAgent");
+    return classifyAction === "followup" ? { action: "followup", reply: "答疑内容" } : { action: "answer", evaluation: evaluateResult };
+  } };
+  const archive = async () => { calls.push("archive"); if (archiveError) throw archiveError; return archiveResult; };
+  const listAttempts = (id) => { calls.push("listAttempts:" + id); return attempts; };
+  const engine = {
+    handle: (target, text) => handleInterviewMessage({ session: target, text, piAgent, agent, archive, listAttempts }),
+    advance: (target, ending) => advanceInterview({ session: target, ending, agent, listAttempts }),
+    listAttempts,
+  };
   return { engine, calls };
 }
 
@@ -37,7 +42,7 @@ test("一条消息就是一次回答：立刻点评，并给出标准答案", as
   const { engine, calls } = makeEngine();
   const result = await engine.handle(session(), "我答的是这样的");
 
-  assert.deepEqual(calls, ["classify", "evaluate", "archive"], "回答要立刻点评并归档，不再等「下一题」");
+  assert.deepEqual(calls, ["piAgent", "archive"], "回答要由 Pi Agent 一次判断并点评，然后归档");
   assert.deepEqual(result.messages.map((m) => m.kind), ["evaluation", "answer"]);
   assert.equal(result.messages[1].content, QUESTION.standardAnswer, "要把宝典规范格式的标准答案讲出来");
   assert.equal(result.session.completedCount, 1);
@@ -47,7 +52,7 @@ test("说「不知道」和普通回答走同一条路，只是分数低", async
   const { engine, calls } = makeEngine({ evaluateResult: { score: 0, comment: "这题没答上来，正常" } });
   const result = await engine.handle(session(), "这个不太清楚");
 
-  assert.deepEqual(calls, ["classify", "evaluate", "archive"], "「不知道」也是一次回答，照样点评归档");
+  assert.deepEqual(calls, ["piAgent", "archive"], "「不知道」也是一次回答，照样点评归档");
   assert.deepEqual(result.messages.map((m) => m.kind), ["evaluation", "answer"]);
   assert.equal(result.messages[0].evaluation.score, 0);
 });
@@ -62,7 +67,7 @@ test("追问只答疑，不点评不归档", async () => {
   const { engine, calls } = makeEngine({ classifyAction: "followup" });
   const result = await engine.handle(session(), "那 G1 和 CMS 有什么区别？");
 
-  assert.deepEqual(calls, ["classify", "answerFollowup"]);
+  assert.deepEqual(calls, ["piAgent"]);
   assert.deepEqual(result.messages.map((m) => m.kind), ["followup"]);
   assert.equal(result.session.completedCount, undefined);
 });

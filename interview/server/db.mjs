@@ -40,6 +40,10 @@ export function openDatabase(file) {
       key TEXT PRIMARY KEY, kind TEXT NOT NULL, plan TEXT NOT NULL,
       cursor INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS agent_memories (
+      session_id TEXT PRIMARY KEY, summary TEXT NOT NULL DEFAULT '',
+      through_message_id INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
+    );
   `);
   const columns = new Set(db.prepare("PRAGMA table_info(sessions)").all().map((row) => row.name));
   // 目标 JD：出题与总评都会带上它
@@ -91,4 +95,21 @@ export function saveSession(db, session) {
 export function addMessage(db, sessionId, message) {
   db.prepare("INSERT INTO messages(session_id,role,kind,content,payload,created_at) VALUES(?,?,?,?,?,?)")
     .run(sessionId, message.role, message.kind || "text", message.content, JSON.stringify(message.payload ?? message.evaluation ?? null), new Date().toISOString());
+}
+
+export function agentMemory(db, sessionId) {
+  return db.prepare("SELECT summary,through_message_id AS throughMessageId FROM agent_memories WHERE session_id=?").get(sessionId)
+    ?? { summary: "", throughMessageId: 0 };
+}
+
+export function saveAgentMemory(db, sessionId, summary, throughMessageId) {
+  db.prepare(`INSERT INTO agent_memories(session_id,summary,through_message_id,updated_at) VALUES(?,?,?,?)
+    ON CONFLICT(session_id) DO UPDATE SET summary=excluded.summary,
+      through_message_id=excluded.through_message_id,updated_at=excluded.updated_at`)
+    .run(sessionId, summary, throughMessageId, new Date().toISOString());
+}
+
+export function agentHistory(db, sessionId, afterId = 0) {
+  return db.prepare(`SELECT id,role,kind,content FROM messages
+    WHERE session_id=? AND id>? ORDER BY id`).all(sessionId, afterId);
 }

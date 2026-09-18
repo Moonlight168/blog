@@ -35,6 +35,7 @@ const pdfError = ref("");
 const versions = ref<string[]>([]);
 const cursor = ref(-1);
 let snapshotTimer = 0;
+let previewQueued = false;
 
 /** 预览栏是否切到编辑态 */
 const editing = ref(false);
@@ -53,8 +54,22 @@ function pushVersion(value: string) {
   cursor.value = versions.value.length - 1;
 }
 function flushVersion() { window.clearTimeout(snapshotTimer); pushVersion(html.value); }
-function undo() { flushVersion(); if (canUndo.value) { cursor.value -= 1; html.value = versions.value[cursor.value]; } }
-function redo() { flushVersion(); if (canRedo.value) { cursor.value += 1; html.value = versions.value[cursor.value]; } }
+async function undo() {
+  flushVersion();
+  if (!canUndo.value) return;
+  cursor.value -= 1;
+  html.value = versions.value[cursor.value];
+  stalePreview.value = true;
+  await refreshPdf();
+}
+async function redo() {
+  flushVersion();
+  if (!canRedo.value) return;
+  cursor.value += 1;
+  html.value = versions.value[cursor.value];
+  stalePreview.value = true;
+  await refreshPdf();
+}
 function onInput(event: Event) {
   html.value = (event.target as HTMLTextAreaElement).value;
   stalePreview.value = true;
@@ -107,6 +122,8 @@ async function switchPerson(id: string) {
 async function switchFile(next: string) {
   if (!next || next === file.value) return;
   if (dirty.value && !window.confirm("当前简历还有未保存的改动，切换会丢掉，确定吗？")) return;
+  chatLog.value = [];
+  instruction.value = "";
   await load(next);
 }
 
@@ -137,10 +154,10 @@ async function syncFromDisk() {
 /**
  * 生成预览用的 PDF。
  * 每次约 2～3 秒（Chrome 的打印排版本身就这么慢），所以不做逐键实时，
- * 由「刷新预览」按钮和保存动作触发。
+ * 由刷新按钮、保存、撤销/重做和 AI 改写触发；手工逐键输入仍不触发。
  */
 async function refreshPdf() {
-  if (rendering.value) return;
+  if (rendering.value) { previewQueued = true; return; }
   rendering.value = true;
   pdfError.value = "";
   try {
@@ -167,6 +184,10 @@ async function refreshPdf() {
     pdfError.value = (error as Error).message;
   } finally {
     rendering.value = false;
+    if (previewQueued) {
+      previewQueued = false;
+      void refreshPdf();
+    }
   }
 }
 
@@ -336,7 +357,8 @@ async function revise() {
   // 先对齐磁盘：模型必须基于"文件里现在真实的内容"改写，否则一保存就把外面的改动盖掉了
   try { await syncFromDisk(); } catch { /* 读不到就按内存里的走，别为此拦住 */ }
   // 先把历史快照出来再推入这句——否则历史里会多一条和这次重复的「他」说的话
-  const history = chatLog.value.slice();
+  // 当前 HTML 已包含更早改动，只保留最近 6 轮用于指代消解，避免上下文无限增长。
+  const history = chatLog.value.slice(-12);
   chatLog.value.push({ role: "user", text: ask });
   instruction.value = "";
   revising.value = true;
@@ -351,11 +373,12 @@ async function revise() {
       pushVersion(data.html);
       stalePreview.value = true;
       editing.value = false;
+      await refreshPdf();
     }
     chatLog.value.push({
       role: "assistant",
       action: data.action,
-      text: data.reply || (data.action === "revise" ? "改好了，点「刷新预览」看效果。" : "（模型这次没给出内容）"),
+      text: data.reply || (data.action === "revise" ? "改好了，预览已同步更新。" : "（模型这次没给出内容）"),
     });
   } catch (error) {
     chatLog.value.push({ role: "assistant", text: `这次没成功：${(error as Error).message}`, error: true });

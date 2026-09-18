@@ -23,6 +23,16 @@ function restoreFile(file, existed, content) {
   else if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 
+function restoreFileIfUnchanged(file, written, existed, original) {
+  if (written === null) return;
+  const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  if (current !== written) {
+    console.warn(`跳过归档回滚，文件已被其他操作修改：${file}`);
+    return;
+  }
+  restoreFile(file, existed, original);
+}
+
 export function mergeHistory(markdown, { chapter, title, date, rawAnswer }) {
   const header = markdown.trim() ? markdown.trimEnd() : `# ${chapter} 面试答题记录\n\n---`;
   const entry = `- **${date}**：${rawAnswer.replace(/\s+/g, " ").trim()}`;
@@ -214,6 +224,8 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
     const historyNext = mergeHistory(historyOriginal, { chapter, title: existing?.title ?? question.title, date, rawAnswer });
     let attemptId = null;
     let notice = null;
+    let publicWritten = null;
+    let historyWritten = null;
     try {
       if (!existing) {
         const written = await writeQuestionBlock({
@@ -226,21 +238,32 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
           console.warn(`题目未写入知识库（${sourceRelative}）：${written.reason}`);
         }
       }
+      publicWritten = fs.existsSync(sourceFile) ? fs.readFileSync(sourceFile, "utf8") : null;
       fs.mkdirSync(path.dirname(history.file), { recursive: true });
       const historyTemp = `${history.file}.${process.pid}.tmp`;
       fs.writeFileSync(historyTemp, historyNext, "utf8");
       fs.renameSync(historyTemp, history.file);
+      historyWritten = historyNext;
       const inserted = db.prepare("INSERT INTO attempts(session_id,question_title,raw_answer,evaluation,created_at,attempt_key,standard_answer) VALUES(?,?,?,?,?,?,?)")
         .run(session.id, question.title, rawAnswer, JSON.stringify(evaluation), new Date().toISOString(), attemptKey, question.standardAnswer ?? "");
       attemptId = inserted.lastInsertRowid;
       await questionIndex.refresh();
     } catch (error) {
-      restoreFile(sourceFile, publicExisted, publicBefore);
-      restoreFile(history.file, historyExisted, historyOriginal);
+      restoreFileIfUnchanged(sourceFile, publicWritten, publicExisted, publicBefore);
+      restoreFileIfUnchanged(history.file, historyWritten, historyExisted, historyOriginal);
       if (attemptId !== null) db.prepare("DELETE FROM attempts WHERE id=?").run(attemptId);
       await questionIndex.refresh().catch(() => {});
       throw error;
     }
-    return notice ? { notice } : {};
+    let rolledBack = false;
+    const rollback = async () => {
+      if (rolledBack) return;
+      rolledBack = true;
+      restoreFileIfUnchanged(sourceFile, publicWritten, publicExisted, publicBefore);
+      restoreFileIfUnchanged(history.file, historyWritten, historyExisted, historyOriginal);
+      if (attemptId !== null) db.prepare("DELETE FROM attempts WHERE id=?").run(attemptId);
+      await questionIndex.refresh().catch(() => {});
+    };
+    return { ...(notice ? { notice } : {}), rollback };
   };
 }

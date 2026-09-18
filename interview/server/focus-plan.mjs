@@ -9,11 +9,16 @@
 
 const MAX_FOCUS = 18;
 
-/** 计划的键：换简历或换 JD 就是另一条进度线 */
+import { createHash } from "node:crypto";
+
+/** 计划的键：路径或内容变化都是另一条进度线，避免同路径文件更新后继续使用旧考点。 */
 export function planKey(session) {
+  const version = createHash("sha256")
+    .update(`${session.resumeExcerpt ?? ""}\0${session.jdExcerpt ?? ""}\0${session.skillSnapshot ?? ""}`)
+    .digest("hex").slice(0, 12);
   return session.mode === "jd"
-    ? `jd|${session.resumePath}|${session.jdPath ?? ""}`
-    : `chapter|${session.resumePath}|${session.chapterPath}`;
+    ? `jd|${session.resumePath}|${session.jdPath ?? ""}|${version}`
+    : `chapter|${session.resumePath}|${session.chapterPath}|${version}`;
 }
 
 /** 章节模式的考点表：直接拿题库里这一章已有的题目标题（0 成本，不调模型） */

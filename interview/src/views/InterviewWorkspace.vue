@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NAlert, NButton, NCard, NEmpty, NInput, NModal, NSelect, NSpin, NSwitch, NTag, useMessage } from "naive-ui";
-import { api } from "../api";
+import { api, apiStream } from "../api";
 import { renderMarkdown } from "../markdown";
 import type { Chapter, Message, Session, TopicSeries } from "../types";
 
@@ -9,6 +9,8 @@ const toast = useMessage();
 // 模型输出一律按 markdown 渲染（含中文紧贴加粗的处理，见 src/markdown.ts）
 const loading = ref(true);
 const sending = ref(false);
+const aiStage = ref("");
+const activeRequest = ref<AbortController | null>(null);
 const resumeDir = ref("");
 const savingDir = ref(false);
 const resumes = ref<{ name: string; path: string; dir: string }[]>([]);
@@ -667,15 +669,42 @@ async function start() {
 async function submit(body: Record<string, unknown>, restoreDraft?: () => void) {
   if (!session.value || sending.value) return false;
   sending.value = true;
+  let streamedText = "";
   try {
-    const data = await api<{ session: Session; messages: Message[] }>(`/api/sessions/${session.value.id}/messages`, { method: "POST", body: JSON.stringify(body) });
+    aiStage.value = "AI 正在理解你的消息…";
+    activeRequest.value = body.action ? null : new AbortController();
+    const data = await apiStream<{ session: Session; messages: Message[] }>(`/api/sessions/${session.value.id}/messages`, {
+      method: "POST", body: JSON.stringify({ ...body, stream: true }), signal: activeRequest.value?.signal,
+    }, (event) => {
+      if (event.type === "stage") aiStage.value = event.stage === "searching" ? "AI 正在查询相关资料…" : event.stage === "archiving" ? "正在保存本次回答…" : "AI 正在处理…";
+      if (event.type === "tool") aiStage.value = event.name === "search_context" ? "AI 正在查询相关资料…" : "AI 正在整理结果…";
+      if (event.type === "draft" && event.content) {
+        streamedText = event.content;
+        messages.value = [...messages.value.filter((item) => !item.pending), {
+          role: "assistant", kind: event.kind || "followup", content: streamedText, pending: true,
+        }];
+        void scrollBottom();
+      }
+      if (event.type === "evaluation" && event.evaluation) {
+        messages.value = [...messages.value.filter((item) => !item.pending), {
+          role: "assistant", kind: "evaluation", content: event.evaluation.comment,
+          evaluation: event.evaluation, pending: true,
+        }];
+        void scrollBottom();
+      }
+    });
     session.value = data.session; messages.value = data.messages;
     // 暂停中的会话刷新后要能接着暂停，所以只有真正结束才清掉
     if (!["active", "paused"].includes(data.session.status)) localStorage.removeItem("interview-session");
     await scrollBottom();
     return true;
-  } catch (error) { restoreDraft?.(); toast.error((error as Error).message); return false; }
-  finally { sending.value = false; }
+  } catch (error) {
+    messages.value = messages.value.filter((item) => !item.pending);
+    restoreDraft?.();
+    toast.error((error as Error).name === "AbortError" ? "已取消本次 AI 处理" : (error as Error).message);
+    return false;
+  }
+  finally { sending.value = false; aiStage.value = ""; activeRequest.value = null; }
 }
 
 async function send(value = draft.value) {
@@ -752,7 +781,7 @@ onMounted(async () => {
     if (active.value && secondsLeft.value === 0) void syncExpiredSession();
   }, 1000);
 });
-onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak(); });
+onBeforeUnmount(() => { window.clearInterval(timer); activeRequest.value?.abort(); releaseSpace(); stopSpeak(); });
 </script>
 
 <template>
@@ -857,6 +886,8 @@ onBeforeUnmount(() => { window.clearInterval(timer); releaseSpace(); stopSpeak()
         <div class="composer-foot">
           <span>Enter 发送 · Shift + Enter 换行 · 长按空格语音输入</span>
           <div class="composer-actions">
+            <span v-if="aiStage" class="muted">{{ aiStage }}</span>
+            <n-button v-if="activeRequest" size="small" tertiary @click="activeRequest?.abort()">取消 AI</n-button>
             <n-button :disabled="!session || finished || sending" :loading="pausing" @click="togglePause">{{ paused ? '继续' : '暂停' }}</n-button>
             <n-button :disabled="!active || sending || pausing" @click="endConfirmOpen = true">结束</n-button>
             <n-button :disabled="!active || sending || pausing" @click="act('next')">下一题</n-button>

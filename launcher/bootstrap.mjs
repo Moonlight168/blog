@@ -150,7 +150,7 @@ function run(command, args, cwd = APP_DIR) {
 
 function checkNode(mode) {
   const [major, minor] = process.versions.node.split(".").map(Number);
-  const required = mode === "interview" ? [22, 5] : [20, 19];
+  const required = mode === "interview" ? [22, 19] : [20, 19];
   if (major < required[0] || (major === required[0] && minor < required[1])) {
     throw new Error(`Node 版本过低（当前 v${process.versions.node}），${mode === "interview" ? "面试台" : "博客"}需要 ${required.join(".")}+`);
   }

@@ -82,25 +82,30 @@ export class InterviewAgent {
    * 没有这层重试，用户会在对话框里看到「这次没成功：模型未返回 JSON 对象」，
    * 而且是碰运气式的——同一句话有时行有时不行，最难排查。
    */
-  async #chat(messages, temperature = STABLE_TEMPERATURE) {
+  async #chat(messages, temperature = STABLE_TEMPERATURE, options = {}) {
     let lastError;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
-        return await this.#chatOnce(messages, temperature);
+        return await this.#chatOnce(messages, temperature, { ...options, attempt });
       } catch (error) {
         lastError = error;
+        console.warn(JSON.stringify({ event: "ai_interaction", operation: options.operation ?? "chat", status: "error", attempt, retryable: error.retryable !== false }));
+        if (error.retryable === false) break;
       }
     }
     throw lastError;
   }
 
   /** 真正发请求的那一次；重试策略在 #chat 里 */
-  async #chatOnce(messages, temperature = STABLE_TEMPERATURE) {
+  async #chatOnce(messages, temperature = STABLE_TEMPERATURE, { operation = "chat", maxTokens = 1_600, attempt = 1 } = {}) {
     if (!this.config.baseUrl || !this.config.apiKey || !this.config.model) {
       throw new Error("尚未配置 INTERVIEW_CHAT_BASE_URL / API_KEY / MODEL");
     }
     const url = apiUrl(this.config.baseUrl, "chat/completions");
+    const startedAt = Date.now();
     let response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
     try {
       response = await fetch(url, {
         method: "POST",
@@ -109,22 +114,36 @@ export class InterviewAgent {
           model: this.config.model,
           temperature,
           response_format: { type: "json_object" },
+          max_tokens: maxTokens,
           messages,
         }),
+        signal: controller.signal,
       });
     } catch (error) {
+      if (error?.name === "AbortError") {
+        const timeout = new Error("对话模型响应超时，请重试");
+        timeout.retryable = true;
+        throw timeout;
+      }
       // 网络不可用：别把 undici 的 "fetch failed" 直接甩给用户
       throw new Error(friendlyNetworkError(error, { what: "对话模型服务", url }) ?? error.message);
-    }
+    } finally { clearTimeout(timer); }
     if (!response.ok) {
-      throw new Error(`对话模型返回 HTTP ${response.status}${httpStatusHint(response.status)}：${(await response.text()).slice(0, 300)}`);
+      const error = new Error(`对话模型返回 HTTP ${response.status}${httpStatusHint(response.status)}：${(await response.text()).slice(0, 300)}`);
+      error.retryable = response.status === 429 || response.status >= 500;
+      throw error;
     }
     let payload;
     try { payload = await response.json(); }
     catch { throw new Error("对话模型返回的不是合法 JSON（可能网络中断），请重试"); }
     const content = payload.choices?.[0]?.message?.content ?? "";
     try {
-      return parseJson(content);
+      const result = parseJson(content);
+      console.info(JSON.stringify({
+        event: "ai_interaction", operation, promptVersion: `${operation}-v1`, model: this.config.model,
+        durationMs: Date.now() - startedAt, attempt, usage: payload.usage ?? null,
+      }));
+      return result;
     } catch (error) {
       // 把原文挂上：调用方要能分清「模型压根没按 JSON 回」和「JSON 坏了」——
       // 前者是可以兜的（它就是说了段话），后者只能报错。
@@ -134,18 +153,8 @@ export class InterviewAgent {
   }
 
   /** 单轮的便捷写法：一段系统提示 + 一句用户话 */
-  async #json(system, user, temperature = STABLE_TEMPERATURE) {
-    return this.#chat([{ role: "system", content: system }, { role: "user", content: user }], temperature);
-  }
-
-  async classify({ session, text }) {
-    return this.#json(
-      `判断候选人这条消息是「回答」还是「追问」，只返回 JSON：{"action":"answer|followup"}。`
-      + `疑问句、求解释、要例子、问范围（如“这里指生产环境吗”“G1 和 CMS 有什么区别”）属于 followup；`
-      + `陈述对当前题的理解，或表态“不会/不知道/没接触过”，属于 answer。`
-      + `两者都像时判 followup——宁可少记一次回答，也不要把提问当成回答写进答题历史。`,
-      `当前题：${session.currentQuestion.title}\n候选人消息：${text}`,
-    );
+  async #json(system, user, temperature = STABLE_TEMPERATURE, options = {}) {
+    return this.#chat([{ role: "system", content: system }, { role: "user", content: user }], temperature, options);
   }
 
   /**
@@ -166,13 +175,13 @@ export class InterviewAgent {
       + `只讲简历里真有的经历，不编；没有的就如实说没有，再把话题转到自己真做过的事上。\n`
       + `只返回 JSON：{"title":"以？结尾的问题","prompt":"向候选人展示的问题","standardAnswer":"标准答案"}。`;
     const user = `面试模式：人事面试（行为面）\n`
-      + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
+      + (session.jdExcerpt ? `目标岗位 JD 摘要：\n${session.jdExcerpt.slice(0, 2_000)}\n` : "")
       + resumeBlock(session)
       + focusBlock(session.nextFocus)
       + askedBlock(session);
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const result = await this.#json(system, user, CREATIVE_TEMPERATURE);
+      const result = await this.#json(system, user, CREATIVE_TEMPERATURE, { operation: "question_hr", maxTokens: 1_800 });
       result.standardAnswer = result.standardAnswer ?? result.standard_answer;
       const broken = !result.title?.match(/[？?]$/u) || !result.standardAnswer ? "模型生成的题目结构不完整" : "";
       if (!broken) return result;
@@ -244,7 +253,7 @@ export class InterviewAgent {
         ? `知识分类：${session.series}\n章节：不限（本分类下由你挑最贴切的一章）\n`
         : `知识分类：${session.series}\n章节：${session.chapterPath}\n`)
       + `面试模式：${session.mode}\n`
-      + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
+      + (session.jdExcerpt && !(jdMode && session.nextFocus) ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
       // 以下三块每次都变，放在稳定前缀之后，尽量保住缓存命中
       + resumeBlock(session)
       + focusBlock(session.nextFocus)
@@ -252,7 +261,7 @@ export class InterviewAgent {
 
     // 出题走高温，偶尔会漏字段（实测漏过 topic）。给它一次补的机会，别让整道题出不来。
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const result = await this.#json(system, user, CREATIVE_TEMPERATURE);
+      const result = await this.#json(system, user, CREATIVE_TEMPERATURE, { operation: "question", maxTokens: 1_800 });
       result.standardAnswer = result.standardAnswer ?? result.standard_answer;
       const broken = !result.title?.match(/[？?]$/u) || !result.standardAnswer
         ? "模型生成的题目结构不完整"
@@ -279,6 +288,7 @@ export class InterviewAgent {
       + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
       + `JD 里强调的能力，对应的考点要排进去并适当靠前。`,
       STABLE_TEMPERATURE,
+      { operation: "outline", maxTokens: 1_500 },
     );
   }
 
@@ -296,41 +306,10 @@ export class InterviewAgent {
       + focusListBlock(session.nextFocuses)
       + askedBlock(session),
       CREATIVE_TEMPERATURE,
+      { operation: "paper", maxTokens: 4_000 },
     );
     if (!Array.isArray(result.questions) || result.questions.length !== count) throw new Error("模型未生成完整书面试卷");
     return result.questions;
-  }
-
-  async evaluate({ question, rawAnswer, session }) {
-    const result = await this.#json(
-      `你是技术面试官。根据题目和标准答案点评候选人的回答。客观指出亮点、缺口和更好表述。`
-      + `comment 用 markdown 组织（要点用短列表或加粗关键词），不要写成一整段。`
-      + `只返回 JSON：{"score":0到100,"comment":"中文点评"}。`,
-      `题目：${question.title}\n标准答案：${question.standardAnswer || "无"}\n候选人回答：${rawAnswer}`,
-    );
-    return { score: Number(result.score ?? 0), comment: String(result.comment ?? "暂无点评") };
-  }
-
-  async answerFollowup({ session, text }) {
-    const question = session.currentQuestion ?? {};
-    const result = await this.#json(
-      `你是正在面试的中文技术面试官，正在回答候选人对当前这道题的追问。`
-      // 之前这里写的是「不泄露完整标准答案」——但候选人的回答一提交，标准答案就以消息形式
-      // 摆在页面上了，藏它守不住任何东西，只换来模型推掉追问（实测会说「我没法替你编」）。
-      + `必须正面回答，不许回避：不要说“这个得结合你自己的项目来讲”“我没法替你编”“你先补充信息我再答”这类话。`
-      + `候选人明确要标准答案、或要你结合他的项目示范一遍时，直接给出完整、可背诵的答案。`
-      + `要结合项目时，用下面简历里的真实项目（项目名、技术栈照抄），不要编造简历里没有的经历；`
-      + `简历里确实找不到对应项目时，先照常给出通用标准答案，末尾再用一句话说明补上哪段经历会更好。`
-      + `候选人只是澄清题意或追问概念时，简短回答，不必把整段标准答案倒出来。`
-      + `用 markdown 组织。只返回 JSON：{"reply":"内容"}。`,
-      // 顺序照旧：一次会话里不变的内容在前，每次都变的追问压到最后，同一题连着追问能命中缓存
-      (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
-      + resumeBlock(session)
-      + `当前题：${question.title ?? ""}\n`
-      + (question.standardAnswer ? `本题标准答案（供参考，按需改写或补充）：\n${question.standardAnswer}\n` : "")
-      + `候选人追问：${text}`,
-    );
-    return result.reply;
   }
 
   /**
@@ -355,6 +334,7 @@ export class InterviewAgent {
       + (errors.length ? `\n上次校验未通过：${errors.join("；")}` : ""),
       `题目：${question.title}\n原答案：\n${question.standardAnswer ?? ""}`,
       CREATIVE_TEMPERATURE,
+      { operation: "answer_reformat", maxTokens: 1_800 },
     );
     return String(result.standardAnswer ?? "");
   }
@@ -365,7 +345,7 @@ export class InterviewAgent {
    * （找不到锚点、上下文对不上）要多得多——改坏了有回撤栈和 git 兜着。
    */
   async reviseSelfIntro({ markdown, instruction, spec = "", history = [] }) {
-    return this.#revise({
+    const result = await this.#revise({
       system: `你在帮候选人改他的面试自我介绍（一份 markdown）。`
         + `这是个对话框：他可能让你改稿，也可能只是问你意见。`
         + `只返回 JSON：{"action":"revise|answer","reply":"…","markdown":"…"}。`,
@@ -383,6 +363,11 @@ export class InterviewAgent {
       field: "markdown",
       emptyError: "模型说要改，但没返回改写后的自我介绍",
     });
+    if (result.action === "revise") {
+      const first = (value) => value.split("\n").find((line) => line.trim())?.trim() ?? "";
+      if (first(markdown).startsWith(">") && !first(result.markdown).startsWith(">")) throw new Error("AI 改写丢失了首行链路锚点，本次结果未应用");
+    }
+    return result;
   }
 
   /**
@@ -391,7 +376,7 @@ export class InterviewAgent {
    * 不碰 <style> 与结构——一改样式，导出 PDF 的样子就变了。
    */
   async reviseResume({ html, instruction, spec = "", history = [] }) {
-    return this.#revise({
+    const result = await this.#revise({
       system: `你在帮候选人改他的简历（一份自包含的 HTML）。`
         + `这是个对话框：他可能让你改简历，也可能只是问你意见。`
         + `只返回 JSON：{"action":"revise|answer","reply":"…","html":"…"}。`,
@@ -408,6 +393,12 @@ export class InterviewAgent {
       field: "html",
       emptyError: "模型说要改，但没返回改写后的简历",
     });
+    if (result.action === "revise") {
+      const styles = (value) => [...value.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/giu)].map((match) => match[0]);
+      if (JSON.stringify(styles(html)) !== JSON.stringify(styles(result.html))) throw new Error("AI 改写改变了简历样式，本次结果未应用");
+      if (/<script\b|\son\w+\s*=|javascript:/iu.test(result.html)) throw new Error("AI 改写包含不安全的 HTML，本次结果未应用");
+    }
+    return result;
   }
 
   /**
@@ -466,7 +457,7 @@ export class InterviewAgent {
     ];
     let result;
     try {
-      result = await this.#chat(messages, CREATIVE_TEMPERATURE);
+      result = await this.#chat(messages, 0.35, { operation: `document_${field}_revise`, maxTokens: 16_000 });
     } catch (error) {
       // 模型在 JSON 模式下偶尔直接说一段话（实测同一个请求时好时坏）。对这个对话框来说
       // 那**本身就是一种合法的回答**——按 answer 收下，比甩一句「模型未返回 JSON 对象」
@@ -496,6 +487,8 @@ export class InterviewAgent {
       + `chapter 必须从已有章节名里原样挑一个；确实一个都覆盖不了这道题时返回 {"chapter":"新建"}。`
       + `宁可归入一个覆盖面稍宽的已有章节，也不要新建近义章节——那会让同一个知识点散落在多个文件里。`,
       `新题自报的章节名：${topic}\n已有章节：${chapters.join("、")}`,
+      STABLE_TEMPERATURE,
+      { operation: "chapter_match", maxTokens: 64 },
     );
     const picked = String(result.chapter ?? "").trim();
     return chapters.includes(picked) ? picked : "";
@@ -506,6 +499,8 @@ export class InterviewAgent {
     return this.#json(
       "判断新题与候选题是否语义等价。只返回 JSON：{\"kind\":\"existing|new\",\"questionId\":\"匹配ID或空字符串\"}。只有考察目标实质相同才算 existing。",
       `新题：${title}\n候选：${JSON.stringify(candidates)}`,
+      STABLE_TEMPERATURE,
+      { operation: "duplicate", maxTokens: 64 },
     );
   }
 
@@ -525,8 +520,10 @@ export class InterviewAgent {
       + `给了目标岗位 JD 时，「下一场重点」要落到该岗位最看重、而候选人目前最弱的那块。`
       + `不要自己写场均分或总分，那一行由系统统一给出。`,
       `主题：${session.series}/${session.chapterPath}\n已点评 ${session.completedCount ?? 0} 次\n`
-      + (session.jdExcerpt ? `目标岗位 JD：\n${session.jdExcerpt}\n` : "")
+      + (session.jdExcerpt ? `目标岗位 JD 摘要：\n${session.jdExcerpt.slice(0, 2_000)}\n` : "")
       + `逐题记录：\n${scored || "（本场没有点评记录）"}`,
+      STABLE_TEMPERATURE,
+      { operation: "summary", maxTokens: 800 },
     );
     // 场均分由服务端算，不让模型碰数字——否则它会自己编
     const average = attempts.length

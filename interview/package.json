@@ -2,6 +2,9 @@
   "name": "interview-copilot",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "vite build",
@@ -10,6 +13,8 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.85.1",
+    "@earendil-works/pi-ai": "^0.85.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "markdown-it": "^15.0.2",
     "naive-ui": "^2.42.0",

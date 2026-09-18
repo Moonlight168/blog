@@ -88,15 +88,14 @@ export function resolveSelfIntro(resumeDir, file) {
   return list.find((item) => item.file === wanted || item.name === wanted) ?? null;
 }
 
-/** 从文件所在目录往上找 .git，找到就返回仓库根；没有则返回 null（此时只写盘、不做版本管理） */
+/** 让 Git 自己确认仓库根；仅看到一个损坏或占位的 .git 目录不能算有效仓库。 */
 export function findRepoRoot(file) {
-  let dir = path.dirname(path.resolve(file));
-  for (;;) {
-    if (fs.existsSync(path.join(dir, ".git"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
+  try {
+    const root = execFileSync("git", ["-C", path.dirname(path.resolve(file)), "rev-parse", "--show-toplevel"], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return root ? fs.realpathSync(root) : null;
+  } catch { return null; }
 }
 
 function git(repo, args, { allowFailure = false } = {}) {

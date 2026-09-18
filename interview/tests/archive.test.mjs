@@ -36,13 +36,14 @@ function makeEnv({ candidates = [], existing = null, reformat = null, matchChapt
       return reformat;
     },
   };
+  const db = openDatabase(path.join(root, "test.sqlite"));
   return {
-    calls, agent, questionIndex, knowledgeRoot, privateHistoryRoot,
+    calls, agent, questionIndex, knowledgeRoot, privateHistoryRoot, db,
     // 暴露出来给「新建章节」的断言用
     knowledgeDir: path.join(knowledgeRoot, "Java"),
     knowledgeFile: path.join(knowledgeRoot, "Java", "多线程.md"),
     historyFile: path.join(privateHistoryRoot, "Java", "多线程-答题记录.md"),
-    archive: createArchive({ questionIndex, agent, knowledgeRoot, privateHistoryRoot, db: openDatabase(path.join(root, "test.sqlite")) }),
+    archive: createArchive({ questionIndex, agent, knowledgeRoot, privateHistoryRoot, db }),
   };
 }
 
@@ -50,6 +51,40 @@ const COMPLIANT = "**锚点**：`状态定边界`\n\n1. **边界清晰**：用�
 const JD_SESSION = { id: "session-jd", completedCount: 0, mode: "jd", chapterPath: "" };
 /** 选了「全部」章节：分类由会话定，章节由模型自报 */
 const ALL_SESSION = { id: "session-all", completedCount: 0, mode: "interview", series: "Java", chapterPath: "" };
+
+test("会话落库失败时可回滚已归档的文件和答题记录", async () => {
+  const env = makeEnv();
+  const before = fs.readFileSync(env.knowledgeFile, "utf8");
+  const result = await env.archive({
+    session: SESSION,
+    question: { title: "线程池怎么关闭？", standardAnswer: COMPLIANT },
+    rawAnswer: "回答", evaluation: { score: 80, comment: "清楚" },
+  });
+  assert.equal(env.db.prepare("SELECT COUNT(*) AS total FROM attempts").get().total, 1);
+
+  await result.rollback();
+
+  assert.equal(fs.readFileSync(env.knowledgeFile, "utf8"), before);
+  assert.equal(fs.existsSync(env.historyFile), false);
+  assert.equal(env.db.prepare("SELECT COUNT(*) AS total FROM attempts").get().total, 0);
+  await result.rollback();
+});
+
+test("回滚不覆盖归档后的外部文件修改", async () => {
+  const env = makeEnv();
+  const result = await env.archive({
+    session: SESSION,
+    question: { title: "线程池怎么关闭？", standardAnswer: COMPLIANT },
+    rawAnswer: "回答", evaluation: { score: 80, comment: "清楚" },
+  });
+  const external = `${fs.readFileSync(env.knowledgeFile, "utf8")}\n<!-- 外部修改 -->\n`;
+  fs.writeFileSync(env.knowledgeFile, external, "utf8");
+
+  await result.rollback();
+
+  assert.equal(fs.readFileSync(env.knowledgeFile, "utf8"), external);
+  assert.equal(env.db.prepare("SELECT COUNT(*) AS total FROM attempts").get().total, 0);
+});
 
 test("剥掉模型误带上的分类前缀（实测返回过「Agent 开发：langgraph」）", () => {
   assert.equal(stripSeriesPrefix("Java：多线程", "Java"), "多线程");

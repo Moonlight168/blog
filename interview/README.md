@@ -35,7 +35,7 @@
 
 ## 启动
 
-要求 Node.js 22.5+（使用内置 `node:sqlite`）。
+要求 Node.js 22.19+（使用内置 `node:sqlite`，并满足 Pi Agent 运行时要求）。
 
 ```bash
 cd interview
