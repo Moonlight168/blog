@@ -150,14 +150,18 @@ async function switchFile(file: string) {
 async function save() {
   saving.value = true;
   try {
-    const data = await api<{ mtime: number; externallyChanged: boolean; notices: string[]; commit: { committed: boolean; hash?: string; reason?: string } }>(
+    const data = await api<{ mtime: number; externallyChanged: boolean; notices: string[]; commit: { committed: boolean; hash?: string; reason?: string; unchanged?: boolean } }>(
       "/api/self-intro",
       { method: "POST", body: JSON.stringify({ file: currentFile.value, markdown: text.value, baseMtime: baseMtime.value }) },
     );
     saved.value = text.value;
     uncommitted.value = false;
     baseMtime.value = data.mtime;
-    toast.success(data.commit.committed ? `已保存 ${data.commit.hash}` : "已保存");
+    // 没提交成功时要如实说：内容确实落盘了，但**没进版本库**。
+    // 只说「已保存」的话，用户会以为版本列表里迟早会出现这一版——其实永远不会。
+    if (data.commit.committed) toast.success(`已保存 ${data.commit.hash}`);
+    else if (data.commit.unchanged) toast.success("已保存");
+    else toast.warning(`已保存到磁盘，但没进版本库：${data.commit.reason ?? "原因未知"}`);
     for (const notice of data.notices) toast.warning(notice);
   } catch (error) {
     toast.error((error as Error).message);

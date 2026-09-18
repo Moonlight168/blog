@@ -21,7 +21,7 @@ import { commitResumeDoc, findBrowser, htmlToPdf, listResumeGroups, pdfFileName,
 import { decorateCommits } from "./commit-subject.mjs";
 import { slugify } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
-import { commitSelfIntro, listSelfIntros, readSelfIntro, readSelfIntroAt, rollbackSelfIntro, selfIntroHistory, writeSelfIntro } from "./self-intro.mjs";
+import { commitSelfIntro, listSelfIntros, readSelfIntro, readSelfIntroAt, requireRepo, rollbackSelfIntro, selfIntroHistory, writeSelfIntro } from "./self-intro.mjs";
 import { expired } from "./session-time.mjs";
 
 /**
@@ -335,6 +335,13 @@ async function api(request, response, url) {
     // 编辑器打开期间文件被别处改过：先把磁盘上那份提交存档，再覆盖。
     // 不做「报冲突让你二选一」——那会卡住保存；先存档则两边都不会丢，git 里都能翻到。
     const current = readSelfIntro(config.resumeDir, file);
+    // 没有可提交的仓库就整个拒绝，**一个字节都不写**：写下去会变成
+    // 「盘上是新的、历史里没有、界面还说已保存」，比直接报错难查得多
+    try {
+      requireRepo(current);
+    } catch (error) {
+      return json(response, 400, { error: error.message });
+    }
     const externallyChanged = current.exists
       && typeof input.baseMtime === "number"
       && Math.abs(current.mtime - input.baseMtime) > 1;
@@ -573,6 +580,12 @@ async function api(request, response, url) {
     const file = String(input.file ?? "");
     const html = String(input.html ?? "");
     const current = readResumeDoc(config.resumeDir, file);
+    // 同自我介绍：没有可提交的仓库就整个拒绝，一个字节都不写
+    try {
+      requireRepo(current);
+    } catch (error) {
+      return json(response, 400, { error: error.message });
+    }
     const notices = [];
     if (current.mtime && typeof input.baseMtime === "number" && Math.abs(current.mtime - input.baseMtime) > 1) {
       const archived = commitResumeDoc(config.resumeDir, file, "简历：外部改动存档");

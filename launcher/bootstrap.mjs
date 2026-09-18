@@ -324,7 +324,24 @@ function ensurePrivate({ appDir, seedDir }) {
   }
   const seedPrivate = path.join(seedDir, "private");
   const copied = fs.existsSync(seedPrivate) ? copyMissing(seedPrivate, privateRoot) : 0;
-  return `个人目录已就绪${copied ? `，从 seed 导入 ${copied} 个文件` : ""}${created ? `，新建 ${created} 个目录` : ""}`;
+  const repo = ensurePrivateRepo(privateRoot);
+  return `个人目录已就绪${copied ? `，从 seed 导入 ${copied} 个文件` : ""}${created ? `，新建 ${created} 个目录` : ""}${repo ? `，${repo}` : ""}`;
+}
+
+/**
+ * `src/private` 必须是**它自己的**仓库：简历、自我介绍的版本管理全靠它。
+ *
+ * seed 只复制文件、不带 `.git`，所以新机器上这个仓库根本不存在。不补的话，
+ * 后台的 findRepoRoot 会一路往上找到**外层业务仓库**，而外层通常把 `src/private` 整个排除了——
+ * 于是 `git add` 被拒：内容写进了盘、却永远提交不了，界面还显示「已保存」，版本列表里却什么都没有。
+ */
+function ensurePrivateRepo(privateRoot) {
+  if (!fs.existsSync(privateRoot)) return "";
+  if (fs.existsSync(path.join(privateRoot, ".git"))) return "版本库已就绪";
+  if (!captureDetailed("git", ["-C", privateRoot, "init"]).ok) return "版本库初始化失败";
+  captureDetailed("git", ["-C", privateRoot, "add", "-A"]);
+  const commit = captureDetailed("git", ["-C", privateRoot, "commit", "-m", "chore: 建立版本管理基线"]);
+  return commit.ok ? "已初始化版本库" : `已初始化版本库，但首次提交失败（${commit.error}）`;
 }
 
 function envEntries(content) {

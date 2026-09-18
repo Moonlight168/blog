@@ -91,13 +91,49 @@ export function resolveSelfIntro(resumeDir, file) {
 }
 
 /** 让 Git 自己确认仓库根；仅看到一个损坏或占位的 .git 目录不能算有效仓库。 */
+/**
+ * 保存前先确认这个文件有仓库可提交，没有就抛错、**不写盘**。
+ *
+ * 为什么不「先写下去、回头再说」：那样会造出一个「盘上是新的、历史里没有、界面还显示已保存」
+ * 的中间态——正是这个中间态让人以为改动丢了（其实没丢，只是永远进不了版本库）。
+ * 宁可这一次保存整个失败、把原因说清楚。
+ */
+export function requireRepo(target) {
+  const repo = target ? findRepoRoot(target.path) : null;
+  if (!repo) {
+    throw new Error("这个文件的私有目录还不是可用的 git 仓库（没有独立仓库，或被外层仓库的 .gitignore 排除了），保存没法留版本");
+  }
+  return repo;
+}
+
+/**
+ * 这个文件归哪个仓库管。
+ *
+ * 注意不能只看「往上找到的第一个仓库」：一路找上去可能是**外层业务仓库**，
+ * 而它常常把私有目录整个 .gitignore 掉了（典型：仓库根写了 `src/private`）。
+ * 那种「找到的仓库其实管不到这个路径」的情况下 `git add` 会被直接拒绝，
+ * 于是保存变成「内容写进了盘、却永远提交不了，界面还说已保存」——
+ * 所以这里用 check-ignore 判一下，被排除就当它不在仓库里，让上层如实说「保存不会留版本」。
+ */
 export function findRepoRoot(file) {
+  const target = path.resolve(file);
+  let root = "";
   try {
-    const root = execFileSync("git", ["-C", path.dirname(path.resolve(file)), "rev-parse", "--show-toplevel"], {
+    root = execFileSync("git", ["-C", path.dirname(target), "rev-parse", "--show-toplevel"], {
       encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
     }).trim();
-    return root ? fs.realpathSync(root) : null;
-  } catch { return null; }
+  } catch {
+    return null;                 // 不在任何仓库里
+  }
+  if (!root) return null;
+  try {
+    // 退出码 0 = 被排除。走到这里就说明被排除了
+    execFileSync("git", ["-C", root, "check-ignore", "-q", target], { stdio: "ignore" });
+    return null;
+  } catch (error) {
+    // 退出码 1 = 没被排除，正常。其它错误（git 太老、参数不认）也不该把仓库整个否掉
+    return error?.status === 1 || error?.status === undefined ? fs.realpathSync(root) : null;
+  }
 }
 
 function git(repo, args, { allowFailure = false } = {}) {
@@ -173,7 +209,7 @@ export function commitSelfIntro(resumeDir, file, message) {
   const relative = path.relative(repo, target.path).split(path.sep).join("/");
   git(repo, ["add", "--", relative]);
   const dirty = git(repo, ["status", "--porcelain", "--", relative], { allowFailure: true });
-  if (!dirty?.trim()) return { committed: false, reason: "内容没有变化，无需提交" };
+  if (!dirty?.trim()) return { committed: false, unchanged: true, reason: "内容没有变化，无需提交" };
   const output = git(repo, ["commit", "-m", message, "--", relative], { allowFailure: true });
   if (output === null) return { committed: false, reason: "提交失败（可能是 git 用户信息未配置）" };
   return { committed: true, hash: git(repo, ["rev-parse", "--short", "HEAD"]).trim(), repo };

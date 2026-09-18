@@ -7,7 +7,7 @@ import test from "node:test";
 
 import {
   commitSelfIntro, findRepoRoot, listSelfIntros, readSelfIntro, readSelfIntroAt,
-  resolveSelfIntro, rollbackSelfIntro, selfIntroDir, selfIntroHistory, writeSelfIntro,
+  requireRepo, resolveSelfIntro, rollbackSelfIntro, selfIntroDir, selfIntroHistory, writeSelfIntro,
 } from "../server/self-intro.mjs";
 
 const TECH = "技术面.md";
@@ -243,6 +243,36 @@ test("恢复到最新那版不算未保存——盘上和 HEAD 一模一样，�
   const rolled = rollbackSelfIntro(env.resumeDir, TECH, newest);
   assert.equal(rolled.uncommitted, false, "恢复的就是当前这版");
   assert.equal(readSelfIntro(env.resumeDir, TECH).uncommitted, false, "读出来也该是干净的");
+});
+
+test("路径被外层仓库 .gitignore 排除时，不算「在这个仓库里」", () => {
+  // 真机上踩过的坑：新机器上 src/private 没有自己的 .git（seed 只复制文件），
+  // 于是 findRepoRoot 一路往上找到外层业务仓库，而外层把 src/private 整个排除了——
+  // git add 被拒 → 内容写进了盘却永远提交不了，界面还显示「已保存」。
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "repo-ignored-"));
+  const run = (...args) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  fs.mkdirSync(path.join(repo, "src", "private"), { recursive: true });
+  fs.writeFileSync(path.join(repo, ".gitignore"), "src/private\n", "utf8");
+  fs.writeFileSync(path.join(repo, "src", "private", "a.md"), "内容", "utf8");
+  fs.writeFileSync(path.join(repo, "b.md"), "内容", "utf8");
+  run("init");
+  run("config", "user.name", "tester");
+  run("config", "user.email", "tester@example.com");
+
+  try {
+    assert.equal(findRepoRoot(path.join(repo, "src", "private", "a.md")), null, "被排除的路径要当作不在仓库里");
+    assert.ok(findRepoRoot(path.join(repo, "b.md")), "没被排除的路径照常认");
+
+    // 保存前的门槛：这种文件直接拒掉，别写盘——否则会留下「盘上有了、历史里没有」的中间态
+    assert.throws(
+      () => requireRepo({ path: path.join(repo, "src", "private", "a.md") }),
+      /没法留版本/,
+      "没有可用仓库要拒掉保存，而不是写下去",
+    );
+    assert.ok(requireRepo({ path: path.join(repo, "b.md") }), "正常路径照常放行");
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test("非法提交号被拒绝，不会去碰文件", () => {

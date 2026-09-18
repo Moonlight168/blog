@@ -119,7 +119,7 @@ export function commitResumeDoc(resumeDir, file, message) {
   const git = (args, allowFailure = false) => gitIn(repo, args, allowFailure);
   git(["add", "--", relative]);
   if (!(git(["status", "--porcelain", "--", relative], true) ?? "").trim()) {
-    return { committed: false, reason: "内容没有变化，无需提交" };
+    return { committed: false, unchanged: true, reason: "内容没有变化，无需提交" };
   }
   if (git(["commit", "-m", message, "--", relative], true) === null) {
     return { committed: false, reason: "提交失败（可能是 git 用户信息未配置）" };
