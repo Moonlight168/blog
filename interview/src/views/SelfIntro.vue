@@ -154,14 +154,19 @@ async function save() {
       "/api/self-intro",
       { method: "POST", body: JSON.stringify({ file: currentFile.value, markdown: text.value, baseMtime: baseMtime.value }) },
     );
-    saved.value = text.value;
-    uncommitted.value = false;
+    // 盘上确实写了新内容，基准得跟上，否则下次保存会把这次当成「外部改过」再存一份
     baseMtime.value = data.mtime;
-    // 没提交成功时要如实说：内容确实落盘了，但**没进版本库**。
-    // 只说「已保存」的话，用户会以为版本列表里迟早会出现这一版——其实永远不会。
-    if (data.commit.committed) toast.success(`已保存 ${data.commit.hash}`);
-    else if (data.commit.unchanged) toast.success("已保存");
-    else toast.warning(`已保存到磁盘，但没进版本库：${data.commit.reason ?? "原因未知"}`);
+    // 只有**真的进版本库了**（或内容本来就没变）才算保存成功。
+    // 提交失败（典型：没配 git 用户名/邮箱）时绝不能翻成「已保存」——
+    // 那样用户以为存下来了，版本列表里却永远不会出现，刷新后连痕迹都没了。
+    // 保持「未保存」，等他配好 git 再点一次「保存」就行。
+    if (data.commit.committed || data.commit.unchanged) {
+      saved.value = text.value;
+      uncommitted.value = false;
+      toast.success(data.commit.committed ? `已保存 ${data.commit.hash}` : "已保存");
+    } else {
+      toast.warning(`写进磁盘了，但没进版本库：${data.commit.reason ?? "原因未知"}。先解决它，再点一次「保存」`);
+    }
     for (const notice of data.notices) toast.warning(notice);
   } catch (error) {
     toast.error((error as Error).message);
