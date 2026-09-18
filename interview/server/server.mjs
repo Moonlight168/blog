@@ -278,6 +278,23 @@ async function api(request, response, url) {
     const markdown = readResume(target);
     return json(response, 200, { markdown, chars: markdown.length });
   }
+  // 「让 AI 改」的对话压缩：简历页和自我介绍页共用。
+  // 摘要存客户端（对话本来就在 localStorage 里），服务端只干「把更早那几轮压成一段」这一件事。
+  if (request.method === "POST" && url.pathname === "/api/chat/compact") {
+    const input = await body(request);
+    const turns = (Array.isArray(input.turns) ? input.turns : [])
+      .map((turn) => ({
+        role: turn?.role === "user" ? "user" : "assistant",
+        text: String(turn?.text ?? "").slice(0, 4_000),   // 单条封顶，别让一条超长回复顶掉整次压缩
+      }))
+      .filter((turn) => turn.text);
+    if (!turns.length) return json(response, 400, { error: "没有要压缩的对话" });
+    try {
+      return json(response, 200, { summary: await agent.compactHistory({ summary: String(input.summary ?? ""), turns }) });
+    } catch (error) {
+      return json(response, 502, { error: error.message });
+    }
+  }
   // 自我介绍编辑：读 / 写 / 让模型改 / 历史版本 / 回滚。
   // 目录下可以放多份（技术面、HR 面…），请求带 file 指定；后端只从扫描结果里取，
   // 不接受拼出来的路径。文件在 src/private 下，写回后顺手提交给那个目录里的独立仓库。
@@ -341,7 +358,7 @@ async function api(request, response, url) {
     if (!instruction) return json(response, 400, { error: "请说明想怎么改" });
     try {
       // history 是对话框里已有的那些话：带上它，模型才把「那教育经历那段呢」当成一句追问
-      return json(response, 200, await agent.reviseSelfIntro({ markdown, instruction, spec: editingSpecs().intro, history: input.history }));
+      return json(response, 200, await agent.reviseSelfIntro({ markdown, instruction, spec: editingSpecs().intro, history: input.history, summary: String(input.summary ?? "") }));
     } catch (error) {
       return json(response, 502, { error: error.message });
     }
@@ -575,7 +592,7 @@ async function api(request, response, url) {
     if (!instruction) return json(response, 400, { error: "请说明想怎么改" });
     try {
       // history 是对话框里已有的那些话：带上它，模型才把「那教育经历那段呢」当成一句追问
-      return json(response, 200, await agent.reviseResume({ html: String(input.html ?? ""), instruction, spec: editingSpecs().resume, history: input.history }));
+      return json(response, 200, await agent.reviseResume({ html: String(input.html ?? ""), instruction, spec: editingSpecs().resume, history: input.history, summary: String(input.summary ?? "") }));
     } catch (error) {
       return json(response, 502, { error: error.message });
     }

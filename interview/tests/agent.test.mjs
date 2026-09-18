@@ -408,3 +408,56 @@ test("出题不再注入「章节已有题目样例」（该功能已移除）",
     assert.doesNotMatch(JSON.stringify(lastBody().messages), /样例/);
   });
 });
+
+// ---- 对话历史压缩：更早那几轮压成滚动摘要，跟着每轮一起发 ----
+
+test("压缩历史：既有摘要和待压对话都进提示词，并取回新摘要", async () => {
+  await withStubbedChat({ summary: "用户要求教育经历那栏别动" }, async (agent, lastBody) => {
+    const summary = await agent.compactHistory({
+      summary: "早先定过：整体压到一页内",
+      turns: [{ role: "user", text: "教育经历那栏别动" }, { role: "assistant", text: "好" }],
+    });
+
+    assert.equal(summary, "用户要求教育经历那栏别动");
+    const prompt = JSON.stringify(lastBody().messages);
+    assert.match(prompt, /整体压到一页内/, "既有摘要是滚动的，漏掉它等于每压一次丢一层");
+    assert.match(prompt, /教育经历那栏别动/, "待压缩的对话要在里面");
+  });
+});
+
+test("压缩历史：模型没给摘要就给空串，不把 undefined 写进去", async () => {
+  await withStubbedChat({}, async (agent) => {
+    assert.equal(await agent.compactHistory({ turns: [{ role: "user", text: "随便说点什么" }] }), "");
+  });
+});
+
+test("改简历：带了摘要就进提示词，并标明它只是上下文、不是新指令", async () => {
+  await withStubbedChat({ action: "answer", reply: "好" }, async (agent, lastBody) => {
+    await agent.reviseResume({ html: "<html></html>", instruction: "再说一遍", summary: "早先定过：整体压到一页内" });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /早先定过：整体压到一页内/);
+    assert.match(system, /不是新指令/, "要写明它是上下文，否则模型可能把摘要当成本次要求");
+  });
+});
+
+test("改简历：没有摘要时不出现摘要段", async () => {
+  await withStubbedChat({ action: "answer", reply: "好" }, async (agent, lastBody) => {
+    await agent.reviseResume({ html: "<html></html>", instruction: "问个问题" });
+    assert.doesNotMatch(lastBody().messages[0].content, /之前已经聊过/);
+  });
+});
+
+test("改自我介绍：摘要同样要进提示词", async () => {
+  await withStubbedChat({ action: "answer", reply: "好" }, async (agent, lastBody) => {
+    await agent.reviseSelfIntro({ markdown: "稿子", instruction: "再改一次", summary: "早先定过：链路锚点那行别动" });
+    assert.match(lastBody().messages[0].content, /链路锚点那行别动/);
+  });
+});
+
+test("摘要排在文稿之前：文稿每次改都变，放最后才不打断前面那段缓存", async () => {
+  await withStubbedChat({ action: "answer", reply: "好" }, async (agent, lastBody) => {
+    await agent.reviseResume({ html: "AAAA-简历正文", instruction: "问个问题", summary: "BBBB-摘要" });
+    const system = lastBody().messages[0].content;
+    assert.ok(system.indexOf("BBBB-摘要") < system.indexOf("AAAA-简历正文"), "摘要要在文稿前面");
+  });
+});

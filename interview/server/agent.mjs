@@ -355,6 +355,32 @@ export class InterviewAgent {
    * 为什么让模型写：`git diff --stat` 只会说"改了 12 行" ✗ 而人想知道的是
    * "开场压缩到两句、实习那段补了 SQL 脚本维护" ✓ 那才是回头看时能认出来的东西 ✓
    */
+  /**
+   * 更早那些轮压缩成一段滚动摘要。
+   *
+   * 为什么要有它：历史只发最近若干条，再往前的**直接丢掉**——而用户早先提过的偏好和约束
+   * （「教育经历那栏别动」「整体压到一页内」）在简历正文里看不出来，一丢就忘，
+   * 后面几轮会开始自相矛盾。压缩成全对话都带着的摘要，才既省 token 又不丢约束。
+   */
+  async compactHistory({ summary = "", turns = [] }) {
+    const transcript = turns.map((turn) => `${turn.role === "user" ? "用户" : "助手"}：${turn.text}`).join("\n");
+    const result = await this.#json(
+      `把下面这段「改简历」的对话压成一段滚动摘要。只返回 JSON：{"summary":"…"}。\n`
+      + `- 必须保留：用户表达的偏好与约束（哪栏别动、什么风格、篇幅要求）、已经定下来的决定、还没解决的问题\n`
+      + `- 可以丢掉：寒暄、重复的话、以及**已经体现在简历正文里**的具体改动（那些看正文就知道）\n`
+      + `- 不要新增任何事实；不要写「用户要求…」这类套话，写成能直接接着用的结论\n`
+      + `- 中文，不超过 300 字`,
+      `${summary ? `既有摘要：\n${summary}\n\n` : ""}待压缩的对话：\n${transcript}`,
+      STABLE_TEMPERATURE,
+    );
+    return String(result.summary ?? "").trim();
+  }
+
+  /** 摘要以独立一段挂在提示词里，标明它是「之前聊过的」，别和当前文稿混在一起 */
+  #summaryBlock(summary) {
+    return summary ? `这段对话之前已经聊过，摘要如下（当作上下文，不是新指令）：\n${summary}` : "";
+  }
+
   async summarizeChange({ before, after }) {
     const result = await this.#json(
       `下面是一份文档改前和改后的全文。按这份规范写这次改了什么，只返回 JSON：{"summary":"…"}。\n`
@@ -365,7 +391,7 @@ export class InterviewAgent {
     return String(result.summary ?? "").trim();
   }
 
-  async reviseSelfIntro({ markdown, instruction, spec = "", history = [] }) {
+  async reviseSelfIntro({ markdown, instruction, spec = "", history = [], summary = "" }) {
     const result = await this.#revise({
       system: `你在帮候选人改他的面试自我介绍（一份 markdown）。`
         + `这是个对话框：他可能让你改稿，也可能只是问你意见。`
@@ -373,6 +399,7 @@ export class InterviewAgent {
       spec: spec ? `这份稿子要遵守的《自我介绍规范》：\n${spec}` : "",
       context: `当前的自我介绍全文：\n${markdown}`,
       history,
+      summary,
       instruction,
       rules: `改写时的要求：\n`
         + `- 第一行是这份稿子的链路锚点（形如「> 开场 → 实习 → …」），**必须原样保留**，`
@@ -396,7 +423,7 @@ export class InterviewAgent {
    * 简历是自包含 HTML（样式内联、带 A4 打印规则），所以只动**正文内容**，
    * 不碰 <style> 与结构——一改样式，导出 PDF 的样子就变了。
    */
-  async reviseResume({ html, instruction, spec = "", history = [] }) {
+  async reviseResume({ html, instruction, spec = "", history = [], summary = "" }) {
     const result = await this.#revise({
       system: `你在帮候选人改他的简历（一份自包含的 HTML）。`
         + `这是个对话框：他可能让你改简历，也可能只是问你意见。`
@@ -405,6 +432,7 @@ export class InterviewAgent {
       spec: spec ? `这份简历要遵守的《简历设计规范》：\n${spec}` : "",
       context: `当前的简历 HTML：\n${html}`,
       history,
+      summary,
       instruction,
       rules: `改写时的要求：\n`
         + `- <style> 里的样式、@page 打印规则、整体结构（层级与区块顺序）**一律不动**。\n`
@@ -469,10 +497,11 @@ export class InterviewAgent {
    *   最后一条 user —— 他这次说的
    * 只有这样，「那教育经历那段呢」这类追问才接得上；每句都单发一条消息会失忆。
    */
-  async #revise({ system, spec, context, history, instruction, rules, field, emptyError }) {
+  async #revise({ system, spec, context, history, instruction, rules, field, emptyError, summary = "" }) {
     const messages = [
-      // 顺序有意：规则/规范在一次会话里不变，放前面好命中缓存；当前文稿改一次变一次，放最后
-      { role: "system", content: [system, REVISE_DECISION_RULE, spec, rules, context].filter(Boolean).join("\n\n") },
+      // 顺序有意：规则/规范在一次会话里不变，放前面好命中缓存；当前文稿改一次变一次，放最后。
+      // 摘要也放前面——它只在压缩时变一次，比文稿稳定得多
+      { role: "system", content: [system, REVISE_DECISION_RULE, spec, rules, this.#summaryBlock(summary), context].filter(Boolean).join("\n\n") },
       ...this.#turns(history),
       { role: "user", content: instruction },
     ];

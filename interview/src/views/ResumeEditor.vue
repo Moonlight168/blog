@@ -140,10 +140,12 @@ async function switchPerson(id: string) {
  * 这里不弹「还有未保存的改动，确定吗」：浏览器原生的 confirm 拦一下太吵，
  * 而工具栏那颗醒目的「未保存」标签已经说明状态了。切走丢的只是编辑器缓冲区，
  * 盘上那份还在。
+ *
+ * 也**不要**在这里清 chatLog：对话是按文件存的，而这一刻 file.value 还是旧的那份，
+ * 一清就会触发写回、把上一份的对话覆盖成空。load() 里会按新文件把对应的那段读出来。
  */
 async function switchFile(next: string) {
   if (!next || next === file.value) return;
-  chatLog.value = [];
   instruction.value = "";
   await load(next);
 }
@@ -490,6 +492,17 @@ const instruction = ref("");
 // action 要留着：下一轮把它还原成模型当初吐出的 JSON 形状再发回去，
 // 混散文进 JSON 模式的对话会让模型返回空内容（实测 40% 概率）
 const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean; action?: "revise" | "answer" }[]>([]);
+/** 清空对话前问一句：清掉就找不回来了 */
+const clearChatOpen = ref(false);
+/**
+ * 更早那些轮的滚动摘要，以及它已经覆盖到第几条。
+ *
+ * 历史只发最近几条；再往前的要是**直接丢掉**，用户早先提过的偏好和约束就没了——
+ * 那些在简历正文里看不出来（「教育经历那栏别动」「整体压到一页内」），一丢后面几轮就开始自相矛盾。
+ * 所以攒够了就压成一段摘要，跟着每轮一起发。摘要只在压缩时变一次，比文稿稳定，放在提示词前半段。
+ */
+const chatSummary = ref("");
+const chatSummaryCount = ref(0);
 const chatBox = ref<HTMLElement | null>(null);
 
 /**
@@ -498,11 +511,66 @@ const chatBox = ref<HTMLElement | null>(null);
  * 换一份简历就是另一段对话，不会把两边的上下文搅在一起。
  */
 const chatKey = () => `resume-chat:${file.value}`;
+/** 清掉这段对话。它只是本地上下文，跟简历内容无关，清了不影响任何已保存的东西 */
+function clearChat() {
+  chatLog.value = [];
+  chatSummary.value = "";
+  chatSummaryCount.value = 0;
+  saveChatSummary();
+  clearChatOpen.value = false;
+}
+
+const chatSummaryKey = () => `resume-chat-summary:${file.value}`;
+
 function loadChat() {
   try {
     chatLog.value = JSON.parse(localStorage.getItem(chatKey()) ?? "[]");
   } catch {
     chatLog.value = [];        // 存的东西坏了就当没有，别拦着页面
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(chatSummaryKey()) ?? "null");
+    chatSummary.value = typeof saved?.summary === "string" ? saved.summary : "";
+    chatSummaryCount.value = Number.isInteger(saved?.count) && saved.count >= 0 ? saved.count : 0;
+  } catch {
+    chatSummary.value = "";
+    chatSummaryCount.value = 0;
+  }
+}
+
+function saveChatSummary() {
+  if (!file.value) return;
+  try {
+    localStorage.setItem(chatSummaryKey(), JSON.stringify({ summary: chatSummary.value, count: chatSummaryCount.value }));
+  } catch {
+    /* 存不下不该影响正在进行的对话，下次重新压一遍就是 */
+  }
+}
+
+/** 最近几条原样发出去，更早的压进摘要 */
+const CHAT_KEEP = 8;
+/** 没归档的攒到这么多条就先压一次 */
+const CHAT_COMPACT_AT = 12;
+
+/**
+ * 攒够了就把更早那几轮压成摘要。
+ * 压缩失败**不拦住这次改写**——退回「只发最近几条」，跟没做这个功能时一样。
+ */
+async function compactChatIfNeeded() {
+  const pending = chatLog.value.slice(chatSummaryCount.value);
+  if (pending.length <= CHAT_COMPACT_AT) return;
+  const older = pending.slice(0, -CHAT_KEEP);
+  if (!older.length) return;
+  try {
+    const data = await api<{ summary: string }>("/api/chat/compact", {
+      method: "POST",
+      body: JSON.stringify({ summary: chatSummary.value, turns: older }),
+    });
+    chatSummary.value = data.summary;
+    chatSummaryCount.value += older.length;
+    saveChatSummary();
+  } catch {
+    /* 压不了就算了，这次按老样子发最近几条 */
   }
 }
 watch(chatLog, () => {
@@ -519,16 +587,17 @@ async function revise() {
   if (!ask || revising.value) return;
   // 先对齐磁盘：模型必须基于"文件里现在真实的内容"改写，否则一保存就把外面的改动盖掉了
   try { await syncFromDisk(); } catch { /* 读不到就按内存里的走，别为此拦住 */ }
-  // 先把历史快照出来再推入这句——否则历史里会多一条和这次重复的「他」说的话
-  // 当前 HTML 已包含更早改动，只保留最近 6 轮用于指代消解，避免上下文无限增长。
-  const history = chatLog.value.slice(-12);
-  chatLog.value.push({ role: "user", text: ask });
-  instruction.value = "";
+  instruction.value = "";      // 先清输入框，别让这句话一直挂着
   revising.value = true;
   try {
+    // 攒够了先压一次（只在自己压缩时才会多花一次调用）；压完摘要覆盖住的那些就不再单独发
+    await compactChatIfNeeded();
+    // 再把历史快照出来、然后才推入这句——否则历史里会多一条和这次重复的「他」说的话
+    const history = chatLog.value.slice(chatSummaryCount.value);
+    chatLog.value.push({ role: "user", text: ask });
     const data = await api<{ action: "revise" | "answer"; reply: string; html?: string }>("/api/resume-doc/revise", {
       method: "POST",
-      body: JSON.stringify({ html: html.value, instruction: ask, history }),
+      body: JSON.stringify({ html: html.value, instruction: ask, history, summary: chatSummary.value }),
     });
     // action=answer 表示他只是在问意见：简历一个字都不动，也不提示刷新预览
     if (data.action === "revise" && data.html) {
@@ -638,7 +707,11 @@ onBeforeUnmount(() => {
 
         <template #2>
         <aside class="re-pane re-chat-pane">
-          <div class="re-pane-head">让 AI 改</div>
+          <div class="re-pane-head">
+            <span>让 AI 改</span>
+            <!-- 常驻显示、空了置灰：只在有对话时才冒出来的话，想清空的人反而找不到 -->
+            <n-button size="tiny" quaternary :disabled="!chatLog.length" @click="clearChatOpen = true">清空对话</n-button>
+          </div>
           <div ref="chatBox" class="re-chat">
             <div v-if="!chatLog.length" class="si-chat-hint">
               <p class="si-chat-hint-title">让它改，或者直接问它意见</p>
@@ -794,6 +867,17 @@ onBeforeUnmount(() => {
       <template #action>
         <n-button size="small" @click="rollbackOpen = false">取消</n-button>
         <n-button size="small" type="primary" :loading="rollingBack" @click="rollback(previewHash)">恢复到这一版</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="clearChatOpen" preset="dialog" title="清空这段对话？" :show-icon="false">
+      <div class="confirm-body">
+        <p>对话记录清掉就找不回来了。</p>
+        <p>只清对话——简历本身和已保存的版本都不受影响。</p>
+      </div>
+      <template #action>
+        <n-button size="small" @click="clearChatOpen = false">取消</n-button>
+        <n-button size="small" type="primary" @click="clearChat">清空</n-button>
       </template>
     </n-modal>
   </div>
