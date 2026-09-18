@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { NButton, NInput, NModal, NSelect, NSplit, NSpin, NTag, useMessage } from "naive-ui";
 import { api } from "../api";
+import { renderMarkdown } from "../markdown";
 
 interface ResumeFile { file: string; name: string }
 interface Person { id: string; label: string; resumes: ResumeFile[] }
@@ -87,6 +88,7 @@ async function load(wanted = "") {
     }>(`/api/resume-doc${wanted ? `?file=${encodeURIComponent(wanted)}` : ""}`);
     people.value = data.people;
     file.value = data.file;
+    loadChat();                 // 换文件就换一段对话（按文件存的）
     name.value = data.name;
     filePath.value = data.path;
     exportDir.value = data.exportDir;
@@ -188,6 +190,98 @@ async function refreshPdf() {
       previewQueued = false;
       void refreshPdf();
     }
+  }
+}
+
+/**
+ * 历史版本：和自我介绍同一套（列表 / 预览某一版 / 回滚）。
+ *
+ * 版本 = **手动保存**产生的 git 提交；AI 改写本身不算一版。
+ * 预览走 PDF：老版本的 HTML 直接塞进页面会把它的 <style> 也带进来、把界面搞花，
+ * 而 PDF 走的是和主预览同一条渲染，看到的就是那一版导出后的样子。
+ */
+const historyOpen = ref(false);
+const historyLoading = ref(false);
+const previewLoading = ref(false);
+/** version/title/points/dateText 都由服务端从提交信息里拆好（见 server/commit-subject.mjs） */
+interface Commit {
+  hash: string; date: string; subject: string; added: number; deleted: number;
+  version: string; title: string; points: string[]; dateText: string; dateFull: string;
+}
+const commits = ref<Commit[]>([]);
+const previewHash = ref("");
+const previewUrl = ref("");
+
+function dropPreview() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
+  previewUrl.value = "";
+}
+
+async function openHistory() {
+  historyOpen.value = true;
+  previewHash.value = "";
+  dropPreview();
+  historyLoading.value = true;
+  try {
+    const data = await api<{ commits: typeof commits.value }>(`/api/resume-doc/history?file=${encodeURIComponent(file.value)}`);
+    commits.value = data.commits;
+    if (commits.value[0]) await previewCommit(commits.value[0].hash);
+  } catch (error) {
+    toast.error((error as Error).message);
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+async function previewCommit(hash: string) {
+  previewHash.value = hash;
+  previewLoading.value = true;
+  try {
+    const data = await api<{ html: string }>("/api/resume-doc/history", {
+      method: "POST",
+      body: JSON.stringify({ file: file.value, hash }),
+    });
+    const response = await fetch("/api/resume-doc/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file: file.value, html: data.html }),
+    });
+    if (!response.ok) {
+      // 和主预览一个写法：把服务端那句具体原因带出来，别只剩一个状态码
+      const detail = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(detail.error || `生成这一版的预览失败（HTTP ${response.status}）`);
+    }
+    const blob = await response.blob();
+    dropPreview();
+    // 历史预览用 page-fit：目的是"一眼看全这一版长什么样"。用 100%（真实大小）页面会超出这一栏，
+    // 于是阅读器出现滚动条、外层再来一根——就是那对"双滚动条"。主预览仍然用 100%，那里要看真实大小。
+    previewUrl.value = `${URL.createObjectURL(blob)}#zoom=page-fit`;
+  } catch (error) {
+    // 取不到就把选中和画面一起清掉：留着上一版的预览配着新的哈希，
+    // 底下那个「回滚到这一版」就指向了一个根本没加载出来的版本
+    dropPreview();
+    previewHash.value = "";
+    toast.error((error as Error).message);
+  } finally {
+    previewLoading.value = false;
+  }
+}
+
+async function rollback(hash: string) {
+  try {
+    const data = await api<{ html: string; mtime: number; commit: { committed: boolean; hash?: string } }>(
+      "/api/resume-doc/rollback",
+      { method: "POST", body: JSON.stringify({ file: file.value, hash }) },
+    );
+    html.value = data.html;
+    saved.value = data.html;
+    baseMtime.value = data.mtime;
+    resetVersions(data.html);
+    historyOpen.value = false;
+    stalePreview.value = true;      // 内容变了，主预览要刷新才对得上
+    toast.success(data.commit.committed ? `已回滚并提交 ${data.commit.hash}` : "已回滚");
+  } catch (error) {
+    toast.error((error as Error).message);
   }
 }
 
@@ -351,6 +445,28 @@ const instruction = ref("");
 const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean; action?: "revise" | "answer" }[]>([]);
 const chatBox = ref<HTMLElement | null>(null);
 
+/**
+ * 对话按**文件**存在本地：刷新、关掉再回来，之前聊过什么还在。
+ * 不落服务端——这是编辑时的临时上下文，不是要沉淀的资产；而按文件分开存，
+ * 换一份简历就是另一段对话，不会把两边的上下文搅在一起。
+ */
+const chatKey = () => `resume-chat:${file.value}`;
+function loadChat() {
+  try {
+    chatLog.value = JSON.parse(localStorage.getItem(chatKey()) ?? "[]");
+  } catch {
+    chatLog.value = [];        // 存的东西坏了就当没有，别拦着页面
+  }
+}
+watch(chatLog, () => {
+  if (!file.value) return;
+  try {
+    localStorage.setItem(chatKey(), JSON.stringify(chatLog.value));
+  } catch {
+    /* 存不下（配额满）不该影响正在进行的对话 */
+  }
+}, { deep: true });
+
 async function revise() {
   const ask = instruction.value.trim();
   if (!ask || revising.value) return;
@@ -411,6 +527,9 @@ onBeforeUnmount(() => {
       <div class="re-tools">
         <n-tag v-if="dirty" type="warning" size="small" round>未保存</n-tag>
         <n-tag v-else size="small" round>已保存</n-tag>
+        <!-- 和自我介绍同一套摆放：历史属于「落盘」这一组，紧贴保存左边；
+             它动的是 git 提交，「回撤/前进」动的是内存里的撤销栈，两回事 -->
+        <n-button size="small" @click="openHistory">历史</n-button>
         <n-button size="small" type="primary" :loading="saving" :disabled="!dirty" @click="save">保存</n-button>
         <n-button size="small" :loading="exporting" @click="openExport">导出 PDF</n-button>
         <button
@@ -484,7 +603,10 @@ onBeforeUnmount(() => {
             </div>
             <div v-for="(entry, index) in chatLog" :key="index" class="si-chat-item" :class="entry.role">
               <span class="si-chat-who">{{ entry.role === "user" ? "我" : "AI" }}</span>
-              <span>{{ entry.text }}</span>
+              <!-- 模型输出按 markdown 渲染；用户自己打的内容保持原文，免得被当成语法 -->
+              <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
+              <div v-if="entry.role === 'assistant'" class="si-chat-text" v-html="renderMarkdown(entry.text)" />
+              <div v-else class="si-chat-text">{{ entry.text }}</div>
             </div>
           </div>
           <div class="si-chat-box">
@@ -530,6 +652,66 @@ onBeforeUnmount(() => {
         <n-button size="small" :disabled="exporting" @click="exportOpen = false">取消</n-button>
         <n-button size="small" type="primary" :loading="exporting" @click="doExport()">导出</n-button>
       </template>
+    </n-modal>
+
+    <!-- 历史版本：左边列表、右边那一版的 PDF。样式和自我介绍那个面板共用（si-history 系列） -->
+    <n-modal v-model:show="historyOpen" preset="card" style="width: 1000px; max-width: 94vw" title="历史版本">
+      <n-spin :show="historyLoading">
+        <!-- 一版都没有时不摆两栏：右边那句「左侧选一个版本」根本没得选，
+             两栏一起说「没有东西」，还白占 380px 高。空着就只说一件事。 -->
+        <div v-if="commits.length" class="si-history">
+          <div class="si-history-list">
+            <button
+              v-for="commit in commits"
+              :key="commit.hash"
+              class="si-commit"
+              :class="{ active: commit.hash === previewHash }"
+              @click="previewCommit(commit.hash)"
+            >
+              <span class="si-commit-head">
+                <span class="si-commit-ver">{{ commit.version }}</span>
+                <strong class="si-commit-title">{{ commit.title }}</strong>
+              </span>
+              <!-- 分点用 span 不用 ul：button 里放不了流内容，浏览器容错但我们不该依赖它 -->
+              <span v-if="commit.points.length" class="si-commit-points">
+                <span v-for="point in commit.points" :key="point" class="si-commit-point">{{ point }}</span>
+              </span>
+              <span class="si-commit-meta">
+                <time :datetime="commit.date" :title="commit.dateFull">{{ commit.dateText }}</time>
+                <code>{{ commit.hash.slice(0, 7) }}</code>
+                <em class="si-diff-add">+{{ commit.added }}</em>
+                <em class="si-diff-del">−{{ commit.deleted }}</em>
+              </span>
+            </button>
+          </div>
+          <div class="si-history-preview">
+            <div class="si-history-preview-body">
+              <!-- 打开面板会自动选中最新一版，那时 historyLoading 还没落地。
+                   两个转圈一起转（外面罩整个弹窗、里面罩预览栏）看着像卡死了，
+                   外面那个已经说明"在加载"，里面就等它让位 -->
+              <n-spin :show="previewLoading && !historyLoading">
+                <iframe v-if="previewUrl" class="re-history-pdf" :src="previewUrl" title="历史版本预览" />
+                <p v-else-if="!previewLoading" class="muted si-history-hint">左侧选一个版本看它当时长什么样。</p>
+              </n-spin>
+            </div>
+            <div v-if="previewHash" class="si-history-actions">
+              <n-button size="small" type="primary" @click="rollback(previewHash)">回滚到这一版</n-button>
+              <span class="si-count">回滚会新增一次提交，历史不会丢</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="si-history-blank">
+          <!-- 载入中也走这块：高度一样，弹窗不会先塌成一条、拿到数据再长开 -->
+          <template v-if="!historyLoading">
+            <svg class="si-blank-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.4" />
+              <path d="M12 7.2v5.1l3.3 2" />
+            </svg>
+            <p class="si-blank-title">还没有任何版本</p>
+            <p class="si-blank-hint">在编辑器里改完点「保存」，就会记下这一版——以后随时能翻回来看看，也能回滚。</p>
+          </template>
+        </div>
+      </n-spin>
     </n-modal>
   </div>
 </template>

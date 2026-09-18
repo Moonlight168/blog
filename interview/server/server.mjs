@@ -17,11 +17,32 @@ import { compactHistoryText, PiInteractionAgent } from "./pi-interaction-agent.m
 import { QuestionIndex } from "./question-index.mjs";
 import { pickPath } from "./picker.mjs";
 import { listRealInterviews, readRealInterview } from "./real-interview.mjs";
-import { commitResumeDoc, findBrowser, htmlToPdf, listResumeGroups, pdfFileName, readResumeDoc, resolveResumeDoc, writeResumeDoc } from "./resume-doc.mjs";
+import { commitResumeDoc, findBrowser, htmlToPdf, listResumeGroups, pdfFileName, readResumeDoc, readResumeDocAt, resolveResumeDoc, resumeDocHistory, rollbackResumeDoc, writeResumeDoc } from "./resume-doc.mjs";
+import { decorateCommits } from "./commit-subject.mjs";
 import { slugify } from "./markdown.mjs";
 import { normalizeTitle } from "./search.mjs";
 import { commitSelfIntro, listSelfIntros, readSelfIntro, readSelfIntroAt, rollbackSelfIntro, selfIntroHistory, writeSelfIntro } from "./self-intro.mjs";
 import { expired } from "./session-time.mjs";
+
+/**
+ * 保存时的提交信息 = **范围 + 模型写的一句话**。
+ * 历史面板里显示的就是它，所以它得能让人一眼认出「这一版改了什么」：
+ * `简历：开场压缩到两句；实习那段补了 SQL 脚本维护`
+ *
+ * 版本号刻意不写进来——面板按「这个文件的第几次提交」自己算（见 commit-subject.mjs），
+ * 信息里再写一遍就是同一件事说两次。模型写的时候也照着同一份规范（COMMIT_SUBJECT_SPEC）。
+ *
+ * 模型总结失败不该拦住保存——退回一句朴素的，先把内容落盘。
+ */
+async function versionedMessage({ scope, before, after, fallback }) {
+  let summary = "";
+  try {
+    summary = await agent.summarizeChange({ before, after });
+  } catch {
+    /* 总结不成就算了，落回 fallback */
+  }
+  return `${scope}：${summary || fallback}`;
+}
 import { isAllowedJob, isAllowedResume, readResume, scanJobs, scanResumes, updateEnvFile } from "./resume.mjs";
 
 const db = openDatabase(config.databasePath);
@@ -276,7 +297,8 @@ async function api(request, response, url) {
   }
   if (request.method === "GET" && url.pathname === "/api/self-intro/history") {
     const file = url.searchParams.get("file") ?? "";
-    return json(response, 200, { commits: selfIntroHistory(config.resumeDir, file) });
+    // 提交信息是自由文本，列表要的是拆好的几段（版本 / 标题 / 分点 / 时间）——见 commit-subject.mjs
+    return json(response, 200, { commits: decorateCommits(selfIntroHistory(config.resumeDir, file)) });
   }
   if (request.method === "POST" && url.pathname === "/api/self-intro/history") {
     const input = await body(request);
@@ -306,7 +328,9 @@ async function api(request, response, url) {
         : "这个文件在编辑器外被改过（当前内容与磁盘一致，无需额外存档）");
     }
     const written = writeSelfIntro(config.resumeDir, file, markdown);
-    const commit = commitSelfIntro(config.resumeDir, file, String(input.message ?? "").trim() || "自我介绍：编辑器保存");
+    const message = String(input.message ?? "").trim()
+      || await versionedMessage({ scope: "自我介绍", before: current.markdown, after: markdown, fallback: "编辑器保存" });
+    const commit = commitSelfIntro(config.resumeDir, file, message);
     return json(response, 200, { ...written, commit, externallyChanged, notices });
   }
   if (request.method === "POST" && url.pathname === "/api/self-intro/revise") {
@@ -538,7 +562,9 @@ async function api(request, response, url) {
         : "这份简历在编辑器外被改过（当前内容与磁盘一致，无需额外存档）");
     }
     const written = writeResumeDoc(config.resumeDir, file, html);
-    const commit = commitResumeDoc(config.resumeDir, file, String(input.message ?? "").trim() || "简历：编辑器保存");
+    const message = String(input.message ?? "").trim()
+      || await versionedMessage({ scope: "简历", before: current.html, after: html, fallback: "编辑器保存" });
+    const commit = commitResumeDoc(config.resumeDir, file, message);
     return json(response, 200, { ...written, commit, notices });
   }
   if (request.method === "POST" && url.pathname === "/api/resume-doc/revise") {
@@ -583,6 +609,27 @@ async function api(request, response, url) {
     }
   }
   // 导出目录可改：写回 .env，下次启动仍是这个目录
+  // 简历的历史版本：与自我介绍同一套（列表 / 取某一版 / 回滚）
+  if (request.method === "GET" && url.pathname === "/api/resume-doc/history") {
+    const file = url.searchParams.get("file") ?? "";
+    return json(response, 200, { commits: decorateCommits(resumeDocHistory(config.resumeDir, file)) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/resume-doc/history") {
+    const input = await body(request);
+    try {
+      return json(response, 200, { html: readResumeDocAt(config.resumeDir, String(input.file ?? ""), String(input.hash ?? "")) });
+    } catch (error) {
+      return json(response, 404, { error: error.message });
+    }
+  }
+  if (request.method === "POST" && url.pathname === "/api/resume-doc/rollback") {
+    const input = await body(request);
+    try {
+      return json(response, 200, await rollbackResumeDoc(config.resumeDir, String(input.file ?? ""), String(input.hash ?? "")));
+    } catch (error) {
+      return json(response, 400, { error: error.message });
+    }
+  }
   if (request.method === "POST" && url.pathname === "/api/resume-doc/export-dir") {
     const input = await body(request);
     const dir = String(input.dir ?? "").trim();

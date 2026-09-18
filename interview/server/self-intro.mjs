@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+import { commitPathAt } from "./commit-path.mjs";
+
 /**
  * 自我介绍文档：读、写、版本管理。
  *
@@ -202,8 +204,14 @@ export function readSelfIntroAt(resumeDir, file, hash) {
   const repo = findRepoRoot(target.path);
   if (!repo) throw new Error("这个文件不在任何 git 仓库里，无法回溯历史");
   const relative = path.relative(repo, target.path).split(path.sep).join("/");
-  const content = git(repo, ["show", `${hash}:${relative}`], { allowFailure: true });
-  if (content === null) throw new Error("这次提交里没有这个文件");
+  // 先按当前路径取；改名之前的那几版要回头查当时的名字。
+  // 名字查不到就不要再拿空路径去 show——`<hash>:` 会被 git 当成根 tree，返回一坨非空的东西。
+  let content = git(repo, ["show", `${hash}:${relative}`], { allowFailure: true });
+  if (content === null) {
+    const then = commitPathAt(repo, relative, hash);
+    content = then ? git(repo, ["show", `${hash}:${then}`], { allowFailure: true }) : null;
+  }
+  if (content === null) throw new Error("这一版里没有这个文件");
   return content;
 }
 

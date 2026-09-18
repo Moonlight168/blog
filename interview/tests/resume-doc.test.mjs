@@ -5,9 +5,13 @@ import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
+import { execFileSync } from "node:child_process";
+
+import { commitPathAt } from "../server/commit-path.mjs";
+import { versionLabel } from "../server/doc-version.mjs";
 import {
-  findBrowser, listResumeGroups, pdfFileName, readResumeDoc,
-  resolveResumeDoc, withBaseHref, writeResumeDoc,
+  commitResumeDoc, findBrowser, htmlToPdf, listResumeGroups, pdfFileName, readResumeDoc, readResumeDocAt,
+  resolveResumeDoc, resumeDocHistory, rollbackResumeDoc, waitForFile, withBaseHref, writeResumeDoc,
 } from "../server/resume-doc.mjs";
 
 /** 造一个和线上同构的简历目录：一级目录 = 一个人，里面放 html */
@@ -113,8 +117,175 @@ test("没给简历路径时原样返回，渲染不该因此失败", () => {
   assert.equal(withBaseHref(doc, undefined), doc);
 });
 
+/** 造一份「躺在 git 仓库里」的简历——历史与版本号都建立在这上面 */
+function makeRepoWithResume() {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "resume-history-"));
+  const resumeDir = path.join(repo, "resume");
+  fs.mkdirSync(path.join(resumeDir, "zhangsan"), { recursive: true });
+  const file = "张三-后端.html";
+  fs.writeFileSync(path.join(resumeDir, "zhangsan", file), "<html>第一版</html>", "utf8");
+  const run = (...args) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  run("init");
+  run("config", "user.name", "tester");
+  run("config", "user.email", "tester@example.com");
+  run("add", "-A");
+  run("commit", "-m", "1.0 初版");
+  return { repo, resumeDir, file };
+}
+
+test("版本号：第几次保存就是第几版，1.0 之后用两位小数", () => {
+  assert.equal(versionLabel(1), "1.0");
+  assert.equal(versionLabel(2), "1.01");
+  assert.equal(versionLabel(3), "1.02");
+  assert.equal(versionLabel(11), "1.10");
+});
+
+test("简历历史：一次保存一条，提交信息就是那一版的说明", () => {
+  const { resumeDir, file } = makeRepoWithResume();
+  writeResumeDoc(resumeDir, file, "<html>第二版</html>");
+  commitResumeDoc(resumeDir, file, "1.01 压缩了实习那段");
+
+  const history = resumeDocHistory(resumeDir, file);
+  assert.equal(history.length, 2, "初版 + 这次保存");
+  assert.equal(history[0].subject, "1.01 压缩了实习那段", "新的在前");
+  assert.equal(history[1].subject, "1.0 初版");
+  assert.ok(history[0].added > 0 && history[0].deleted > 0, "要带上改了多少行");
+});
+
+/** 造一份「改过名、也挪过位置」的简历：第一版在 resume/ 下，第二版挪进人名目录还改了名 */
+function makeRepoWithRenamedResume() {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "resume-rename-"));
+  const resumeDir = path.join(repo, "resume");
+  const run = (...args) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  fs.mkdirSync(resumeDir, { recursive: true });
+  // 正文要够长、两版够像，git 才认得出这是改名而不是「删一个加一个」
+  const body = `<html><body>${"简历正文".repeat(200)}`;
+  const before = path.join(resumeDir, "张三-后端.html");
+  fs.writeFileSync(before, `${body}<p>第一版</p></body></html>`, "utf8");
+  run("init");
+  run("config", "user.name", "tester");
+  run("config", "user.email", "tester@example.com");
+  run("add", "-A");
+  run("commit", "-m", "1.0 初版");
+
+  const after = path.join(resumeDir, "zhangsan", "张三-后端(AI应用).html");
+  fs.mkdirSync(path.dirname(after), { recursive: true });
+  fs.renameSync(before, after);
+  fs.writeFileSync(after, `${body}<p>第二版</p></body></html>`, "utf8");
+  run("add", "-A");
+  run("commit", "-m", "1.01 归入人名目录并改名");
+  return { repo, resumeDir, file: "张三-后端(AI应用).html" };
+}
+
+test("改名挪位之前的版本也读得出来——按当时的路径取，而不是拿当前路径去撞", () => {
+  const { resumeDir, file } = makeRepoWithRenamedResume();
+  const history = resumeDocHistory(resumeDir, file);
+  assert.equal(history.length, 2, "--follow 要能跟着改名走回旧提交");
+
+  const first = history.find((item) => item.subject === "1.0 初版");
+  assert.ok(first, "旧提交要出现在历史列表里");
+  assert.match(
+    readResumeDocAt(resumeDir, file, first.hash),
+    /第一版/,
+    "老版本要能取到内容，不能报「这一版里没有这个文件」",
+  );
+});
+
+test("查「那次提交里文件叫什么」：改名前后各是各的名字", () => {
+  const { repo, file } = makeRepoWithRenamedResume();
+  const history = resumeDocHistory(path.join(repo, "resume"), file);
+  const oldest = history.find((item) => item.subject === "1.0 初版");
+  const newest = history.find((item) => item.subject.startsWith("1.01"));
+
+  assert.equal(commitPathAt(repo, `resume/zhangsan/${file}`, oldest.hash), "resume/张三-后端.html");
+  assert.equal(commitPathAt(repo, `resume/zhangsan/${file}`, newest.hash), `resume/zhangsan/${file}`);
+  assert.equal(commitPathAt(repo, `resume/zhangsan/${file}`, "0000000"), "", "查不到的提交给空串，不抛错");
+});
+
+test("简历历史：能取回某一版的内容，回滚是新增一版而不是抹掉历史", () => {
+  const { resumeDir, file } = makeRepoWithResume();
+  const first = resumeDocHistory(resumeDir, file)[0].hash;
+
+  writeResumeDoc(resumeDir, file, "<html>第二版</html>");
+  commitResumeDoc(resumeDir, file, "1.01 改了点东西");
+
+  assert.equal(readResumeDocAt(resumeDir, file, first), "<html>第一版</html>", "旧版内容取得到");
+
+  const rolled = rollbackResumeDoc(resumeDir, file, first, "1.02 回滚到初版");
+  assert.equal(rolled.html, "<html>第一版</html>", "磁盘上回到了那一版");
+  assert.equal(fs.readFileSync(path.join(resumeDir, "zhangsan", file), "utf8"), "<html>第一版</html>");
+  assert.equal(resumeDocHistory(resumeDir, file).length, 3, "回滚本身也算一版，历史没丢");
+  assert.equal(resumeDocHistory(resumeDir, file)[0].subject, "1.02 回滚到初版");
+});
+
+test("简历历史：提交号不合法或不在仓库里时明确报错，不静默给空", () => {
+  const { resumeDir, file } = makeRepoWithResume();
+  assert.throws(() => readResumeDocAt(resumeDir, file, "../../etc/passwd"), /提交号不合法/);
+  const loose = fs.mkdtempSync(path.join(os.tmpdir(), "resume-nogit-"));
+  fs.mkdirSync(path.join(loose, "zhangsan"), { recursive: true });
+  fs.writeFileSync(path.join(loose, "zhangsan", file), HTML, "utf8");
+  assert.throws(() => readResumeDocAt(loose, file, "abcdef1"), /不在任何 git 仓库/);
+});
+
 test("找不到浏览器时返回空串，找到的必须是真实存在的路径", () => {
   const found = findBrowser();
   assert.equal(typeof found, "string");
   if (found) assert.ok(fs.existsSync(found), `返回的浏览器路径应当存在：${found}`);
+});
+
+// ---- 等浏览器把 PDF 写出来 ----
+// 背景：Chrome 拿到参数后会把自己重新拉起来渲染（命令行里多出 --user-data-dir=…\HeadlessChrome…
+// 和 --do-not-de-elevate），父进程立刻以 0 退出，PDF 要再过几百毫秒才落盘。
+// 之前只看一次 existsSync，就会把好好的渲染报成「浏览器没有产出文件」。
+
+function waitDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "pdf-wait-"));
+}
+
+test("浏览器退出了但文件晚一步才出现：要接着等，不能当场判失败", async () => {
+  const out = path.join(waitDir(), "晚到.pdf");
+  const since = Date.now();
+  setTimeout(() => fs.writeFileSync(out, "%PDF-1.4 正文", "utf8"), 250);
+
+  await waitForFile(out, { since, timeoutMs: 5000 });
+  assert.ok(fs.statSync(out).size > 0, "等到的是个有内容的文件");
+});
+
+test("同名旧文件躺在那儿不算数——导出是覆盖写，等的必须是这一次新写的", async () => {
+  const out = path.join(waitDir(), "覆盖.pdf");
+  fs.writeFileSync(out, "%PDF-1.4 上一版", "utf8");
+  const past = new Date(Date.now() - 60_000);
+  fs.utimesSync(out, past, past);                    // 伪装成一分钟前导出的那份
+  const since = Date.now();
+  setTimeout(() => fs.writeFileSync(out, "%PDF-1.4 这一版", "utf8"), 300);
+
+  const started = Date.now();
+  await waitForFile(out, { since, timeoutMs: 5000 });
+  assert.equal(fs.readFileSync(out, "utf8"), "%PDF-1.4 这一版", "不能拿旧文件顶数");
+  assert.ok(Date.now() - started >= 200, "得真等到新文件写出");
+});
+
+test("一直不出现就超时报错，错误里带上路径方便定位", async () => {
+  const out = path.join(waitDir(), "永远不会出现.pdf");
+  await assert.rejects(
+    () => waitForFile(out, { since: Date.now(), timeoutMs: 300, intervalMs: 50 }),
+    (error) => error.message.includes("永远不会出现.pdf"),
+  );
+});
+
+test("空文件不算产出：Chrome 崩在半路会留下 0 字节", async () => {
+  const out = path.join(waitDir(), "空的.pdf");
+  fs.writeFileSync(out, "", "utf8");
+  await assert.rejects(
+    () => waitForFile(out, { since: Date.now() - 1000, timeoutMs: 300, intervalMs: 50 }),
+    /空的\.pdf/,
+  );
+});
+
+test("真实浏览器跑一遍：产出的 PDF 非空（没装 Chrome/Edge 就跳过）", async (t) => {
+  const browser = findBrowser();
+  if (!browser) return t.skip("本机没找到 Chrome 或 Edge");
+  const out = path.join(waitDir(), "真渲染.pdf");
+  await htmlToPdf({ browser, html: "<html><body><h1>简历</h1></body></html>", outPath: out, sourceFile: "" });
+  assert.ok(fs.statSync(out).size > 0, "渲染出来的 PDF 要有内容");
 });

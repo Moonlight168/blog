@@ -164,18 +164,67 @@ main { height: calc(100vh - 72px); }
    看起来和 AI 那侧只差徽标位置，分不出"这是我说的话"。 */
 .si-chat-item.user { flex-direction: row-reverse; width: fit-content; max-width: 88%; margin-left: auto; color: #173f36; }
 .si-chat-item.assistant { color: #56615d; }
+/* AI 的回复按 markdown 渲染，会出现 p / ul / code 这些块级元素。
+   min-width:0 是必须的：flex 子项默认最小宽度是内容宽度，长英文或长代码会把气泡顶破。
+   其余是把它压回"对话"的紧凑感，别让一条回复撑出好几屏。 */
+.si-chat-text { min-width: 0; }
+.si-chat-text > :first-child { margin-top: 0; }
+.si-chat-text > :last-child { margin-bottom: 0; }
+.si-chat-text p, .si-chat-text ul, .si-chat-text ol { margin: 0 0 6px; }
+.si-chat-text ul, .si-chat-text ol { padding-left: 18px; }
+.si-chat-text li { margin-bottom: 2px; }
+.si-chat-text h1, .si-chat-text h2, .si-chat-text h3, .si-chat-text h4 { margin: 8px 0 4px; font-size: 12px; }
+.si-chat-text code { padding: 1px 4px; border-radius: 3px; background: #f1efe7; font-size: 11px; }
+.si-chat-text pre { margin: 0 0 6px; padding: 8px 10px; border-radius: 4px; background: #f1efe7; overflow-x: auto; }
+.si-chat-text pre code { padding: 0; background: none; }
+.si-chat-text blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid #e0ddd2; color: #79827f; }
 .si-chat-who { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; background: #e5e8df; color: #53605b; font-size: 10px; font-weight: 800; }.si-chat-item.assistant .si-chat-who { background: #173f36; color: #f6d679; }
 .si-chat-box { padding: 14px 14px 12px; border-top: 1px solid #f0ede4; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }.si-chat-box > .n-input { width: 100%; }
 .si-path { margin: 10px 0 0; font-size: 11px; word-break: break-all; }
-.si-history { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; min-height: 380px; }
+/* 340px 而不是 280px：标题要能在两行内读完，窄了每条都折成四五行的灰墙 */
+.si-history { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; min-height: 380px; }
 .si-history-list { max-height: 62vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+/* 一版都没有时只有这一块：一句说明居中摆好，高度比两栏矮一截，别空占着 380px */
+.si-history-blank { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; text-align: center; }
+.si-blank-icon { width: 26px; height: 26px; fill: none; stroke: #c2cdc8; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.si-blank-title { margin: 3px 0 0; color: #56615d; font-size: 13px; font-weight: 600; }
+.si-blank-hint { margin: 0; max-width: 360px; color: #929a97; font-size: 12px; line-height: 1.7; }
+/* 右侧还没选版本时的提示：flex 里 margin: auto 会把它推到正中间，别缩在左上角 */
+.si-history-hint { margin: auto; text-align: center; }
 .si-commit { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid #e6e2d8; border-radius: 10px; background: #fffefa; text-align: left; font: inherit; cursor: pointer; transition: .15s ease; }
 .si-commit:hover { border-color: #c8dcd4; background: #f3f8f5; }.si-commit.active { border-color: #173f36; background: #f3f8f5; }
-.si-commit strong { font-size: 12px; font-weight: 600; color: #2d3833; line-height: 1.5; }.si-commit-meta { color: #929a97; font-size: 11px; font-family: ui-monospace, monospace; }
-.si-history-preview { max-height: 62vh; overflow-y: auto; padding: 14px 18px; border-radius: 10px; background: #fffefa; }
-.si-history-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0ede4; display: flex; align-items: center; gap: 12px; }
+.si-commit-head { display: flex; align-items: baseline; gap: 6px; }
+.si-commit-ver { flex: none; padding: 1px 5px; border-radius: 5px; background: #eef4f1; color: #3f6b5d; font: 600 10px ui-monospace, monospace; }
+.si-commit-title { font-size: 12px; font-weight: 600; color: #2d3833; line-height: 1.5; }
+/* 分点靠一个圆点 + 缩进区分层级，不加边框底色——一栏十几条，每条都描边就成马赛克了 */
+.si-commit-points { display: flex; flex-direction: column; gap: 3px; }
+.si-commit-point { position: relative; padding-left: 11px; color: #5c6663; font-size: 11px; line-height: 1.45; }
+.si-commit-point::before { content: ""; position: absolute; left: 3px; top: .58em; width: 3px; height: 3px; border-radius: 50%; background: #c6d0cb; }
+/* meta 上面加一条细线：时间/哈希/增删是这一版的元数据，不是内容的一部分 */
+.si-commit-meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f0ede4; color: #929a97; font: 11px ui-monospace, monospace; }
+.si-commit-meta code { font: inherit; }
+.si-diff-add { color: #4f7a52; font-style: normal; }.si-diff-del { color: #a8675f; font-style: normal; }
+/* 预览栏拆成「能滚的内容」+「不滚的操作条」：窗口一矮，回滚按钮就被内容顶出视野，
+   用户根本找不到它。操作条当网格的一行钉在底部，滚的只有上面那块。 */
+.si-history-preview { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 62vh; overflow: hidden; border-radius: 10px; background: #fffefa; }
+.si-history-preview-body { min-height: 0; overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; }
+/* 历史面板里嵌的 .preview-body 不该自己滚：它那套 max-height/overflow 是给主预览区的，
+   套进来就变成外层滚一层、内层再滚一层。这里把它降级成普通内容，由上面那层统一滚。 */
+.si-history-preview .preview-body { max-height: none; overflow: visible; padding: 0; background: none; border-radius: 0; }
+/* 简历的历史版本预览：老版本是 HTML，塞进页面会把它的 <style> 也带进来，所以走 PDF。
+   flex: 1 让它铺满剩下的高度，滚动交给阅读器自己——外面再套一层就又成双滚动条了。 */
+.re-history-pdf { display: block; width: 100%; flex: 1; min-height: 0; border: 0; border-radius: 8px; background: #fff; }
+/* 嵌 PDF 时上面那块也不滚，整栏交给阅读器（它内部那根不算外层）。看 markdown 的自我介绍那边不受影响。 */
+.si-history-preview-body:has(.re-history-pdf) { overflow: hidden; padding: 8px; }
+.si-history-actions { padding: 12px 18px; border-top: 1px solid #f0ede4; display: flex; align-items: center; gap: 12px; }
 .intro-foot { display: flex; justify-content: flex-end; gap: 8px; }
-@media (max-width: 1100px) { .si-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 260px; }.si-history { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .si-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 260px; }
+/* 两栏压成一栏后，两块的 62vh 是**相加**的（约 124vh），弹窗必然高过视口——
+   回滚按钮在预览栏底部，就这么被顶到屏幕外，怎么都点不到。这里按视口比例重新分配，
+   两块加起来再留出弹窗自身的约 90px。窄且矮的窗口（1080×577 就中招）全靠这几行。 */
+.si-history { grid-template-columns: 1fr; min-height: 0; }
+.si-history-list { max-height: 34vh; }
+.si-history-preview { height: 42vh; } }
 .retrieval-bar { margin: 18px 0 10px; }.retrieval-actions { display: flex; gap: 8px; margin-bottom: 22px; }.confirm-body p { max-width: 330px; margin: 0 0 8px; line-height: 1.6; }.confirm-body p:last-child { margin-bottom: 0; }
 .end-confirm-body p { max-width: 430px; margin: 0 0 8px; color: #4a5450; line-height: 1.7; }.end-confirm-body p:last-child { margin-bottom: 0; }.end-confirm-body strong { color: #173f36; }
 .channel-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 30px; }.channel-col { min-width: 0; padding: 16px 18px; border: 1px solid #dedbd1; border-radius: 14px; background: #fffefa; }.channel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }.channel-empty { margin: 0; font-size: 12px; }

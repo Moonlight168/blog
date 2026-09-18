@@ -1,3 +1,4 @@
+import { COMMIT_SUBJECT_SPEC } from "./commit-subject.mjs";
 import { apiUrl } from "./config.mjs";
 import { MAX_PROSE_LINES } from "./markdown.mjs";
 import { friendlyNetworkError, httpStatusHint } from "./net.mjs";
@@ -26,7 +27,11 @@ const REVISE_DECISION_RULE = `先判断他这句话是在「让你去做」还�
   + `只写 reply，正文留空，**一个字都不要动稿子**。\n`
   + `- 同一句里既有问又有指路时看主体：「如果投递 Agent 岗，怎么修正比较好 先改个人优势」主体是那个问，`
   + `后面半句是在给分析划范围（先从个人优势说起），不是在让你动手——判 answer。\n`
-  + `- 分不清就判 answer：改稿有副作用（覆盖内容、要重新预览），宁可不改，等他明确要求。`;
+  + `- 分不清就判 answer：改稿有副作用（覆盖内容、要重新预览），宁可不改，等他明确要求。\n`
+  // 对话框按 markdown 渲染，所以 reply 里该用就用——不分点会被读成一坨
+  + `- reply 用 markdown 写（**加粗**、列表、\`行内代码\`、必要时分段），前端会渲染出来，`
+  + `别把几条建议挤成一大段。只有 revise 的那句话保持简短口语，因为它是动作说明不是分析。`;
+
 
 /** 已问题目清单只取标题、不带答案摘要——省 token，又足够让模型避开重复 */
 function askedBlock(session) {
@@ -344,6 +349,22 @@ export class InterviewAgent {
    * 走「整篇返回」而不是 diff：文档才 2KB，一次往返成本可忽略，而 patch 的失败模式
    * （找不到锚点、上下文对不上）要多得多——改坏了有回撤栈和 git 兜着。
    */
+  /**
+   * 一次保存改了什么，写成一句话——给提交信息用，也是历史面板里显示的那行。
+   *
+   * 为什么让模型写：`git diff --stat` 只会说"改了 12 行" ✗ 而人想知道的是
+   * "开场压缩到两句、实习那段补了 SQL 脚本维护" ✓ 那才是回头看时能认出来的东西 ✓
+   */
+  async summarizeChange({ before, after }) {
+    const result = await this.#json(
+      `下面是一份文档改前和改后的全文。按这份规范写这次改了什么，只返回 JSON：{"summary":"…"}。\n`
+      + `${COMMIT_SUBJECT_SPEC}`,
+      `改前：\n${before}\n\n改后：\n${after}`,
+      STABLE_TEMPERATURE,
+    );
+    return String(result.summary ?? "").trim();
+  }
+
   async reviseSelfIntro({ markdown, instruction, spec = "", history = [] }) {
     const result = await this.#revise({
       system: `你在帮候选人改他的面试自我介绍（一份 markdown）。`

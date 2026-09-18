@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import { NButton, NInput, NModal, NSelect, NSpin, NTag, useMessage } from "naive-ui";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
 
-interface Commit { hash: string; date: string; subject: string; added: number; deleted: number }
+/** version/title/points/dateText 都由服务端从提交信息里拆好（见 server/commit-subject.mjs） */
+interface Commit {
+  hash: string; date: string; subject: string; added: number; deleted: number;
+  version: string; title: string; points: string[]; dateText: string; dateFull: string;
+}
 interface IntroFile { file: string; name: string }
 
 /** 面试页的预览弹窗也读这个键，两处看的是同一份 */
@@ -99,6 +103,7 @@ async function load(file = "") {
     }>(`/api/self-intro${file ? `?file=${encodeURIComponent(file)}` : ""}`);
     files.value = data.files;
     currentFile.value = data.file;
+    loadChat();                 // 换稿子就换一段对话（按稿子存的）
     if (data.file) localStorage.setItem(STORAGE_KEY, data.file);
     text.value = data.markdown;
     saved.value = data.markdown;
@@ -118,8 +123,9 @@ async function load(file = "") {
 async function switchFile(file: string) {
   if (!file || file === currentFile.value) return;
   if (dirty.value && !window.confirm(`「${nameOf(currentFile.value)}」还有未保存的改动，切换会丢掉，确定吗？`)) return;
-  chatLog.value = [];
   instruction.value = "";
+  // 不要在这里清 chatLog：对话是按文件存的，清空会把上一份的记录覆盖成空。
+  // load() 里会按新文件把对应的那段读出来。
   await load(file);
 }
 
@@ -151,6 +157,27 @@ const instruction = ref("");
 // 混散文进 JSON 模式的对话会让模型返回空内容（实测 40% 概率）
 const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean; action?: "revise" | "answer" }[]>([]);
 const chatBox = ref<HTMLElement | null>(null);
+
+/**
+ * 对话按**哪一份稿子**存在本地：刷新、关掉再回来，之前聊过什么还在。
+ * 不落服务端——这是编辑时的临时上下文，不是要沉淀的资产。
+ */
+const chatKey = () => `self-intro-chat:${currentFile.value}`;
+function loadChat() {
+  try {
+    chatLog.value = JSON.parse(localStorage.getItem(chatKey()) ?? "[]");
+  } catch {
+    chatLog.value = [];        // 存的东西坏了就当没有，别拦着页面
+  }
+}
+watch(chatLog, () => {
+  if (!currentFile.value) return;
+  try {
+    localStorage.setItem(chatKey(), JSON.stringify(chatLog.value));
+  } catch {
+    /* 存不下（配额满）不该影响正在进行的对话 */
+  }
+}, { deep: true });
 
 async function revise() {
   const ask = instruction.value.trim();
@@ -224,6 +251,10 @@ async function previewCommit(hash: string) {
     const data = await api<{ markdown: string }>("/api/self-intro/history", { method: "POST", body: JSON.stringify({ file: currentFile.value, hash }) });
     previewText.value = data.markdown;
   } catch (error) {
+    // 取不到就把选中和正文一起清掉：留着上一版的正文配着新的哈希，
+    // 底下那个「回滚到这一版」就指向了一个根本没加载出来的版本
+    previewText.value = "";
+    previewHash.value = "";
     toast.error((error as Error).message);
   }
 }
@@ -305,7 +336,10 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
             </p>
             <div v-for="(entry, index) in chatLog" :key="index" class="si-chat-item" :class="entry.role">
               <span class="si-chat-who">{{ entry.role === "user" ? "我" : "AI" }}</span>
-              <span>{{ entry.text }}</span>
+              <!-- 模型输出按 markdown 渲染；用户自己打的内容保持原文，免得被当成语法 -->
+              <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
+              <div v-if="entry.role === 'assistant'" class="si-chat-text" v-html="renderMarkdown(entry.text)" />
+              <div v-else class="si-chat-text">{{ entry.text }}</div>
             </div>
           </div>
           <div class="si-chat-box">
@@ -329,7 +363,9 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
 
     <n-modal v-model:show="historyOpen" preset="card" style="width: 1000px; max-width: 94vw" title="历史版本">
       <n-spin :show="historyLoading">
-        <div class="si-history">
+        <!-- 一版都没有时不摆两栏：右边那句「左侧选一个版本」根本没得选，
+             两栏一起说「没有东西」，还白占 380px 高。空着就只说一件事。 -->
+        <div v-if="commits.length" class="si-history">
           <div class="si-history-list">
             <button
               v-for="commit in commits"
@@ -338,19 +374,43 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
               :class="{ active: commit.hash === previewHash }"
               @click="previewCommit(commit.hash)"
             >
-              <strong>{{ commit.subject }}</strong>
-              <span class="si-commit-meta">{{ commit.date.slice(0, 16).replace("T", " ") }} · {{ commit.hash.slice(0, 7) }} · +{{ commit.added }}/-{{ commit.deleted }}</span>
+              <span class="si-commit-head">
+                <span class="si-commit-ver">{{ commit.version }}</span>
+                <strong class="si-commit-title">{{ commit.title }}</strong>
+              </span>
+              <!-- 分点用 span 不用 ul：button 里放不了流内容，浏览器容错但我们不该依赖它 -->
+              <span v-if="commit.points.length" class="si-commit-points">
+                <span v-for="point in commit.points" :key="point" class="si-commit-point">{{ point }}</span>
+              </span>
+              <span class="si-commit-meta">
+                <time :datetime="commit.date" :title="commit.dateFull">{{ commit.dateText }}</time>
+                <code>{{ commit.hash.slice(0, 7) }}</code>
+                <em class="si-diff-add">+{{ commit.added }}</em>
+                <em class="si-diff-del">−{{ commit.deleted }}</em>
+              </span>
             </button>
-            <p v-if="!historyLoading && !commits.length" class="muted">还没有任何提交。</p>
           </div>
           <div class="si-history-preview">
-            <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
-            <div class="preview-body" v-html="renderMarkdown(previewText)" />
+            <div class="si-history-preview-body">
+              <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
+              <div class="preview-body" v-html="renderMarkdown(previewText)" />
+            </div>
             <div v-if="previewHash" class="si-history-actions">
               <n-button size="small" type="primary" @click="rollback(previewHash)">回滚到这一版</n-button>
               <span class="si-count">回滚会新增一次提交，历史不会丢</span>
             </div>
           </div>
+        </div>
+        <div v-else class="si-history-blank">
+          <!-- 载入中也走这块：高度一样，弹窗不会先塌成一条、拿到数据再长开 -->
+          <template v-if="!historyLoading">
+            <svg class="si-blank-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.4" />
+              <path d="M12 7.2v5.1l3.3 2" />
+            </svg>
+            <p class="si-blank-title">还没有任何版本</p>
+            <p class="si-blank-hint">在编辑器里改完点「保存」，就会记下这一版——以后随时能翻回来看看，也能回滚。</p>
+          </template>
         </div>
       </n-spin>
     </n-modal>
