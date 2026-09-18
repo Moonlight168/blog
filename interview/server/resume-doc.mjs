@@ -83,13 +83,15 @@ export function resolveResumeDoc(resumeDir, file) {
 export function readResumeDoc(resumeDir, file) {
   const target = resolveResumeDoc(resumeDir, file);
   if (!target) throw new Error(`没有这份简历：${file || "(空)"}`);
+  const info = repoRelative(target);
   return {
     file: target.file,
     name: target.name,
     path: target.path,
     html: fs.readFileSync(target.path, "utf8"),
     mtime: fs.statSync(target.path).mtimeMs,
-    repo: findRepoRoot(target.path),
+    repo: info?.repo ?? null,
+    uncommitted: info ? differsFromHead(info.repo, info.relative) : false,
   };
 }
 
@@ -141,6 +143,17 @@ function repoRelative(target) {
   return repo ? { repo, relative: path.relative(repo, target.path).split(path.sep).join("/") } : null;
 }
 
+/**
+ * 盘上这份和最新提交对不上——刚恢复过一版、还没点保存就会这样。
+ *
+ * 用途：刷新页面后编辑器要接着显示「未保存」。否则重开一次就变成「已保存」，
+ * 内容明明还没记进历史，人却以为已经存下来了。
+ */
+function differsFromHead(repo, relative) {
+  if (!repo || !relative) return false;
+  return Boolean(gitIn(repo, ["diff", "--name-only", "HEAD", "--", relative], true)?.trim());
+}
+
 /** 提交历史（新→旧），带每次改了多少行——历史面板的列表就是它 */
 export function resumeDocHistory(resumeDir, file, limit = 50) {
   const target = resolveResumeDoc(resumeDir, file);
@@ -156,14 +169,20 @@ export function resumeDocHistory(resumeDir, file, limit = 50) {
     if (!hash) continue;
     let added = 0;
     let deleted = 0;
+    let binary = false;
     for (const line of rest) {
       const cells = line.split("\t");
-      if (cells.length >= 2 && /^\d+$/.test(cells[0]) && /^\d+$/.test(cells[1])) {
+      if (cells.length < 2) continue;
+      if (/^\d+$/.test(cells[0]) && /^\d+$/.test(cells[1])) {
         added += Number(cells[0]);
         deleted += Number(cells[1]);
+      } else if (cells[0] === "-") {
+        binary = true;            // 二进制文件的 numstat 是 `-`，别把它读成「没改动」
       }
     }
-    commits.push({ hash, date, subject, added, deleted });
+    // 纯改名/挪位置那次提交，这个文件的 numstat 是 `0 0`——内容一个字没动。
+    // 标出来交给展示层，别让它占一个版本号
+    commits.push({ hash, date, subject, added, deleted, changed: binary || added > 0 || deleted > 0 });
   }
   return commits;
 }
@@ -186,11 +205,25 @@ export function readResumeDocAt(resumeDir, file, hash) {
   return content;
 }
 
-/** 回滚到某一版：内容写回去再提交一次——历史不丢，回滚本身也算一版 */
-export function rollbackResumeDoc(resumeDir, file, hash, message = "简历：回滚到历史版本") {
+/**
+ * 回滚到某一版：只把内容写回工作区，**不提交**（同 rollbackSelfIntro，理由见那边）。
+ *
+ * `uncommitted` 要照实回：恢复到**最新那版**时盘上和 HEAD 一模一样，那就是没有未保存的改动，
+ * 编辑器不该亮着「未保存」催人点保存。
+ */
+export function rollbackResumeDoc(resumeDir, file, hash) {
   const html = readResumeDocAt(resumeDir, file, hash);
   const written = writeResumeDoc(resumeDir, file, html);
-  return { ...written, html, commit: commitResumeDoc(resumeDir, file, message) };
+  const target = resolveResumeDoc(resumeDir, file);
+  const info = target ? repoRelative(target) : null;
+  return {
+    ...written,
+    // 回**盘上现在的样子**，不是 git 里那份：blob 存的是 LF（core.autocrlf），
+    // 盘上是 CRLF，直接把 git 那份回给编辑器，字符串一比对不上，
+    // 就会为一个根本没改过的文件亮「未保存」
+    html: fs.readFileSync(written.path, "utf8"),
+    uncommitted: info ? differsFromHead(info.repo, info.relative) : false,
+  };
 }
 
 /**

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { onBeforeRouteLeave } from "vue-router";
 import { NButton, NInput, NModal, NSelect, NSpin, NTag, useMessage } from "naive-ui";
 import { api } from "../api";
 import { renderMarkdown } from "../markdown";
@@ -22,6 +21,12 @@ const revising = ref(false);
 const text = ref("");
 /** 上次落盘的内容——用它判断「未保存」，比一个布尔标记可靠 */
 const saved = ref("");
+/**
+ * 盘上这份和最新提交对不上（比如刚恢复过一版、还没点保存）。
+ * 光比 text 和 saved 不够——刷新页面后两者都从磁盘重新读，看着就成「已保存」了，
+ * 可那份内容其实还没记进历史。这个标记由服务端按 git 算，刷新也带得回来。
+ */
+const uncommitted = ref(false);
 /** 载入时的文件 mtime；服务端用它识别「编辑期间被别处改过」 */
 const baseMtime = ref<number | null>(null);
 const filePath = ref("");
@@ -41,7 +46,13 @@ let snapshotTimer = 0;
 /** 预览栏是否切到编辑态——同一个栏位，不再并排摆两拦 */
 const editing = ref(false);
 
-const dirty = computed(() => text.value !== saved.value);
+const dirty = computed(() => text.value !== saved.value || uncommitted.value);
+/**
+ * 编辑器里改过、还没落盘。和 dirty 不是一回事：恢复过一版之后 dirty 也是 true，
+ * 但那份内容**已经在盘上**了。syncFromDisk 要判断的是「缓冲区里有没有还没落盘的东西」，
+ * 用 dirty 会让它恢复后永远不肯重读磁盘。
+ */
+const edited = computed(() => text.value !== saved.value);
 const canUndo = computed(() => cursor.value > 0);
 const canRedo = computed(() => cursor.value >= 0 && cursor.value < versions.value.length - 1);
 
@@ -70,13 +81,14 @@ function onInput(event: Event) {
  * 有未保存改动时不读——那才是他正在编辑、正要保存的东西。
  */
 async function syncFromDisk() {
-  if (dirty.value || !currentFile.value) return false;
-  const latest = await api<{ markdown: string; mtime: number | null }>(
+  if (edited.value || !currentFile.value) return false;
+  const latest = await api<{ markdown: string; mtime: number | null; uncommitted: boolean }>(
     `/api/self-intro?file=${encodeURIComponent(currentFile.value)}`,
   );
   if (latest.mtime === baseMtime.value) return false;
   text.value = latest.markdown;
   saved.value = latest.markdown;
+  uncommitted.value = latest.uncommitted;
   baseMtime.value = latest.mtime;
   resetVersions(latest.markdown);
   toast.info("文件在外部被改过，已重新载入");
@@ -99,7 +111,7 @@ async function load(file = "") {
   try {
     const data = await api<{
       files: IntroFile[]; file: string; name: string; path: string;
-      markdown: string; mtime: number | null; versioned: boolean;
+      markdown: string; mtime: number | null; versioned: boolean; uncommitted: boolean;
     }>(`/api/self-intro${file ? `?file=${encodeURIComponent(file)}` : ""}`);
     files.value = data.files;
     currentFile.value = data.file;
@@ -107,6 +119,7 @@ async function load(file = "") {
     if (data.file) localStorage.setItem(STORAGE_KEY, data.file);
     text.value = data.markdown;
     saved.value = data.markdown;
+    uncommitted.value = data.uncommitted;
     baseMtime.value = data.mtime;
     filePath.value = data.path;
     versioned.value = data.versioned;
@@ -119,18 +132,19 @@ async function load(file = "") {
   }
 }
 
-/** 切到另一份自我介绍。有未保存改动先问一句——切过去那份的改动就找不回来了 */
+/**
+ * 切到另一份自我介绍。
+ *
+ * 这里不弹「还有未保存的改动，确定吗」：浏览器原生的 confirm 拦一下太吵，
+ * 而工具栏那颗醒目的「未保存」标签已经说明状态了。切走丢的只是编辑器缓冲区，
+ * 盘上那份还在。
+ */
 async function switchFile(file: string) {
   if (!file || file === currentFile.value) return;
-  if (dirty.value && !window.confirm(`「${nameOf(currentFile.value)}」还有未保存的改动，切换会丢掉，确定吗？`)) return;
   instruction.value = "";
   // 不要在这里清 chatLog：对话是按文件存的，清空会把上一份的记录覆盖成空。
   // load() 里会按新文件把对应的那段读出来。
   await load(file);
-}
-
-function nameOf(file: string) {
-  return files.value.find((item) => item.file === file)?.name ?? file;
 }
 
 async function save() {
@@ -141,8 +155,9 @@ async function save() {
       { method: "POST", body: JSON.stringify({ file: currentFile.value, markdown: text.value, baseMtime: baseMtime.value }) },
     );
     saved.value = text.value;
+    uncommitted.value = false;
     baseMtime.value = data.mtime;
-    toast.success(data.commit.committed ? `已保存并提交 ${data.commit.hash}` : "已保存");
+    toast.success(data.commit.committed ? `已保存 ${data.commit.hash}` : "已保存");
     for (const notice of data.notices) toast.warning(notice);
   } catch (error) {
     toast.error((error as Error).message);
@@ -228,6 +243,10 @@ const commits = ref<Commit[]>([]);
 const previewHash = ref("");
 const previewText = ref("");
 const historyLoading = ref(false);
+/** 回滚确认：拿不准改哪一版就不动手 */
+const rollbackOpen = ref(false);
+const rollbackTarget = ref<Commit | null>(null);
+const rollingBack = ref(false);
 
 async function openHistory() {
   historyOpen.value = true;
@@ -259,27 +278,39 @@ async function previewCommit(hash: string) {
   }
 }
 
+/** 回滚会把编辑器里这份稿子整个换掉，先确认一次；确认框里点明是哪一版 */
+function askRollback() {
+  rollbackTarget.value = commits.value.find((item) => item.hash === previewHash.value) ?? null;
+  if (rollbackTarget.value) rollbackOpen.value = true;
+}
+
 async function rollback(hash: string) {
+  rollingBack.value = true;
+  const label = rollbackTarget.value ? `已恢复到 ${rollbackTarget.value.version}` : "已恢复";
   try {
-    const data = await api<{ markdown: string; mtime: number; commit: { committed: boolean; hash?: string } }>(
+    const data = await api<{ markdown: string; mtime: number; uncommitted: boolean }>(
       "/api/self-intro/rollback",
       { method: "POST", body: JSON.stringify({ file: currentFile.value, hash }) },
     );
     text.value = data.markdown;
-    saved.value = data.markdown;
+    // 故意不更新 saved：服务端只把内容写回工作区、没有提交。
+    // uncommitted 由服务端按 git 照实算——恢复到**最新那版**时它就是 false，
+    // 盘上和 HEAD 一模一样，不该亮着「未保存」催人点保存。
+    uncommitted.value = data.uncommitted;
     baseMtime.value = data.mtime;
     pushVersion(data.markdown);
+    rollbackOpen.value = false;
     historyOpen.value = false;
-    toast.success(data.commit.committed ? `已回滚并提交 ${data.commit.hash}` : "已回滚");
+    toast.success(`${label}，点「保存」才记进历史`);
   } catch (error) {
     toast.error((error as Error).message);
+  } finally {
+    rollingBack.value = false;
   }
 }
 
 onMounted(() => load(localStorage.getItem(STORAGE_KEY) ?? ""));
 onBeforeUnmount(() => window.clearTimeout(snapshotTimer));
-// 有未保存改动时离开要拦一下：这个文件不在主仓库里，随手丢了不好找回来
-onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保存的改动，确定离开吗？") : true));
 </script>
 
 <template>
@@ -296,7 +327,8 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
         />
         <n-button size="small" :disabled="!canUndo" @click="undo">← 回撤</n-button>
         <n-button size="small" :disabled="!canRedo" @click="redo">前进 →</n-button>
-        <span class="si-count">版本 {{ cursor + 1 }}/{{ versions.length }}</span>
+        <!-- 数的是回撤栈里的位置，不是 git 的「第几版」（那个在历史面板里）。别叫「版本」，会撞词 -->
+        <span class="si-count">步骤 {{ cursor + 1 }}/{{ versions.length }}</span>
       </div>
       <div class="si-tools">
         <n-tag v-if="dirty" type="warning" size="small" round>未保存</n-tag>
@@ -362,6 +394,18 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
     </p>
 
     <n-modal v-model:show="historyOpen" preset="card" style="width: 1000px; max-width: 94vw" title="历史版本">
+      <!-- 回滚按钮放标题栏（那块本来就是空的）：预览栏的每一行都是给内容的高度，
+           在下面单开一行放按钮，等于从预览里挖走 47px -->
+      <template #header-extra>
+        <n-button
+          class="si-rollback-btn"
+          size="small"
+          type="primary"
+          :disabled="!previewHash"
+          title="把这一版的内容放回编辑器，不产生新提交"
+          @click="askRollback"
+        >恢复到这一版</n-button>
+      </template>
       <n-spin :show="historyLoading">
         <!-- 一版都没有时不摆两栏：右边那句「左侧选一个版本」根本没得选，
              两栏一起说「没有东西」，还白占 380px 高。空着就只说一件事。 -->
@@ -395,10 +439,6 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
               <!-- eslint-disable-next-line vue/no-v-html -- markdown-it 以 html:false 渲染，已转义原始 HTML -->
               <div class="preview-body" v-html="renderMarkdown(previewText)" />
             </div>
-            <div v-if="previewHash" class="si-history-actions">
-              <n-button size="small" type="primary" @click="rollback(previewHash)">回滚到这一版</n-button>
-              <span class="si-count">回滚会新增一次提交，历史不会丢</span>
-            </div>
           </div>
         </div>
         <div v-else class="si-history-blank">
@@ -409,10 +449,36 @@ onBeforeRouteLeave(() => (dirty.value ? window.confirm("自我介绍还有未保
               <path d="M12 7.2v5.1l3.3 2" />
             </svg>
             <p class="si-blank-title">还没有任何版本</p>
-            <p class="si-blank-hint">在编辑器里改完点「保存」，就会记下这一版——以后随时能翻回来看看，也能回滚。</p>
+            <p class="si-blank-hint">在编辑器里改完点「保存」，就会记下这一版——以后随时能翻回来看看，也能恢复。</p>
           </template>
         </div>
       </n-spin>
+    </n-modal>
+
+    <!-- 回滚会把编辑器里这份稿子整个换掉，先确认一次。目标那一版按列表里的样子摆出来，
+         一眼就知道要换成哪一版；顺带把「历史不会丢」讲清楚——那是最容易被误会的地方 -->
+    <n-modal v-model:show="rollbackOpen" preset="dialog" title="恢复到这一版？" :show-icon="false">
+      <div class="si-rollback-body">
+        <div v-if="rollbackTarget" class="si-rollback-card">
+          <span class="si-commit-head">
+            <span class="si-commit-ver">{{ rollbackTarget.version }}</span>
+            <strong class="si-commit-title">{{ rollbackTarget.title }}</strong>
+          </span>
+          <span v-if="rollbackTarget.points.length" class="si-commit-points">
+            <span v-for="point in rollbackTarget.points" :key="point" class="si-commit-point">{{ point }}</span>
+          </span>
+          <span class="si-commit-meta">
+            <time>{{ rollbackTarget.dateText }}</time>
+            <code>{{ rollbackTarget.hash.slice(0, 7) }}</code>
+          </span>
+        </div>
+        <!-- 一句话就够：最要紧的是「不会新增提交」，其次才是「那怎么才能记下来」 -->
+        <p><strong>不会</strong>新增提交，只把内容放回编辑器；点「保存」才记成一版。</p>
+      </div>
+      <template #action>
+        <n-button size="small" @click="rollbackOpen = false">取消</n-button>
+        <n-button size="small" type="primary" :loading="rollingBack" @click="rollback(previewHash)">恢复到这一版</n-button>
+      </template>
     </n-modal>
   </div>
 </template>

@@ -115,13 +115,27 @@ export function readSelfIntro(resumeDir, file = "") {
   const target = resolveSelfIntro(resumeDir, file);
   if (!target) return { file: "", name: "", path: "", exists: false, markdown: "", mtime: null, repo: null };
   const exists = fs.existsSync(target.path) && fs.statSync(target.path).isFile();
+  const repo = findRepoRoot(target.path);
   return {
     ...target,
     exists,
     markdown: exists ? fs.readFileSync(target.path, "utf8") : "",
     mtime: exists ? fs.statSync(target.path).mtimeMs : null,
-    repo: findRepoRoot(target.path),
+    repo,
+    // 盘上和最新提交对不上——刚恢复过一版还没保存就会这样。刷新页面后要接着显示「未保存」
+    uncommitted: repo ? differsFromHead(repo, relativeTo(repo, target.path)) : false,
   };
+}
+
+/** 文件在仓库里的相对路径（git 只认正斜杠） */
+function relativeTo(repo, file) {
+  return path.relative(repo, file).split(path.sep).join("/");
+}
+
+/** 盘上这份和最新提交对不上？——恢复到最新那版时会是 false，那就没有「未保存」可言 */
+function differsFromHead(repo, relative) {
+  if (!repo || !relative) return false;
+  return Boolean(git(repo, ["diff", "--name-only", "HEAD", "--", relative], { allowFailure: true })?.trim());
 }
 
 /**
@@ -184,14 +198,20 @@ export function selfIntroHistory(resumeDir, file, limit = 50) {
     if (!hash) continue;
     let added = 0;
     let deleted = 0;
+    let binary = false;
     for (const line of rest) {
       const cells = line.split("\t");
-      if (cells.length >= 2 && /^\d+$/.test(cells[0]) && /^\d+$/.test(cells[1])) {
+      if (cells.length < 2) continue;
+      if (/^\d+$/.test(cells[0]) && /^\d+$/.test(cells[1])) {
         added += Number(cells[0]);
         deleted += Number(cells[1]);
+      } else if (cells[0] === "-") {
+        binary = true;            // 二进制文件的 numstat 是 `-`，别把它读成「没改动」
       }
     }
-    commits.push({ hash, date, subject, added, deleted });
+    // 纯改名/挪位置那次提交，这个文件的 numstat 是 `0 0`——内容一个字没动。
+    // 标出来交给展示层，别让它占一个版本号
+    commits.push({ hash, date, subject, added, deleted, changed: binary || added > 0 || deleted > 0 });
   }
   return commits;
 }
@@ -215,10 +235,24 @@ export function readSelfIntroAt(resumeDir, file, hash) {
   return content;
 }
 
-/** 回滚 = 把那一版内容取出来重新写一遍并提交（不改写历史） */
-export function rollbackSelfIntro(resumeDir, file, hash, message = "自我介绍：回滚到历史版本") {
+/**
+ * 回滚到某一版：只把内容写回工作区，**不提交**。
+ *
+ * 提交是「保存」才做的事。回滚若自己提交，列表里就多一条内容上只是旧版副本的记录——
+ * 不带任何新信息，只把「第几版」这个数字冲淡。所以回滚完编辑器是「未保存」状态，
+ * 由你决定要不要点保存把它记成一版（git 里 `checkout <commit> -- <file>` 也是这个语义）。
+ */
+export function rollbackSelfIntro(resumeDir, file, hash) {
   const markdown = readSelfIntroAt(resumeDir, file, hash);
   const written = writeSelfIntro(resumeDir, file, markdown);
-  const commit = commitSelfIntro(resumeDir, file, message);
-  return { ...written, markdown, commit };
+  const repo = findRepoRoot(written.path);
+  return {
+    ...written,
+    // 回**盘上现在的样子**，不是 git 里那份：blob 存的是 LF（core.autocrlf），
+    // 盘上是 CRLF，直接把 git 那份回给编辑器，字符串一比对不上，
+    // 就会为一个根本没改过的文件亮「未保存」
+    markdown: fs.readFileSync(written.path, "utf8"),
+    // 照实回：恢复到**最新那版**时盘上和 HEAD 一样，就没有未保存的改动
+    uncommitted: repo ? differsFromHead(repo, relativeTo(repo, written.path)) : false,
+  };
 }

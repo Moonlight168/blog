@@ -98,3 +98,23 @@ test("时间给得不认识就原样返回，不显示 Invalid Date", () => {
 test("decorateCommits 对非数组输入返回空数组，页面拿到的是可渲染的东西", () => {
   assert.deepEqual(decorateCommits(undefined), []);
 });
+
+test("内容一个字没动的提交不进列表，版本号也只数真版本", () => {
+  const raw = [
+    { hash: "d", date: "2026-09-18T10:00:00+08:00", subject: "第四次", changed: true },
+    { hash: "c", date: "2026-09-17T10:00:00+08:00", subject: "第三次（只挪了位置）", changed: false },
+    { hash: "b", date: "2026-09-16T10:00:00+08:00", subject: "第二次", changed: true },
+    { hash: "a", date: "2026-09-15T10:00:00+08:00", subject: "第一次", changed: true },
+  ];
+  const list = decorateCommits(raw);
+  assert.deepEqual(list.map((item) => item.title), ["第四次", "第二次", "第一次"], "只挪位置的那条被滤掉");
+  assert.deepEqual(list.map((item) => item.version), ["1.02", "1.01", "1.0"], "编号跳过没内容的那条");
+});
+
+test("没有 changed 字段的提交当有改动处理，不能因缺字段就把历史吃掉", () => {
+  const raw = [
+    { hash: "b", date: "2026-09-16T10:00:00+08:00", subject: "第二次" },
+    { hash: "a", date: "2026-09-15T10:00:00+08:00", subject: "第一次" },
+  ];
+  assert.equal(decorateCommits(raw).length, 2);
+});

@@ -191,6 +191,81 @@ test("改名挪位之前的版本也读得出来——按当时的路径取，�
   );
 });
 
+test("恢复过一版还没保存时，读取要报「未提交」——刷新后不能变回已保存", () => {
+  const { resumeDir, file } = makeRepoWithResume();
+  const first = resumeDocHistory(resumeDir, file)[0].hash;
+  writeResumeDoc(resumeDir, file, "<html>第二版</html>");
+  commitResumeDoc(resumeDir, file, "1.01 改了点东西");
+  assert.equal(readResumeDoc(resumeDir, file).uncommitted, false, "刚提交完，盘上和 HEAD 一致");
+
+  rollbackResumeDoc(resumeDir, file, first);
+  assert.equal(readResumeDoc(resumeDir, file).uncommitted, true, "恢复后盘上和最新提交对不上，还没保存");
+});
+
+test("恢复到最新那版不算未保存——盘上和 HEAD 一模一样，没什么可存的", () => {
+  const { resumeDir, file } = makeRepoWithResume();
+  writeResumeDoc(resumeDir, file, "<html>第二版</html>");
+  commitResumeDoc(resumeDir, file, "1.01 改了点东西");
+  const newest = resumeDocHistory(resumeDir, file)[0].hash;
+
+  const rolled = rollbackResumeDoc(resumeDir, file, newest);
+  assert.equal(rolled.uncommitted, false, "恢复的就是当前这版");
+  assert.equal(readResumeDoc(resumeDir, file).uncommitted, false, "读出来也该是干净的");
+});
+
+test("恢复回给编辑器的是盘上那份，不是 git 里那份——两者的换行符可能不一样", () => {
+  // core.autocrlf=true 时 blob 里存 LF、盘上是 CRLF，直接回 git 那份会让编辑器
+  // 以为内容变了，为一个根本没改过的文件亮「未保存」
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "resume-eol-"));
+  const resumeDir = path.join(repo, "resume");
+  const file = "张三-后端.html";
+  const run = (...args) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  fs.mkdirSync(path.join(resumeDir, "zhangsan"), { recursive: true });
+  fs.writeFileSync(path.join(resumeDir, "zhangsan", file), "<html>\r\n<body>第一版</body>\r\n</html>\r\n", "utf8");
+  run("init");
+  run("config", "user.name", "tester");
+  run("config", "user.email", "tester@example.com");
+  run("config", "core.autocrlf", "true");
+  run("add", "-A");
+  run("commit", "-m", "1.0 初版");
+
+  const disk = () => fs.readFileSync(path.join(resumeDir, "zhangsan", file), "utf8");
+  const newest = resumeDocHistory(resumeDir, file)[0].hash;
+  assert.match(readResumeDocAt(resumeDir, file, newest), /\n/, "git 里那份是 LF");
+  assert.doesNotMatch(readResumeDocAt(resumeDir, file, newest), /\r\n/, "git 里那份没有 CR");
+
+  const rolled = rollbackResumeDoc(resumeDir, file, newest);
+  assert.equal(rolled.html, disk(), "回给编辑器的必须是盘上那份");
+  assert.match(rolled.html, /\r\n/, "盘上是 CRLF，回给编辑器的也得是 CRLF");
+});
+
+test("纯改名的提交内容没动，要标成「未改动」好让面板滤掉", () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "resume-pure-rename-"));
+  const resumeDir = path.join(repo, "resume");
+  const run = (...args) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  fs.mkdirSync(path.join(resumeDir, "zhangsan"), { recursive: true });
+  const body = `<html><body>${"简历正文".repeat(200)}</body></html>`;
+  fs.writeFileSync(path.join(resumeDir, "zhangsan", "张三-后端.html"), body, "utf8");
+  run("init");
+  run("config", "user.name", "tester");
+  run("config", "user.email", "tester@example.com");
+  run("add", "-A");
+  run("commit", "-m", "1.0 初版");
+
+  // 原地改个名就走，内容一个字都不动——这就是「不该占版本号」的那种提交
+  fs.renameSync(path.join(resumeDir, "zhangsan", "张三-后端.html"), path.join(resumeDir, "zhangsan", "张三-后端(AI应用).html"));
+  run("add", "-A");
+  run("commit", "-m", "1.01 改个名");
+
+  const history = resumeDocHistory(resumeDir, "张三-后端(AI应用).html");
+  assert.equal(history.length, 2, "--follow 要能跟着改名走回旧提交");
+  const renamed = history.find((item) => item.subject === "1.01 改个名");
+  assert.equal(renamed.changed, false, "内容一个字没变");
+  assert.equal(renamed.added, 0);
+  assert.equal(renamed.deleted, 0);
+  assert.equal(history.find((item) => item.subject === "1.0 初版").changed, true, "新建那次是实打实的改动");
+});
+
 test("查「那次提交里文件叫什么」：改名前后各是各的名字", () => {
   const { repo, file } = makeRepoWithRenamedResume();
   const history = resumeDocHistory(path.join(repo, "resume"), file);
@@ -202,8 +277,8 @@ test("查「那次提交里文件叫什么」：改名前后各是各的名字",
   assert.equal(commitPathAt(repo, `resume/zhangsan/${file}`, "0000000"), "", "查不到的提交给空串，不抛错");
 });
 
-test("简历历史：能取回某一版的内容，回滚是新增一版而不是抹掉历史", () => {
-  const { resumeDir, file } = makeRepoWithResume();
+test("简历历史：回滚只把内容写回工作区，不自己产生提交", () => {
+  const { repo, resumeDir, file } = makeRepoWithResume();
   const first = resumeDocHistory(resumeDir, file)[0].hash;
 
   writeResumeDoc(resumeDir, file, "<html>第二版</html>");
@@ -211,11 +286,14 @@ test("简历历史：能取回某一版的内容，回滚是新增一版而不�
 
   assert.equal(readResumeDocAt(resumeDir, file, first), "<html>第一版</html>", "旧版内容取得到");
 
-  const rolled = rollbackResumeDoc(resumeDir, file, first, "1.02 回滚到初版");
-  assert.equal(rolled.html, "<html>第一版</html>", "磁盘上回到了那一版");
-  assert.equal(fs.readFileSync(path.join(resumeDir, "zhangsan", file), "utf8"), "<html>第一版</html>");
-  assert.equal(resumeDocHistory(resumeDir, file).length, 3, "回滚本身也算一版，历史没丢");
-  assert.equal(resumeDocHistory(resumeDir, file)[0].subject, "1.02 回滚到初版");
+  const rolled = rollbackResumeDoc(resumeDir, file, first);
+  assert.equal(rolled.html, "<html>第一版</html>", "返回的是那一版的内容");
+  assert.equal(fs.readFileSync(path.join(resumeDir, "zhangsan", file), "utf8"), "<html>第一版</html>", "磁盘上回到了那一版");
+  assert.equal(resumeDocHistory(resumeDir, file).length, 2, "回滚不产生提交，版本数不变");
+
+  // 盘上内容和最新提交对不上＝「未保存」，等用户点保存才成一版
+  const dirty = execFileSync("git", ["-C", repo, "-c", "core.quotepath=false", "status", "--porcelain"], { encoding: "utf8" });
+  assert.match(dirty, /^\s*M\s+\S+\.html/m, "回滚后工作区应当是脏的");
 });
 
 test("简历历史：提交号不合法或不在仓库里时明确报错，不静默给空", () => {

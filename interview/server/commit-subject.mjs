@@ -72,11 +72,15 @@ export function commitDateText(iso, currentYear = String(new Date().getFullYear(
 
 /**
  * 把 history 的原始提交加上列表要显示的字段。
- * 列表是**新→旧**的，所以第 `index` 条的版本号 = `versionLabel(总数 - index)`——
+ *
+ * 先滤掉「内容一个字没动」的提交（纯改名、挪位置——numstat 是 `0 0`，历史函数标的 `changed`）：
+ * 它们占着一个版本号却没有任何新内容，只会让「第几版」这个数字变虚。
+ *
+ * 版本号在过滤**之后**才编：列表是**新→旧**的，第 `index` 条的版本号 = `versionLabel(总数 - index)`——
  * 最旧那条是 1.0，最新的那条是 1.(总数-1)。
  */
 export function decorateCommits(commits, currentYear) {
-  const list = Array.isArray(commits) ? commits : [];
+  const list = (Array.isArray(commits) ? commits : []).filter((commit) => commit.changed !== false);
   const total = list.length;
   return list.map((commit, index) => {
     const parsed = parseCommitSubject(commit.subject);

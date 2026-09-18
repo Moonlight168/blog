@@ -27,6 +27,12 @@ const exportDir = ref("");
 const html = ref("");
 /** 上次落盘的内容——用它判断「未保存」 */
 const saved = ref("");
+/**
+ * 盘上这份和最新提交对不上（比如刚恢复过一版、还没点保存）。
+ * 光比 html 和 saved 不够——刷新页面后两者都从磁盘重新读，看着就成「已保存」了，
+ * 可那份内容其实还没记进历史。这个标记由服务端按 git 算，刷新也带得回来。
+ */
+const uncommitted = ref(false);
 const baseMtime = ref<number | null>(null);
 /** 生成 PDF 期间显示骨架，避免白屏 */
 const pdfUrl = ref("");
@@ -43,7 +49,13 @@ const editing = ref(false);
 /** 内容改过、但预览还停在旧 PDF 上 */
 const stalePreview = ref(false);
 
-const dirty = computed(() => html.value !== saved.value);
+const dirty = computed(() => html.value !== saved.value || uncommitted.value);
+/**
+ * 编辑器里改过、还没落盘。和 dirty 不是一回事：恢复过一版之后 dirty 也是 true，
+ * 但那份内容**已经在盘上**了。syncFromDisk 要判断的是「缓冲区里有没有还没落盘的东西」，
+ * 用 dirty 会让它恢复后永远不肯重读磁盘。
+ */
+const edited = computed(() => html.value !== saved.value);
 const canUndo = computed(() => cursor.value > 0);
 const canRedo = computed(() => cursor.value >= 0 && cursor.value < versions.value.length - 1);
 const resumesOfPerson = computed(() => people.value.find((item) => item.id === person.value)?.resumes ?? []);
@@ -84,7 +96,7 @@ async function load(wanted = "") {
   try {
     const data = await api<{
       people: Person[]; file: string; name: string; path: string;
-      html: string; mtime: number | null; exportDir: string; browser: string;
+      html: string; mtime: number | null; exportDir: string; browser: string; uncommitted: boolean;
     }>(`/api/resume-doc${wanted ? `?file=${encodeURIComponent(wanted)}` : ""}`);
     people.value = data.people;
     file.value = data.file;
@@ -96,6 +108,7 @@ async function load(wanted = "") {
     localStorage.setItem(FILE_KEY, data.file);
     html.value = data.html;
     saved.value = data.html;
+    uncommitted.value = data.uncommitted;
     baseMtime.value = data.mtime;
     resetVersions(data.html);
     editing.value = false;
@@ -103,7 +116,7 @@ async function load(wanted = "") {
     // 换简历就丢掉上次自定义的文件名，否则会把新简历导成旧简历的名字
     lastExportName.value = "";
     localStorage.removeItem(EXPORT_NAME_KEY);
-    if (!data.browser) toast.warning("没找到 Chrome 或 Edge，PDF 预览与导出会失败");
+    if (!data.browser) toast.warning("没找到 Chrome 或 Edge，预览与导出会失败");
     await refreshPdf();
   } catch (error) {
     // 记住的那份没了（改名/删除）就退回默认，别让页面直接卡在报错上
@@ -121,9 +134,15 @@ async function switchPerson(id: string) {
   await switchFile(first);
 }
 
+/**
+ * 切到另一份简历。
+ *
+ * 这里不弹「还有未保存的改动，确定吗」：浏览器原生的 confirm 拦一下太吵，
+ * 而工具栏那颗醒目的「未保存」标签已经说明状态了。切走丢的只是编辑器缓冲区，
+ * 盘上那份还在。
+ */
 async function switchFile(next: string) {
   if (!next || next === file.value) return;
-  if (dirty.value && !window.confirm("当前简历还有未保存的改动，切换会丢掉，确定吗？")) return;
   chatLog.value = [];
   instruction.value = "";
   await load(next);
@@ -140,13 +159,14 @@ async function switchFile(next: string) {
  * 有未保存改动时不读——那才是他正在编辑、正要保存的东西。
  */
 async function syncFromDisk() {
-  if (dirty.value || !file.value) return false;
-  const latest = await api<{ html: string; mtime: number | null }>(
+  if (edited.value || !file.value) return false;
+  const latest = await api<{ html: string; mtime: number | null; uncommitted: boolean }>(
     `/api/resume-doc?file=${encodeURIComponent(file.value)}`,
   );
   if (latest.mtime === baseMtime.value) return false;
   html.value = latest.html;
   saved.value = latest.html;
+  uncommitted.value = latest.uncommitted;
   baseMtime.value = latest.mtime;
   resetVersions(latest.html);
   toast.info("文件在外部被改过，已重新载入");
@@ -178,9 +198,10 @@ async function refreshPdf() {
     }
     const blob = await response.blob();
     if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value);
-    // #zoom=100 让 Chrome 的 PDF 阅读器按真实大小打开（默认是"适应宽度"，窄栏下会缩得很小）；
-    // 缩放交给阅读器后，外层就不需要滚动条了——避免出现嵌套滚动条。
-    pdfUrl.value = `${URL.createObjectURL(blob)}#zoom=100`;
+    // #zoom=page-width 让 PDF 阅读器按**栏宽**适配打开。A4 是 794px 宽，预览栏常常比它窄，
+    // 按真实大小（#zoom=100）会把右边裁掉——而简历的右半截正是照片和联系方式。
+    // 缩放交给阅读器后，外层就不需要滚动条了，也就不会出现嵌套滚动条。
+    pdfUrl.value = `${URL.createObjectURL(blob)}#zoom=page-width`;
     stalePreview.value = false;
   } catch (error) {
     pdfError.value = (error as Error).message;
@@ -211,6 +232,10 @@ interface Commit {
 const commits = ref<Commit[]>([]);
 const previewHash = ref("");
 const previewUrl = ref("");
+/** 回滚确认：拿不准改哪一版就不动手 */
+const rollbackOpen = ref(false);
+const rollbackTarget = ref<Commit | null>(null);
+const rollingBack = ref(false);
 
 function dropPreview() {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
@@ -267,22 +292,43 @@ async function previewCommit(hash: string) {
   }
 }
 
+/** 回滚会把手上这份简历整个换掉，先确认一次；确认框里点明是哪一版 */
+function askRollback() {
+  rollbackTarget.value = commits.value.find((item) => item.hash === previewHash.value) ?? null;
+  if (rollbackTarget.value) rollbackOpen.value = true;
+}
+
 async function rollback(hash: string) {
+  rollingBack.value = true;
+  const label = rollbackTarget.value ? `已恢复到 ${rollbackTarget.value.version}` : "已恢复";
   try {
-    const data = await api<{ html: string; mtime: number; commit: { committed: boolean; hash?: string } }>(
+    const data = await api<{ html: string; mtime: number; uncommitted: boolean }>(
       "/api/resume-doc/rollback",
       { method: "POST", body: JSON.stringify({ file: file.value, hash }) },
     );
     html.value = data.html;
-    saved.value = data.html;
+    // 故意不更新 saved：服务端只把内容写回工作区、没有提交。
+    // uncommitted 由服务端按 git 照实算——恢复到**最新那版**时它就是 false，
+    // 盘上和 HEAD 一模一样，不该亮着「未保存」催人点保存。
+    uncommitted.value = data.uncommitted;
     baseMtime.value = data.mtime;
-    resetVersions(data.html);
+    // 用 pushVersion 而不是 resetVersions：恢复不留提交，万一恢复错了，
+    // 至少还能靠「← 回撤」把恢复前的内容找回来
+    pushVersion(data.html);
+    rollbackOpen.value = false;
     historyOpen.value = false;
-    stalePreview.value = true;      // 内容变了，主预览要刷新才对得上
-    toast.success(data.commit.committed ? `已回滚并提交 ${data.commit.hash}` : "已回滚");
+    stalePreview.value = true;
+    toast.success(`${label}，点「保存」才记进历史`);
   } catch (error) {
     toast.error((error as Error).message);
+    return;                        // 恢复没成，别去刷一份对不上的预览
+  } finally {
+    rollingBack.value = false;
   }
+  // 内容换了就把主预览跟上——和「← 回撤 / 前进 →」一个道理。否则预览还停在上一版的画面上，
+  // 只把按钮变成「● 刷新预览」，得手点一下才对齐。
+  // 放在 finally 后面：渲染要 2~3 秒，不该让「恢复」按钮一直转着。
+  await refreshPdf();
 }
 
 async function save() {
@@ -293,8 +339,9 @@ async function save() {
       { method: "POST", body: JSON.stringify({ file: file.value, html: html.value, baseMtime: baseMtime.value }) },
     );
     saved.value = html.value;
+    uncommitted.value = false;
     baseMtime.value = data.mtime;
-    toast.success(data.commit.committed ? `已保存并提交 ${data.commit.hash}` : "已保存");
+    toast.success(data.commit.committed ? `已保存 ${data.commit.hash}` : "已保存");
     for (const notice of data.notices) toast.warning(notice);
     await refreshPdf();
   } catch (error) {
@@ -430,7 +477,7 @@ async function doExport(nameOverride?: string) {
     exportName.value = data.name.replace(/\.pdf$/i, "");
     lastExportName.value = exportName.value;
     localStorage.setItem(EXPORT_NAME_KEY, exportName.value);
-    toast.success(`已导出 ${data.name}（${Math.round(data.bytes / 1024)} KB）到 ${exportDir.value}`);
+    toast.success(`已导出 ${data.name}（${Math.round(data.bytes / 1024)} KB）`);
   } catch (error) {
     toast.error((error as Error).message);
   } finally {
@@ -520,6 +567,8 @@ onBeforeUnmount(() => {
         <n-select class="re-file" size="small" :value="file" :options="resumesOfPerson.map(r => ({ label: r.name, value: r.file }))" @update:value="switchFile" />
         <n-button size="small" :disabled="!canUndo" @click="undo">← 回撤</n-button>
         <n-button size="small" :disabled="!canRedo" @click="redo">前进 →</n-button>
+        <!-- 和自我介绍同一处、同一套写法：数的是回撤栈里的位置，不是 git 的「第几版」 -->
+        <span class="si-count">步骤 {{ cursor + 1 }}/{{ versions.length }}</span>
         <n-button size="small" :loading="rendering" @click="refreshPdf">
           {{ stalePreview ? "● 刷新预览" : "刷新预览" }}
         </n-button>
@@ -656,6 +705,18 @@ onBeforeUnmount(() => {
 
     <!-- 历史版本：左边列表、右边那一版的 PDF。样式和自我介绍那个面板共用（si-history 系列） -->
     <n-modal v-model:show="historyOpen" preset="card" style="width: 1000px; max-width: 94vw" title="历史版本">
+      <!-- 回滚按钮放标题栏（那块本来就是空的）：预览栏的每一行都是给 PDF 的高度，
+           在下面单开一行放按钮，等于从预览里挖走 47px -->
+      <template #header-extra>
+        <n-button
+          class="si-rollback-btn"
+          size="small"
+          type="primary"
+          :disabled="!previewHash"
+          title="把这一版的内容放回编辑器，不产生新提交"
+          @click="askRollback"
+        >恢复到这一版</n-button>
+      </template>
       <n-spin :show="historyLoading">
         <!-- 一版都没有时不摆两栏：右边那句「左侧选一个版本」根本没得选，
              两栏一起说「没有东西」，还白占 380px 高。空着就只说一件事。 -->
@@ -694,10 +755,6 @@ onBeforeUnmount(() => {
                 <p v-else-if="!previewLoading" class="muted si-history-hint">左侧选一个版本看它当时长什么样。</p>
               </n-spin>
             </div>
-            <div v-if="previewHash" class="si-history-actions">
-              <n-button size="small" type="primary" @click="rollback(previewHash)">回滚到这一版</n-button>
-              <span class="si-count">回滚会新增一次提交，历史不会丢</span>
-            </div>
           </div>
         </div>
         <div v-else class="si-history-blank">
@@ -708,10 +765,36 @@ onBeforeUnmount(() => {
               <path d="M12 7.2v5.1l3.3 2" />
             </svg>
             <p class="si-blank-title">还没有任何版本</p>
-            <p class="si-blank-hint">在编辑器里改完点「保存」，就会记下这一版——以后随时能翻回来看看，也能回滚。</p>
+            <p class="si-blank-hint">在编辑器里改完点「保存」，就会记下这一版——以后随时能翻回来看看，也能恢复。</p>
           </template>
         </div>
       </n-spin>
+    </n-modal>
+
+    <!-- 回滚会把编辑器里这份整个换掉，先确认一次。目标那一版按列表里的样子摆出来，
+         一眼就知道要换成哪一版；顺带把「历史不会丢」讲清楚——那是最容易被误会的地方 -->
+    <n-modal v-model:show="rollbackOpen" preset="dialog" title="恢复到这一版？" :show-icon="false">
+      <div class="si-rollback-body">
+        <div v-if="rollbackTarget" class="si-rollback-card">
+          <span class="si-commit-head">
+            <span class="si-commit-ver">{{ rollbackTarget.version }}</span>
+            <strong class="si-commit-title">{{ rollbackTarget.title }}</strong>
+          </span>
+          <span v-if="rollbackTarget.points.length" class="si-commit-points">
+            <span v-for="point in rollbackTarget.points" :key="point" class="si-commit-point">{{ point }}</span>
+          </span>
+          <span class="si-commit-meta">
+            <time>{{ rollbackTarget.dateText }}</time>
+            <code>{{ rollbackTarget.hash.slice(0, 7) }}</code>
+          </span>
+        </div>
+        <!-- 一句话就够：最要紧的是「不会新增提交」，其次才是「那怎么才能记下来」 -->
+        <p><strong>不会</strong>新增提交，只把内容放回编辑器；点「保存」才记成一版。</p>
+      </div>
+      <template #action>
+        <n-button size="small" @click="rollbackOpen = false">取消</n-button>
+        <n-button size="small" type="primary" :loading="rollingBack" @click="rollback(previewHash)">恢复到这一版</n-button>
+      </template>
     </n-modal>
   </div>
 </template>

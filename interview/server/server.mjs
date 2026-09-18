@@ -293,6 +293,7 @@ async function api(request, response, url) {
       markdown: current.markdown,
       mtime: current.mtime,
       versioned: Boolean(current.repo),
+      uncommitted: Boolean(current.uncommitted),
     });
   }
   if (request.method === "GET" && url.pathname === "/api/self-intro/history") {
@@ -322,10 +323,10 @@ async function api(request, response, url) {
       && Math.abs(current.mtime - input.baseMtime) > 1;
     const notices = [];
     if (externallyChanged) {
-      const archived = commitSelfIntro(config.resumeDir, file, "自我介绍：外部改动存档（编辑器保存前自动存档）");
+      const archived = commitSelfIntro(config.resumeDir, file, "自我介绍：外部改动存档");
       notices.push(archived.committed
-        ? `这个文件在编辑器外被改过，已先把外部版本存成 ${archived.hash}，再写入你现在的版本`
-        : "这个文件在编辑器外被改过（当前内容与磁盘一致，无需额外存档）");
+        ? `文件在编辑器外被改过，已把外部版本存成 ${archived.hash}`
+        : "文件在编辑器外被改过，内容与磁盘一致，无需存档");
     }
     const written = writeSelfIntro(config.resumeDir, file, markdown);
     const message = String(input.message ?? "").trim()
@@ -542,10 +543,11 @@ async function api(request, response, url) {
       resumes: group.resumes.map((item) => ({ file: item.file, name: item.name })),
     }));
     const wanted = url.searchParams.get("file") || people[0]?.resumes[0]?.file || "";
-    const current = wanted ? readResumeDoc(config.resumeDir, wanted) : { file: "", name: "", path: "", html: "", mtime: null, repo: null };
+    const current = wanted ? readResumeDoc(config.resumeDir, wanted) : { file: "", name: "", path: "", html: "", mtime: null, repo: null, uncommitted: false };
     return json(response, 200, {
       people, file: current.file, name: current.name, path: current.path,
       html: current.html, mtime: current.mtime, versioned: Boolean(current.repo),
+      uncommitted: Boolean(current.uncommitted),
       exportDir: config.resumeExportDir, browser: findBrowser(config.browserPath),
     });
   }
@@ -556,10 +558,10 @@ async function api(request, response, url) {
     const current = readResumeDoc(config.resumeDir, file);
     const notices = [];
     if (current.mtime && typeof input.baseMtime === "number" && Math.abs(current.mtime - input.baseMtime) > 1) {
-      const archived = commitResumeDoc(config.resumeDir, file, "简历：外部改动存档（编辑器保存前自动存档）");
+      const archived = commitResumeDoc(config.resumeDir, file, "简历：外部改动存档");
       notices.push(archived.committed
-        ? `这份简历在编辑器外被改过，已先把外部版本存成 ${archived.hash}，再写入你现在的版本`
-        : "这份简历在编辑器外被改过（当前内容与磁盘一致，无需额外存档）");
+        ? `文件在编辑器外被改过，已把外部版本存成 ${archived.hash}`
+        : "文件在编辑器外被改过，内容与磁盘一致，无需存档");
     }
     const written = writeResumeDoc(config.resumeDir, file, html);
     const message = String(input.message ?? "").trim()

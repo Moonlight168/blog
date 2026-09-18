@@ -209,17 +209,40 @@ test("能取到某一版的内容，且不会改动当前文件", () => {
   assert.equal(readSelfIntro(env.resumeDir, TECH).markdown, "新版\n", "读取历史不该动到工作区");
 });
 
-test("回滚把旧内容写回并留成一次新提交，历史不丢", () => {
+test("回滚把旧内容写回工作区，但不自己产生提交", () => {
   const env = makeRepo();
   commitSelfIntro(env.resumeDir, TECH, "旧版");
   const hash = execFileSync("git", ["-C", env.repo, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
   writeSelfIntro(env.resumeDir, TECH, "新版\n");
   commitSelfIntro(env.resumeDir, TECH, "新版");
 
-  const result = rollbackSelfIntro(env.resumeDir, TECH, hash, "回滚到旧版");
-  assert.equal(readSelfIntro(env.resumeDir, TECH).markdown, `${TECH} 的内容\n`);
-  assert.equal(result.commit.committed, true);
-  assert.deepEqual(gitLog(env.repo), ["回滚到旧版", "新版", "旧版"], "回滚是新增一次提交，不改写历史");
+  rollbackSelfIntro(env.resumeDir, TECH, hash);
+  assert.equal(readSelfIntro(env.resumeDir, TECH).markdown, `${TECH} 的内容\n`, "磁盘上回到了那一版");
+  assert.deepEqual(gitLog(env.repo), ["新版", "旧版"], "回滚不产生提交，历史停在原处");
+});
+
+test("恢复过一版还没保存时，读取要报「未提交」——刷新后不能变回已保存", () => {
+  const env = makeRepo();
+  commitSelfIntro(env.resumeDir, TECH, "旧版");
+  const hash = execFileSync("git", ["-C", env.repo, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+  writeSelfIntro(env.resumeDir, TECH, "新版\n");
+  commitSelfIntro(env.resumeDir, TECH, "新版");
+  assert.equal(readSelfIntro(env.resumeDir, TECH).uncommitted, false, "刚提交完，盘上和 HEAD 一致");
+
+  rollbackSelfIntro(env.resumeDir, TECH, hash);
+  assert.equal(readSelfIntro(env.resumeDir, TECH).uncommitted, true, "恢复后盘上和最新提交对不上，还没保存");
+});
+
+test("恢复到最新那版不算未保存——盘上和 HEAD 一模一样，没什么可存的", () => {
+  const env = makeRepo();
+  commitSelfIntro(env.resumeDir, TECH, "旧版");
+  writeSelfIntro(env.resumeDir, TECH, "新版\n");
+  commitSelfIntro(env.resumeDir, TECH, "新版");
+  const newest = execFileSync("git", ["-C", env.repo, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+
+  const rolled = rollbackSelfIntro(env.resumeDir, TECH, newest);
+  assert.equal(rolled.uncommitted, false, "恢复的就是当前这版");
+  assert.equal(readSelfIntro(env.resumeDir, TECH).uncommitted, false, "读出来也该是干净的");
 });
 
 test("非法提交号被拒绝，不会去碰文件", () => {
