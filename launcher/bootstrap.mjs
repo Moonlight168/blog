@@ -337,12 +337,30 @@ function envEntries(content) {
   return entries;
 }
 
-function mergeEnvContent(targetContent, seedContent) {
+/** 文档里的占位地址——永远不是真端点，见到就当没填 */
+function isPlaceholderValue(value) {
+  return /(^|\/\/|\.)example\.(com|org|net)\b/i.test(String(value ?? ""));
+}
+
+/**
+ * 把 seed 的值补进本机 `.env`。
+ *
+ * **不覆盖**本机已经有值的项——但「有值」要排掉两种假的有值：
+ * 值为空、以及值还停在 `.env.example` 的占位/示例上。
+ * 少了后一条，示例里一个非空占位（`https://example.com/v1`）就能把 seed 里的真地址
+ * **永远挡住**：真机上就是这么变成「真 key + example.com 地址」，然后聊天打向 example.com 拿 4xx、
+ * 向量拿 405 的。
+ */
+function mergeEnvContent(targetContent, seedContent, exampleContent = "") {
   let content = targetContent;
   let imported = 0;
   const target = envEntries(content);
+  const example = envEntries(exampleContent);
   for (const [key, seed] of envEntries(seedContent)) {
-    if (!seed.value || (target.has(key) && target.get(key).value)) continue;
+    if (!seed.value) continue;
+    const local = target.get(key);
+    const filled = Boolean(local?.value) && !isPlaceholderValue(local.value) && local.value !== example.get(key)?.value;
+    if (filled) continue;
     if (target.has(key)) {
       const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       content = content.replace(new RegExp(`^\\s*${escaped}=.*$`, "m"), seed.line);
@@ -362,7 +380,12 @@ function initializeEnv({ appDir, seedDir }) {
 
   const seedEnv = path.join(seedDir, "interview", ".env");
   if (!fs.existsSync(seedEnv)) return { envFile, imported: 0 };
-  const merged = mergeEnvContent(fs.readFileSync(envFile, "utf8"), fs.readFileSync(seedEnv, "utf8"));
+  const merged = mergeEnvContent(
+    fs.readFileSync(envFile, "utf8"),
+    fs.readFileSync(seedEnv, "utf8"),
+    // 把示例一并传进去：本机值还停在示例上的，不算「已经填过」
+    fs.existsSync(example) ? fs.readFileSync(example, "utf8") : "",
+  );
   if (merged.imported) fs.writeFileSync(envFile, merged.content, "utf8");
   return { envFile, imported: merged.imported };
 }

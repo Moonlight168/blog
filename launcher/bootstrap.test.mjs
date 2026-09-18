@@ -45,6 +45,30 @@ test("更新白名单不包含博客正文和私人目录", () => {
   assert.ok(SYNC_PATHS.includes("interview"));
 });
 
+test("本地值还停在 .env.example 的占位地址上时，seed 要能顶掉它", () => {
+  // 真机上踩过的坑：示例里写了 https://example.com/v1（非空），合并规则又是「不覆盖非空」，
+  // 于是 seed 里的真地址永远填不进去——变成「真 key + 假地址」，
+  // 聊天打向 example.com 拿 4xx、向量拿 405。
+  const example = "INTERVIEW_CHAT_BASE_URL=https://example.com/v1\nINTERVIEW_CHAT_API_KEY=\n";
+  const local = "INTERVIEW_CHAT_BASE_URL=https://example.com/v1\nINTERVIEW_CHAT_API_KEY=\n";
+  const seed = "INTERVIEW_CHAT_BASE_URL=https://api.deepseek.com/v1\nINTERVIEW_CHAT_API_KEY=sk-real\n";
+
+  const result = mergeEnvContent(local, seed, example);
+  assert.match(result.content, /^INTERVIEW_CHAT_BASE_URL=https:\/\/api\.deepseek\.com\/v1$/m, "占位地址要被顶掉");
+  assert.match(result.content, /^INTERVIEW_CHAT_API_KEY=sk-real$/m);
+  assert.equal(result.imported, 2);
+});
+
+test("本地自己填过的地址，seed 不许覆盖", () => {
+  const example = "INTERVIEW_CHAT_BASE_URL=https://api.deepseek.com/v1\n";
+  const local = "INTERVIEW_CHAT_BASE_URL=https://my-gateway.internal/v1\n";
+  const seed = "INTERVIEW_CHAT_BASE_URL=https://api.deepseek.com/v1\n";
+
+  const result = mergeEnvContent(local, seed, example);
+  assert.match(result.content, /^INTERVIEW_CHAT_BASE_URL=https:\/\/my-gateway\.internal\/v1$/m, "用户自己填的不能被顶掉");
+  assert.equal(result.imported, 0);
+});
+
 test("只有浅仓库才带 --depth=1：全量仓库加了会把自己搞浅、丢历史", () => {
   const shallowSsh = fetchArgs({ transport: "SSH", url: "git@x:y.git", shallow: true });
   const shallowHttps = fetchArgs({ transport: "HTTPS", url: "https://x/y.git", shallow: true });
