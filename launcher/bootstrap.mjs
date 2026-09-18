@@ -176,6 +176,22 @@ function hasSshKey() {
   }
 }
 
+/**
+ * 拉取参数。
+ *
+ * `--depth=1` **只给浅仓库用**，实测依据：
+ * - 浅仓库 + 不带 --depth 的普通 fetch：虽然还是浅的，但克隆点之后每来一个新提交本地就多留一条
+ *   （1→2→3→4→5…），慢慢长回一份完整历史；
+ * - 全量仓库 + `--depth=1`：**会把它变成浅仓库**，`git rev-list --count` 从 3 直接变 1，
+ *   开发者机上的历史视图就没了。所以这里必须先问一句是不是浅的。
+ */
+export function fetchArgs({ transport, url, shallow = false }) {
+  const common = ["fetch", ...(shallow ? ["--depth=1"] : []), url, "main"];
+  return transport === "SSH"
+    ? ["-c", "core.sshCommand=ssh -o BatchMode=yes -o ConnectTimeout=5", ...common]
+    : ["-c", "http.sslBackend=openssl", ...common];
+}
+
 /** SSH 可用时优先；失败后立即回退 HTTPS，不额外等待。 */
 function tryFetch(appDir) {
   const origin = capture("git", ["-C", appDir, "remote", "get-url", "origin"], appDir).trim();
@@ -183,15 +199,14 @@ function tryFetch(appDir) {
   const ssh = originIsSsh ? origin : sshUrlOf(origin);
   const https = originIsSsh ? httpsUrlOf(origin) : origin;
   const attempts = [];
+  // 取不到就当作全量（不加 --depth）——宁可少省点体积，也不能把全量仓库搞浅
+  const shallow = capture("git", ["-C", appDir, "rev-parse", "--is-shallow-repository"], appDir).trim() === "true";
 
   if (ssh && hasSshKey()) {
-    attempts.push({
-      label: "SSH",
-      args: ["-c", "core.sshCommand=ssh -o BatchMode=yes -o ConnectTimeout=5", "fetch", ssh, "main"],
-    });
+    attempts.push({ label: "SSH", args: fetchArgs({ transport: "SSH", url: ssh, shallow }) });
   }
   if (https) {
-    attempts.push({ label: "HTTPS", args: ["-c", "http.sslBackend=openssl", "fetch", https, "main"] });
+    attempts.push({ label: "HTTPS", args: fetchArgs({ transport: "HTTPS", url: https, shallow }) });
   }
 
   for (const attempt of attempts) {

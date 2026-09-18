@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { SYNC_PATHS, copyMissing, httpsUrlOf, mergeEnvContent, sshUrlOf } from "./bootstrap.mjs";
+import { SYNC_PATHS, copyMissing, fetchArgs, httpsUrlOf, mergeEnvContent, sshUrlOf } from "./bootstrap.mjs";
 
 test("远程地址支持 SSH 与 HTTPS 双向回退", () => {
   assert.equal(sshUrlOf("https://github.com/example/repo.git"), "git@github.com:example/repo.git");
@@ -43,4 +43,18 @@ test("更新白名单不包含博客正文和私人目录", () => {
   assert.equal(SYNC_PATHS.some((entry) => entry === "src" || entry.startsWith("src/private") || entry.startsWith("src/blogs")), false);
   assert.ok(SYNC_PATHS.includes("src/.vuepress"));
   assert.ok(SYNC_PATHS.includes("interview"));
+});
+
+test("只有浅仓库才带 --depth=1：全量仓库加了会把自己搞浅、丢历史", () => {
+  const shallowSsh = fetchArgs({ transport: "SSH", url: "git@x:y.git", shallow: true });
+  const shallowHttps = fetchArgs({ transport: "HTTPS", url: "https://x/y.git", shallow: true });
+  const fullHttps = fetchArgs({ transport: "HTTPS", url: "https://x/y.git", shallow: false });
+
+  assert.ok(shallowSsh.includes("--depth=1"));
+  assert.ok(shallowHttps.includes("--depth=1"));
+  assert.equal(fullHttps.includes("--depth=1"), false, "全量仓库绝不能带 --depth=1，会被变成浅仓库");
+  assert.ok(shallowSsh.some((arg) => arg.includes("sshCommand")), "SSH 的免交互参数不能丢");
+  for (const args of [shallowSsh, shallowHttps, fullHttps]) assert.equal(args.at(-1), "main");
+  // 不传 shallow 时按全量处理——取不到状态时的安全默认
+  assert.equal(fetchArgs({ transport: "HTTPS", url: "u" }).includes("--depth=1"), false);
 });
