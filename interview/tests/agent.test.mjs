@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { InterviewAgent } from "../server/agent.mjs";
+import { InterviewAgent, parseJson } from "../server/agent.mjs";
 
 /** 用桩接住请求，返回指定 JSON，避免真调模型。 */
 async function withStubbedChat(reply, run) {
@@ -452,6 +452,32 @@ test("改自我介绍：摘要同样要进提示词", async () => {
     await agent.reviseSelfIntro({ markdown: "稿子", instruction: "再改一次", summary: "早先定过：链路锚点那行别动" });
     assert.match(lastBody().messages[0].content, /链路锚点那行别动/);
   });
+});
+
+// ---- 从模型回复里抠 JSON ----
+
+test("JSON 后面又补了一段话（里面还带花括号），也要能解析出来", () => {
+  // 真机上遇到的报错：Unexpected non-whitespace character after JSON at position 61
+  // —— 取「第一个 { 到最后一个 }」时，把后面那句补充说明里的 `}` 也圈进来了
+  const text = '{"action":"answer","reply":"好的，这段不用改"}\n\n补充说明：真改的话，注意 { } 要成对';
+  assert.deepEqual(parseJson(text), { action: "answer", reply: "好的，这段不用改" });
+});
+
+test("JSON 字符串里的花括号和转义引号，不能把配对带偏", () => {
+  const text = '{"html":"<style>.a{color:red}</style>","reply":"他说\\"好\\""}';
+  assert.deepEqual(parseJson(text), { html: "<style>.a{color:red}</style>", reply: '他说"好"' });
+});
+
+test("```json 包起来、前后带空白，都照常解", () => {
+  assert.deepEqual(parseJson('\n```json\n{"a":1}\n```\n'), { a: 1 });
+});
+
+test("压根没有对象就报错，别硬编一个空的出来", () => {
+  assert.throws(() => parseJson("这段我没法按 JSON 回"), /未返回 JSON/);
+});
+
+test("对象没闭合要说清楚，而不是抛一句看不懂的解析错", () => {
+  assert.throws(() => parseJson('{"action":"answer"'), /不完整/);
 });
 
 test("摘要排在文稿之前：文稿每次改都变，放最后才不打断前面那段缓存", async () => {

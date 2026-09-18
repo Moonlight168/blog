@@ -65,12 +65,35 @@ function resumeBlock(session) {
     : `简历摘要：${session.resumeExcerpt}\n`;
 }
 
-function parseJson(text) {
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+/**
+ * 从模型回复里抠出那个 JSON 对象。
+ *
+ * **不能**取「第一个 `{` 到最后一个 `}`」：模型常在 JSON 后面再补一句说明，
+ * 那句话里只要也带个 `}`，切片就会多出一截尾巴，`JSON.parse` 直接报
+ * 「Unexpected non-whitespace character after JSON」。所以按括号配对找**第一个完整的对象**，
+ * 配平时要跳过字符串里的花括号和转义序列——简历 HTML 里 `<style>.a{...}</style>` 这种一抓一大把。
+ */
+export function parseJson(text) {
+  const cleaned = String(text ?? "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end < start) throw new Error("模型未返回 JSON 对象");
-  return JSON.parse(cleaned.slice(start, end + 1));
+  if (start < 0) throw new Error("模型未返回 JSON 对象");
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < cleaned.length; index += 1) {
+    const char = cleaned[index];
+    if (escaped) { escaped = false; continue; }
+    if (char === "\\") { escaped = true; continue; }
+    if (char === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return JSON.parse(cleaned.slice(start, index + 1));
+    }
+  }
+  throw new Error("模型返回的 JSON 不完整");
 }
 
 export class InterviewAgent {
