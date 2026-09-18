@@ -259,11 +259,23 @@ async function ensureDependencies(mode, appDir) {
   if (installed && recorded === fingerprint) return "已安装";
 
   log(`      安装${mode === "interview" ? "面试台" : "博客"}依赖...`);
+  // 用 npm ci 而不是 npm install，两个理由：
+  //
+  // 1) install 是按「本机实际装出来的树」回写 package-lock.json 的，会把平台兜底包
+  //    （sass-embedded-*-unknown，本机和 CI 都装不上）够不到的 sass 剪掉；
+  //    而远程部署跑的正是 npm ci，它按 lockfile 里的**完整依赖图**校验，缺这条就
+  //    EUSAGE 直接失败。本地跑一次安装就把远程弄挂，就是这么来的。
+  //    ci 只按 lockfile 装、从不回写——本地和远程从此是同一条命令。
+  // 2) package.json 和 lockfile 对不上时，它会**当场报错**，不用等推送后远程才发现。
+  //
+  // 代价是每次都会清空 node_modules 重装；靠上面那句「已装且指纹没变就跳过」兜着，
+  // 只有依赖真的变了时才会走到这儿——那时本来也该重装。没有 lockfile 时只能退回 install。
+  const command = fs.existsSync(path.join(dir, "package-lock.json")) ? "ci" : "install";
   try {
-    await run("npm", ["install", "--no-audit", "--no-fund"], dir);
+    await run("npm", [command, "--no-audit", "--no-fund"], dir);
   } catch {
     log("      默认 npm 源失败，切换镜像重试...");
-    await run("npm", ["install", "--no-audit", "--no-fund", "--registry=https://registry.npmmirror.com"], dir);
+    await run("npm", [command, "--no-audit", "--no-fund", "--registry=https://registry.npmmirror.com"], dir);
   }
   writeState({ [stateKey]: dependencyFingerprint(dir) });
   return "安装完成";
