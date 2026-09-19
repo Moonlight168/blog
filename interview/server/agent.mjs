@@ -615,9 +615,21 @@ export class InterviewAgent {
         } catch {
           /* 重试也不成，按下面的友好错误抛 */
         }
-        // 具体回了哪些字段只写日志——那是给排查用的，给用户看的是人话
+        // 具体回了哪些字段只写日志——那是给排查用的，不给用户看
         console.warn(JSON.stringify({ event: "ai_interaction", operation: `document_${field}_revise`, status: "empty_edits", returned: Object.keys(result) }));
-        throw new Error("这次没改成功：模型说要改，却没给出具体改哪里。再发一次多半就好了；连着两次都这样，就把要求说得更具体些——比如指出要改的那句原话。");
+        // 重问还是不给：这属于**模型自己的问题**，让它自己说一句怎么了，比甩固定文案友好。
+        // 只有真出这种岔子时才会多花这一次调用。
+        try {
+          const asked = await this.#chat([
+            ...messages,
+            { role: "user", content: "你上一轮说要改，却没给出任何改动。这次别改稿了，只回 JSON：{\"reply\":\"…\"}，用一两句中文告诉我该怎么说你才改得动。" },
+          ], 0.7, { operation: `document_${field}_revise`, maxTokens: 800 });
+          const spoken = String(asked?.reply ?? "").trim();
+          if (spoken) return { action: "answer", reply: spoken, edits: [] };
+        } catch {
+          /* 连句话都要不到——那才是过程错误，下面兜底 */
+        }
+        throw new Error("这次没接上模型，没能拿到改动也没能问出原因。再发一次试试。");
       }
       return { action, reply: String(result.reply ?? "").trim(), edits };
     }

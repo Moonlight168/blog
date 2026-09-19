@@ -335,21 +335,43 @@ test("改简历：模型没表态但给了改动时，仍按改稿处理（兼�
   });
 });
 
-test("改简历：两次都不给 edits 才报错，而且错误要说人话", async () => {
+test("改简历：一直不给 edits 时，让模型自己解释一句，而不是甩固定文案", async () => {
   let calls = 0;
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => {
     calls += 1;
-    return new Response(JSON.stringify({ choices: [{ message: { content: '{"action":"revise","reply":"好了"}' } }] }), { status: 200 });
+    // 前两次：说要改却不给改动；第三次（回头问它为什么）：说句人话
+    const content = calls <= 2
+      ? '{"action":"revise","reply":"好了"}'
+      : '{"reply":"抱歉，我没能定位到你说的那一处。把那句原话贴给我，或者说得再具体点？"}';
+    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" });
+    assert.equal(calls, 3, "先自己重问一次，不成再回头问它为什么");
+    assert.equal(result.action, "answer", "拿不到改动就当回答，一个字都不动稿子");
+    assert.match(result.reply, /再具体点|原话/, "要把模型自己那句解释回给用户");
+  } finally { globalThis.fetch = previousFetch; }
+});
+
+test("改简历：连「为什么」都问不出来（过程错误）才用兜底文案", async () => {
+  let calls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls <= 2) {
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"action":"revise","reply":"好了"}' } }] }), { status: 200 });
+    }
+    return new Response("{}", { status: 500 });   // 第三次直接失败
   };
   try {
     const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
     await assert.rejects(
       () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
-      /再发一次多半就好了/,
-      "给用户看的要是人话，不是「它回的是：action / reply」这种排查信息",
+      /再发一次试试/,
+      "这才是过程错误，才该给一句兜底文案",
     );
-    assert.equal(calls, 2, "先自己重问一次，不成才报错");
   } finally { globalThis.fetch = previousFetch; }
 });
 
