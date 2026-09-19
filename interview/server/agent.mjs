@@ -96,6 +96,48 @@ export function parseJson(text) {
   throw new Error("模型返回的 JSON 不完整");
 }
 
+/**
+ * 把模型返回的 `<style>` 块换回**原文那几段**，返回拼好的 HTML。
+ *
+ * 为什么不是原来的「不一样就整次拒绝」：模型没法逐字节复述一大段 CSS——换行、缩进上
+ * 总会有出入，于是**每一次改写都被判成「改变了样式」而失败**（真机上就是这么卡的：
+ * 明明只想改个人优势那两行，却因为 style 里多一个换行被整个拒掉）。
+ *
+ * 样式本来就要求一个字不动，那就别让模型说了算：
+ * - 两边块数一样、且**忽略空白后**内容相同 → 用原文那份替换进去，逐字节保证不变；
+ * - 模型干脆没回 style（偷懒不复述）→ 把原文那几段补回去；
+ * - 真改了样式（忽略空白后仍不同）、或块数对不上 → 仍然拒绝，这是真的有风险。
+ */
+export function restoreStyles(before, after) {
+  const blocks = (value) => [...String(value).matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/giu)].map((match) => match[0]);
+  const original = blocks(before);
+  const incoming = blocks(after);
+  if (!original.length) return after;                       // 原文本来就没有 style，不掺和
+  if (incoming.length === 0) return insertStyles(after, original);
+  if (original.length !== incoming.length) {
+    throw new Error("AI 改写动了 <style> 块的数量，本次结果未应用");
+  }
+
+  // 比对时把空白和「} 前那个分号」都去掉：这两样是纯格式，模型换个行、缩进一下就会变。
+  // 判松一点是有意的——最后一定换回原文那份，**放过一个格式差异零损失**，
+  // 而判严了会让人白白重改一次。只有非空白内容真的不同（比如 red 改成 blue）才拦。
+  const flat = (value) => value.replace(/\s+/g, "").replace(/;}/g, "}");
+  let out = after;
+  for (let index = 0; index < original.length; index += 1) {
+    if (flat(original[index]) !== flat(incoming[index])) {
+      throw new Error("AI 改写改变了简历样式，本次结果未应用");
+    }
+    out = out.replace(incoming[index], original[index]);
+  }
+  return out;
+}
+
+/** 模型没回 style：塞回 head 里（没有 head 就顶到最前面），让它照样是一份完整文档 */
+function insertStyles(html, blocks) {
+  const tag = blocks.join("\n");
+  return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${tag}\n</head>`) : `${tag}\n${html}`;
+}
+
 export class InterviewAgent {
   constructor({ config, questionIndex }) {
     this.config = config;
@@ -466,8 +508,7 @@ export class InterviewAgent {
       emptyError: "模型说要改，但没返回改写后的简历",
     });
     if (result.action === "revise") {
-      const styles = (value) => [...value.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/giu)].map((match) => match[0]);
-      if (JSON.stringify(styles(html)) !== JSON.stringify(styles(result.html))) throw new Error("AI 改写改变了简历样式，本次结果未应用");
+      result.html = restoreStyles(html, result.html);
       if (/<script\b|\son\w+\s*=|javascript:/iu.test(result.html)) throw new Error("AI 改写包含不安全的 HTML，本次结果未应用");
     }
     return result;
@@ -530,7 +571,7 @@ export class InterviewAgent {
     ];
     let result;
     try {
-      result = await this.#chat(messages, 0.35, { operation: `document_${field}_revise`, maxTokens: 16_000 });
+      result = await this.#chat(messages, 0.35, { operation: `document_${field}_revise`, maxTokens: 32_768 });
     } catch (error) {
       // 模型在 JSON 模式下偶尔直接说一段话（实测同一个请求时好时坏）。对这个对话框来说
       // 那**本身就是一种合法的回答**——按 answer 收下，比甩一句「模型未返回 JSON 对象」

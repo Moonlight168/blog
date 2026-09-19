@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { InterviewAgent, parseJson } from "../server/agent.mjs";
+import { InterviewAgent, parseJson, restoreStyles } from "../server/agent.mjs";
 
 /** 用桩接住请求，返回指定 JSON，避免真调模型。 */
 async function withStubbedChat(reply, run) {
@@ -478,6 +478,43 @@ test("压根没有对象就报错，别硬编一个空的出来", () => {
 
 test("对象没闭合要说清楚，而不是抛一句看不懂的解析错", () => {
   assert.throws(() => parseJson('{"action":"answer"'), /不完整/);
+});
+
+// ---- 样式还原：模型没法逐字节复述 CSS，别因此把整次改写判死 ----
+
+const HTML = `<html><head><style>\n.a {\n  color: red;\n}\n</style></head><body><p>原文</p></body></html>`;
+
+test("模型把样式换了行和缩进，要接受，并且换回原文那份", () => {
+  // 真机上就是这么卡的：只想改正文两行，却因为 style 被重新格式化而整个被拒
+  const out = restoreStyles(HTML, `<html><head><style>.a{color:red;}</style></head><body><p>改过了</p></body></html>`);
+  assert.match(out, /<p>改过了<\/p>/, "正文的改动要留下");
+  assert.ok(out.includes("<style>\n.a {\n  color: red;\n}\n</style>"), "样式必须逐字节换回原文那份");
+});
+
+test("模型偷懒没回 style，把它补回去而不是整个拒掉", () => {
+  const out = restoreStyles(HTML, "<html><head></head><body><p>改过了</p></body></html>");
+  assert.match(out, /<style[\s\S]*<\/style>\s*<\/head>/i, "样式要补进 head");
+  assert.ok(out.includes("color: red"));
+  assert.match(out, /<p>改过了<\/p>/);
+});
+
+test("真改了样式还是要拒——这是真的有风险", () => {
+  assert.throws(
+    () => restoreStyles(HTML, `<html><head><style>.a{color:blue;}</style></head><body><p>改过了</p></body></html>`),
+    /改变了简历样式/,
+  );
+});
+
+test("style 块的数量对不上也拒", () => {
+  assert.throws(
+    () => restoreStyles(HTML, `<html><head><style>.a{color:red;}</style><style>.b{}</style></head><body></body></html>`),
+    /块的数量/,
+  );
+});
+
+test("原文本来就没有 style，就别掺和", () => {
+  const plain = "<html><body><p>原文</p></body></html>";
+  assert.equal(restoreStyles(plain, "<html><body><p>改过</p></body></html>"), "<html><body><p>改过</p></body></html>");
 });
 
 test("摘要排在文稿之前：文稿每次改都变，放最后才不打断前面那段缓存", async () => {
