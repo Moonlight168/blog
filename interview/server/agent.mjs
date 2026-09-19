@@ -18,10 +18,20 @@ const CREATIVE_TEMPERATURE = 0.85;
  * 怎么修正比较好 先改个人优势」被当成了改稿指令，其实那是在问怎么改、并指出先说哪一段，
  * 不是让人动手。
  */
-const REVISE_DECISION_RULE = `先判断他这句话是在「让你去做」还是在「问你」——看句式最可靠：\n`
+/**
+ * 「这次是让你改、还是问你」的判定规则，两个对话框共用。
+ *
+ * `patch` 决定**改稿结果怎么交付**：简历走「找—换」（只回改动的那几处，省 token，
+ * 也天然碰不到样式），自我介绍走「整篇全文」（它才 1KB 左右，不值当拆）。
+ * 这段是每次调用都会拼进系统提示词的，改契约时必须连它一起改——只改 rules 不改它，
+ * 模型会照着这里说的旧形状回，然后在对面被当成「一处改动都没给」。
+ */
+const reviseDecisionRule = (patch = false) => `先判断他这句话是在「让你去做」还是在「问你」——看句式最可靠：\n`
   + `- revise：**祈使句**，他让你把某处改成某个样子。`
   + `「把个人优势改成更贴合 Agent 岗位的写法」「压缩到两行」「删掉最后一条」「技能区调个顺序」都属于这类；`
-  + `说得粗（「把个人优势改改」）也算。照做：JSON 的正文里给改好的全文，reply 说清改了什么（口语，不要分点）。\n`
+  + `说得粗（「把个人优势改改」）也算。照做：`
+  + (patch ? `把改动放进 JSON 的 edits 里（只给要改的那几处，别重抄全文）` : `JSON 的正文里给改好的全文`)
+  + `，reply 说清改了什么（口语，不要分点）。\n`
   + `- answer：**疑问句**，或者陈述句里让你先分析、评估、比较。`
   + `「怎么修正比较好」「要不要改」「会不会太长」「这样行不行」「该突出哪个」都属于这类。`
   + `只写 reply，正文留空，**一个字都不要动稿子**。\n`
@@ -502,6 +512,7 @@ export class InterviewAgent {
       instruction,
       rules: `改写时的要求：\n`
         + `- 改动用「找—换」给出，**不要重抄全文**：find 是原文里一字不差的一段，replace 是改成什么。\n`
+        + `- 形状就是：{"action":"revise","reply":"把这条压短了","edits":[{"find":"<p>原来那段</p>","replace":"<p>改短之后</p>"}]}\n`
         + `- find 必须在全文里**只出现一次**；不够唯一就把前后文一起带上。尽量短，只包住真正要改的部分。\n`
         + `- **不要碰 <style> 里的任何东西**，也不要新增 <style>——碰上会被整次拒绝。\n`
         + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
@@ -570,7 +581,7 @@ export class InterviewAgent {
     const messages = [
       // 顺序有意：规则/规范在一次会话里不变，放前面好命中缓存；当前文稿改一次变一次，放最后。
       // 摘要也放前面——它只在压缩时变一次，比文稿稳定得多
-      { role: "system", content: [system, REVISE_DECISION_RULE, spec, rules, this.#summaryBlock(summary), context].filter(Boolean).join("\n\n") },
+      { role: "system", content: [system, reviseDecisionRule(patch), spec, rules, this.#summaryBlock(summary), context].filter(Boolean).join("\n\n") },
       ...this.#turns(history),
       { role: "user", content: instruction },
     ];
@@ -593,7 +604,12 @@ export class InterviewAgent {
     if (patch) {
       const edits = Array.isArray(result.edits) ? result.edits : [];
       const action = this.#decideAction(result.action, edits.length);
-      if (action === "revise" && !edits.length) throw new Error(emptyError);
+      if (action === "revise" && !edits.length) {
+        // 把模型实际回的字段带出来：否则只剩一句「一处改动都没给」，看不出是它回了旧形状、
+        // 还是压根没按 JSON 来——上一版就卡在这上面，查了半天
+        const keys = Object.keys(result).join(" / ") || "(空对象)";
+        throw new Error(`${emptyError}（它回的是：${keys}）`);
+      }
       return { action, reply: String(result.reply ?? "").trim(), edits };
     }
     const revised = String(result[field] ?? "").trim();

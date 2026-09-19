@@ -352,6 +352,34 @@ test("改简历：模型没表态也没给改动时按「问意见」处理，�
   });
 });
 
+test("改简历的提示词说的是「给 edits」，绝不能还留着「给全文」那句旧契约", async () => {
+  // 真机上就是这么挂的：rules 改成了 edits，但共用的判定规则里还写着「JSON 的正文里给改好的全文」，
+  // 模型照着旧那句回 html，对面找 edits 找不到 → 报「一处改动都没给」
+  await withStubbedChat({ action: "answer", reply: "好" }, async (agent, lastBody) => {
+    await agent.reviseResume({ html: "<html>原稿</html>", instruction: "改改" });
+    const system = lastBody().messages[0].content;
+    assert.match(system, /edits/, "要告诉它用 edits");
+    assert.doesNotMatch(system, /给改好的全文/, "留着旧契约，模型就会回全文");
+  });
+});
+
+test("自我介绍那条路仍然要「给全文」——它没走「找—换」", async () => {
+  await withStubbedChat({ action: "answer", reply: "好" }, async (agent, lastBody) => {
+    await agent.reviseSelfIntro({ markdown: "稿子", instruction: "改改" });
+    assert.match(lastBody().messages[0].content, /给改好的全文/);
+  });
+});
+
+test("说了要改却没给 edits 时，错误里要带出模型实际回了哪些字段", async () => {
+  await withStubbedChat({ action: "revise", reply: "好了", html: "<html>旧形状</html>" }, async (agent) => {
+    await assert.rejects(
+      () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
+      /它回的是：action \/ reply \/ html/,
+      "要能一眼看出它回的是旧形状，而不是只剩一句「一处改动都没给」",
+    );
+  });
+});
+
 test("改简历：模型给的原文片段在稿子里找不到，整次拒绝而不是猜", async () => {
   await withStubbedChat({ action: "revise", edits: [{ find: "这句稿子里没有", replace: "x" }] }, async (agent) => {
     await assert.rejects(
