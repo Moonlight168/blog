@@ -605,10 +605,19 @@ export class InterviewAgent {
       const edits = Array.isArray(result.edits) ? result.edits : [];
       const action = this.#decideAction(result.action, edits.length);
       if (action === "revise" && !edits.length) {
-        // 把模型实际回的字段带出来：否则只剩一句「一处改动都没给」，看不出是它回了旧形状、
-        // 还是压根没按 JSON 来——上一版就卡在这上面，查了半天
-        const keys = Object.keys(result).join(" / ") || "(空对象)";
-        throw new Error(`${emptyError}（它回的是：${keys}）`);
+        // 模型偶发会「说要改、却不给改动」（本机复现过两次都正常，属于偶发）。这只是这一轮
+        // 没按格式来，不是稿子有问题——把同一段话带上提示重问一次，别把偶发直接甩给用户。
+        const nudge = { role: "user", content: "上一轮你说了要改，但 edits 是空的。请只回 JSON，把改动放进 edits 里。" };
+        try {
+          const second = await this.#chat([...messages, nudge], 0.35, { operation: `document_${field}_revise`, maxTokens: 32_768 });
+          const retried = Array.isArray(second.edits) ? second.edits : [];
+          if (retried.length) return { action: "revise", reply: String(second.reply ?? "").trim(), edits: retried };
+        } catch {
+          /* 重试也不成，按下面的友好错误抛 */
+        }
+        // 具体回了哪些字段只写日志——那是给排查用的，给用户看的是人话
+        console.warn(JSON.stringify({ event: "ai_interaction", operation: `document_${field}_revise`, status: "empty_edits", returned: Object.keys(result) }));
+        throw new Error("这次没改成功：模型说要改，却没给出具体改哪里。再发一次多半就好了；连着两次都这样，就把要求说得更具体些——比如指出要改的那句原话。");
       }
       return { action, reply: String(result.reply ?? "").trim(), edits };
     }

@@ -335,13 +335,22 @@ test("改简历：模型没表态但给了改动时，仍按改稿处理（兼�
   });
 });
 
-test("改简历：说了要改却一处改动都没给，要报错而不是假装改过", async () => {
-  await withStubbedChat({ action: "revise", reply: "好了" }, async (agent) => {
+test("改简历：两次都不给 edits 才报错，而且错误要说人话", async () => {
+  let calls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"action":"revise","reply":"好了"}' } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
     await assert.rejects(
       () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
-      /一处改动都没给/,
+      /再发一次多半就好了/,
+      "给用户看的要是人话，不是「它回的是：action / reply」这种排查信息",
     );
-  });
+    assert.equal(calls, 2, "先自己重问一次，不成才报错");
+  } finally { globalThis.fetch = previousFetch; }
 });
 
 test("改简历：模型没表态也没给改动时按「问意见」处理，绝不擅自改动", async () => {
@@ -370,14 +379,24 @@ test("自我介绍那条路仍然要「给全文」——它没走「找—换�
   });
 });
 
-test("说了要改却没给 edits 时，错误里要带出模型实际回了哪些字段", async () => {
-  await withStubbedChat({ action: "revise", reply: "好了", html: "<html>旧形状</html>" }, async (agent) => {
-    await assert.rejects(
-      () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
-      /它回的是：action \/ reply \/ html/,
-      "要能一眼看出它回的是旧形状，而不是只剩一句「一处改动都没给」",
-    );
-  });
+test("改简历：第一次没给 edits、重问后给了 → 照常成功，用户毫无感知", async () => {
+  // 模型偶发会「说要改、却不给改动」。这只是这一轮没按格式来，自己重问一次就行
+  let calls = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const content = calls === 1
+      ? '{"action":"revise","reply":"好了"}'
+      : '{"action":"revise","reply":"好了","edits":[{"find":"原稿","replace":"改后"}]}';
+    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  };
+  try {
+    const agent = new InterviewAgent({ config: { baseUrl: "https://x.test/v1", apiKey: "k", model: "m" }, questionIndex: { topics: () => [] } });
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" });
+    assert.equal(calls, 2, "应当自己重问一次");
+    assert.equal(result.action, "revise");
+    assert.equal(result.html, "<html>改后</html>", "重问拿到改动后照常应用");
+  } finally { globalThis.fetch = previousFetch; }
 });
 
 test("改简历：模型给的原文片段在稿子里找不到，整次拒绝而不是猜", async () => {
