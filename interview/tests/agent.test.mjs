@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { InterviewAgent, parseJson, restoreStyles } from "../server/agent.mjs";
+import { InterviewAgent, MAX_EDITS, applyEdits, parseJson } from "../server/agent.mjs";
 
 /** 用桩接住请求，返回指定 JSON，避免真调模型。 */
 async function withStubbedChat(reply, run) {
@@ -319,33 +319,54 @@ test("改简历：模型判为「问意见」时不给改动，只给回复", as
   });
 });
 
-test("改简历：模型判为「让你改」时返回完整正文", async () => {
-  await withStubbedChat({ action: "revise", reply: "压缩了实习那段。", html: "<html>改后</html>" }, async (agent) => {
+test("改简历：模型判为「让你改」时，把它给的「找—换」应用上", async () => {
+  await withStubbedChat({ action: "revise", reply: "压缩了实习那段。", edits: [{ find: "原稿", replace: "改后" }] }, async (agent) => {
     const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "实习那段压缩到两行" });
+    assert.equal(result.action, "revise");
+    assert.equal(result.html, "<html>改后</html>", "只把指定的那处换掉，其余原样");
+  });
+});
+
+test("改简历：模型没表态但给了改动时，仍按改稿处理（兼容漏字段）", async () => {
+  await withStubbedChat({ edits: [{ find: "原稿", replace: "改后" }] }, async (agent) => {
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" });
     assert.equal(result.action, "revise");
     assert.equal(result.html, "<html>改后</html>");
   });
 });
 
-test("改简历：模型没表态也没给稿子时按「问意见」处理，绝不擅自改动", async () => {
-  await withStubbedChat({ reply: "……" }, async (agent) => {
-    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "嗯" });
-    assert.equal(result.action, "answer", "拿不准就该不动手——改稿是有副作用的");
-  });
-});
-
-test("改简历：模型漏了 action 但给了稿子，仍按改稿处理（兼容漏字段）", async () => {
-  await withStubbedChat({ html: "<html>改后</html>" }, async (agent) => {
-    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" });
-    assert.equal(result.action, "revise");
-  });
-});
-
-test("改简历：说了要改却没给稿子，要报错而不是假装改过", async () => {
+test("改简历：说了要改却一处改动都没给，要报错而不是假装改过", async () => {
   await withStubbedChat({ action: "revise", reply: "好了" }, async (agent) => {
     await assert.rejects(
       () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
-      /没返回/,
+      /一处改动都没给/,
+    );
+  });
+});
+
+test("改简历：模型没表态也没给改动时按「问意见」处理，绝不擅自改动", async () => {
+  await withStubbedChat({ reply: "……" }, async (agent) => {
+    const result = await agent.reviseResume({ html: "<html>原稿</html>", instruction: "嗯" });
+    assert.equal(result.action, "answer", "拿不准就该不动手——改稿是有副作用的");
+    assert.equal(result.html, "", "问意见时不该返回改动");
+  });
+});
+
+test("改简历：模型给的原文片段在稿子里找不到，整次拒绝而不是猜", async () => {
+  await withStubbedChat({ action: "revise", edits: [{ find: "这句稿子里没有", replace: "x" }] }, async (agent) => {
+    await assert.rejects(
+      () => agent.reviseResume({ html: "<html>原稿</html>", instruction: "压缩" }),
+      /找不到对应的原文/,
+    );
+  });
+});
+
+test("改简历：模型想改 <style>，整次拒绝——样式是硬底线", async () => {
+  const html = `<html><head><style>.a{color:red}</style></head><body><p>原稿</p></body></html>`;
+  await withStubbedChat({ action: "revise", edits: [{ find: ".a{color:red}", replace: ".a{color:blue}" }] }, async (agent) => {
+    await assert.rejects(
+      () => agent.reviseResume({ html, instruction: "换个颜色" }),
+      /改动简历样式/,
     );
   });
 });
@@ -480,41 +501,44 @@ test("对象没闭合要说清楚，而不是抛一句看不懂的解析错", ()
   assert.throws(() => parseJson('{"action":"answer"'), /不完整/);
 });
 
-// ---- 样式还原：模型没法逐字节复述 CSS，别因此把整次改写判死 ----
+// ---- 「找—换」：模型只回改动的那几处，服务端负责应用 ----
 
-const HTML = `<html><head><style>\n.a {\n  color: red;\n}\n</style></head><body><p>原文</p></body></html>`;
+const PAGE = `<html><head><style>\n.a {\n  color: red;\n}\n</style></head><body><p>原文</p></body></html>`;
 
-test("模型把样式换了行和缩进，要接受，并且换回原文那份", () => {
-  // 真机上就是这么卡的：只想改正文两行，却因为 style 被重新格式化而整个被拒
-  const out = restoreStyles(HTML, `<html><head><style>.a{color:red;}</style></head><body><p>改过了</p></body></html>`);
-  assert.match(out, /<p>改过了<\/p>/, "正文的改动要留下");
-  assert.ok(out.includes("<style>\n.a {\n  color: red;\n}\n</style>"), "样式必须逐字节换回原文那份");
-});
-
-test("模型偷懒没回 style，把它补回去而不是整个拒掉", () => {
-  const out = restoreStyles(HTML, "<html><head></head><body><p>改过了</p></body></html>");
-  assert.match(out, /<style[\s\S]*<\/style>\s*<\/head>/i, "样式要补进 head");
-  assert.ok(out.includes("color: red"));
+test("应用改动：只动指定的那处，其余一个字节不碰", () => {
+  const out = applyEdits(PAGE, [{ find: "<p>原文</p>", replace: "<p>改过了</p>" }]);
   assert.match(out, /<p>改过了<\/p>/);
+  assert.ok(out.includes("<style>\n.a {\n  color: red;\n}\n</style>"), "样式必须原样");
 });
 
-test("真改了样式还是要拒——这是真的有风险", () => {
+test("多处改动按顺序应用，后面的能看到前面的结果", () => {
+  const out = applyEdits("<p>A</p><p>B</p>", [
+    { find: "<p>A</p>", replace: "<p>甲</p>" },
+    { find: "<p>B</p>", replace: "<p>乙</p>" },
+  ]);
+  assert.equal(out, "<p>甲</p><p>乙</p>");
+});
+
+test("片段在稿子里找不到 → 拒绝，不做模糊匹配", () => {
+  assert.throws(() => applyEdits(PAGE, [{ find: "<p>根本没这句</p>", replace: "x" }]), /找不到对应的原文/);
+});
+
+test("片段不唯一 → 拒绝，宁可让人重说一次也不猜", () => {
   assert.throws(
-    () => restoreStyles(HTML, `<html><head><style>.a{color:blue;}</style></head><body><p>改过了</p></body></html>`),
-    /改变了简历样式/,
+    () => applyEdits("<p>同一句</p><p>同一句</p>", [{ find: "<p>同一句</p>", replace: "<p>改了</p>" }]),
+    /不唯一/,
   );
 });
 
-test("style 块的数量对不上也拒", () => {
-  assert.throws(
-    () => restoreStyles(HTML, `<html><head><style>.a{color:red;}</style><style>.b{}</style></head><body></body></html>`),
-    /块的数量/,
-  );
+test("想改 <style> 里的东西 → 拒绝；想塞一段新 <style> 也拒绝", () => {
+  assert.throws(() => applyEdits(PAGE, [{ find: "color: red;", replace: "color: blue;" }]), /改动简历样式/);
+  assert.throws(() => applyEdits(PAGE, [{ find: "<p>原文</p>", replace: "<style>.b{}</style><p>x</p>" }]), /新增样式/);
 });
 
-test("原文本来就没有 style，就别掺和", () => {
-  const plain = "<html><body><p>原文</p></body></html>";
-  assert.equal(restoreStyles(plain, "<html><body><p>改过</p></body></html>"), "<html><body><p>改过</p></body></html>");
+test("一处都没给、或给太多 → 拒绝", () => {
+  assert.throws(() => applyEdits(PAGE, []), /一处改动都没给/);
+  const tooMany = Array.from({ length: MAX_EDITS + 1 }, () => ({ find: "原文", replace: "改后" }));
+  assert.throws(() => applyEdits(PAGE, tooMany), /超过上限/);
 });
 
 test("摘要排在文稿之前：文稿每次改都变，放最后才不打断前面那段缓存", async () => {

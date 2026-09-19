@@ -96,46 +96,47 @@ export function parseJson(text) {
   throw new Error("模型返回的 JSON 不完整");
 }
 
-/**
- * 把模型返回的 `<style>` 块换回**原文那几段**，返回拼好的 HTML。
- *
- * 为什么不是原来的「不一样就整次拒绝」：模型没法逐字节复述一大段 CSS——换行、缩进上
- * 总会有出入，于是**每一次改写都被判成「改变了样式」而失败**（真机上就是这么卡的：
- * 明明只想改个人优势那两行，却因为 style 里多一个换行被整个拒掉）。
- *
- * 样式本来就要求一个字不动，那就别让模型说了算：
- * - 两边块数一样、且**忽略空白后**内容相同 → 用原文那份替换进去，逐字节保证不变；
- * - 模型干脆没回 style（偷懒不复述）→ 把原文那几段补回去；
- * - 真改了样式（忽略空白后仍不同）、或块数对不上 → 仍然拒绝，这是真的有风险。
- */
-export function restoreStyles(before, after) {
-  const blocks = (value) => [...String(value).matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/giu)].map((match) => match[0]);
-  const original = blocks(before);
-  const incoming = blocks(after);
-  if (!original.length) return after;                       // 原文本来就没有 style，不掺和
-  if (incoming.length === 0) return insertStyles(after, original);
-  if (original.length !== incoming.length) {
-    throw new Error("AI 改写动了 <style> 块的数量，本次结果未应用");
-  }
+/** 一次改写最多接受几处「找—换」——再多说明模型在乱拆，或者干脆想重写全文 */
+export const MAX_EDITS = 12;
 
-  // 比对时把空白和「} 前那个分号」都去掉：这两样是纯格式，模型换个行、缩进一下就会变。
-  // 判松一点是有意的——最后一定换回原文那份，**放过一个格式差异零损失**，
-  // 而判严了会让人白白重改一次。只有非空白内容真的不同（比如 red 改成 blue）才拦。
-  const flat = (value) => value.replace(/\s+/g, "").replace(/;}/g, "}");
-  let out = after;
-  for (let index = 0; index < original.length; index += 1) {
-    if (flat(original[index]) !== flat(incoming[index])) {
-      throw new Error("AI 改写改变了简历样式，本次结果未应用");
-    }
-    out = out.replace(incoming[index], original[index]);
-  }
-  return out;
+/** `<style>` 块在文中的区间，用来挡住「改动落在样式里」 */
+function styleRanges(html) {
+  return [...String(html).matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/giu)]
+    .map((match) => [match.index, match.index + match[0].length]);
 }
 
-/** 模型没回 style：塞回 head 里（没有 head 就顶到最前面），让它照样是一份完整文档 */
-function insertStyles(html, blocks) {
-  const tag = blocks.join("\n");
-  return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${tag}\n</head>`) : `${tag}\n${html}`;
+/**
+ * 把模型给的「找—换」对应用到原文上。
+ *
+ * 为什么不让它整篇重写：简历全文约 1.5 万字符，每改一次都复述一遍就是一万多个输出 token，
+ * 而其中 99% 和原文一字不差。只回改动的那几处，又快又省。
+ * 附带的好处更要紧：**没有哪条改动指向 `<style>`，样式天然改不了**——
+ * 「要求模型别动样式、回来再逐字节比对」那一整套都不需要了。
+ *
+ * 三条硬约束，任何一条不满足就整次拒绝：片段在原文里**唯一出现**、不落在 `<style>` 区间内、
+ * 条数不超上限。**不做模糊匹配**——猜错了会悄悄改坏稿子，宁可让人重说一次。
+ */
+export function applyEdits(html, edits) {
+  if (!Array.isArray(edits) || !edits.length) throw new Error("模型说改了，但一处改动都没给");
+  if (edits.length > MAX_EDITS) throw new Error(`模型一次给了 ${edits.length} 处改动，超过上限 ${MAX_EDITS}`);
+
+  let out = String(html);
+  for (const [index, edit] of edits.entries()) {
+    const at = index + 1;
+    const find = String(edit?.find ?? "");
+    const replace = String(edit?.replace ?? "");
+    if (!find) throw new Error(`第 ${at} 处改动没给原文片段`);
+    if (/<style\b/i.test(replace)) throw new Error("AI 改写试图新增样式，本次结果未应用");
+
+    const first = out.indexOf(find);
+    if (first < 0) throw new Error(`第 ${at} 处改动在稿子里找不到对应的原文`);
+    if (out.indexOf(find, first + 1) >= 0) throw new Error(`第 ${at} 处改动的原文片段在稿子里不唯一，无法确定改哪一处`);
+    const overlapsStyle = styleRanges(out).some(([start, end]) => first < end && first + find.length > start);
+    if (overlapsStyle) throw new Error("AI 改写试图改动简历样式，本次结果未应用");
+
+    out = out.slice(0, first) + replace + out.slice(first + find.length);
+  }
+  return out;
 }
 
 export class InterviewAgent {
@@ -492,7 +493,7 @@ export class InterviewAgent {
     const result = await this.#revise({
       system: `你在帮候选人改他的简历（一份自包含的 HTML）。`
         + `这是个对话框：他可能让你改简历，也可能只是问你意见。`
-        + `只返回 JSON：{"action":"revise|answer","reply":"…","html":"…"}。`,
+        + `只返回 JSON：{"action":"revise|answer","reply":"…","edits":[{"find":"原文里的一段","replace":"改成什么"}]}。`,
       // 规范由调用方读好传进来（简历设计规范.md，已剔掉投递策略那类无关章节）
       spec: spec ? `这份简历要遵守的《简历设计规范》：\n${spec}` : "",
       context: `当前的简历 HTML：\n${html}`,
@@ -500,18 +501,22 @@ export class InterviewAgent {
       summary,
       instruction,
       rules: `改写时的要求：\n`
-        + `- <style> 里的样式、@page 打印规则、整体结构（层级与区块顺序）**一律不动**。\n`
+        + `- 改动用「找—换」给出，**不要重抄全文**：find 是原文里一字不差的一段，replace 是改成什么。\n`
+        + `- find 必须在全文里**只出现一次**；不够唯一就把前后文一起带上。尽量短，只包住真正要改的部分。\n`
+        + `- **不要碰 <style> 里的任何东西**，也不要新增 <style>——碰上会被整次拒绝。\n`
         + `- 只改他要求的部分，其余原样保留：不要顺手润色、不要压缩、不要删减事实。\n`
         + `- 不新增原文里没有的经历、数字或技术栈——原文就是事实来源。\n`
-        + `- html 要给完整全文，不是 diff、不是片段，开头不要加解释、不要包 markdown 代码块。`,
+        + `- 一次最多 ${MAX_EDITS} 处；要动的地方比这多，就分几次说。\n`
+        + `- action 是 answer 时，edits 给空数组。`,
+      patch: true,
       field: "html",
-      emptyError: "模型说要改，但没返回改写后的简历",
+      emptyError: "模型说要改，但一处改动都没给",
     });
-    if (result.action === "revise") {
-      result.html = restoreStyles(html, result.html);
-      if (/<script\b|\son\w+\s*=|javascript:/iu.test(result.html)) throw new Error("AI 改写包含不安全的 HTML，本次结果未应用");
-    }
-    return result;
+    // 问意见时不返回改动——html 给空串，调用方（和页面）拿到的形状保持不变
+    if (result.action !== "revise") return { action: "answer", reply: result.reply, html: "" };
+    const revised = applyEdits(html, result.edits);
+    if (/<script\b|\son\w+\s*=|javascript:/iu.test(revised)) throw new Error("AI 改写包含不安全的 HTML，本次结果未应用");
+    return { action: "revise", reply: result.reply, html: revised };
   }
 
   /**
@@ -561,7 +566,7 @@ export class InterviewAgent {
    *   最后一条 user —— 他这次说的
    * 只有这样，「那教育经历那段呢」这类追问才接得上；每句都单发一条消息会失忆。
    */
-  async #revise({ system, spec, context, history, instruction, rules, field, emptyError, summary = "" }) {
+  async #revise({ system, spec, context, history, instruction, rules, field, emptyError, summary = "", patch = false }) {
     const messages = [
       // 顺序有意：规则/规范在一次会话里不变，放前面好命中缓存；当前文稿改一次变一次，放最后。
       // 摘要也放前面——它只在压缩时变一次，比文稿稳定得多
@@ -578,9 +583,18 @@ export class InterviewAgent {
       // 有用得多，也跟「拿不准就当答」的原则一致。
       const spoken = String(error.raw ?? "").trim();
       if (spoken && !spoken.includes("{")) {
-        return { action: "answer", reply: spoken, [field]: "" };
+        return patch
+          ? { action: "answer", reply: spoken, edits: [] }
+          : { action: "answer", reply: spoken, [field]: "" };
       }
       throw error;
+    }
+    // 「找—换」模式：模型只回改动的那几处，不回全文
+    if (patch) {
+      const edits = Array.isArray(result.edits) ? result.edits : [];
+      const action = this.#decideAction(result.action, edits.length);
+      if (action === "revise" && !edits.length) throw new Error(emptyError);
+      return { action, reply: String(result.reply ?? "").trim(), edits };
     }
     const revised = String(result[field] ?? "").trim();
     const action = this.#decideAction(result.action, revised);
