@@ -43,7 +43,7 @@ export const COMMIT_MESSAGE_SPEC =
  */
 export const COMMIT_MESSAGE_PROMPT =
   "你在给一次文档保存写提交信息。\n\n"
-  + "先跑 `git status --porcelain` 看清这次改了哪些文件，再跑 `git diff -- <文件>` 看具体改了哪些行。\n"
+  + "先调用 `git_diff` 读取这次目标文件具体改了哪些行。\n"
   + "**以 diff 的输出为唯一依据** —— 不要凭印象，不要描述 diff 里没有的东西。\n\n"
   + `${COMMIT_MESSAGE_SPEC}\n`
   + "只回这段文字（第一行概括，空行，然后分点），不要引号、不要 JSON、不要解释，也不要代码块围栏。";

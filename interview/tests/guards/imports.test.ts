@@ -62,3 +62,7 @@ test("没有指向搬家前老路径的 import", () => {
   }
   assert.deepEqual(hits, [], `还在引用搬家前的老路径：\n${hits.join("\n")}`);
 });
+
+test("README 要求必读的开发规范已纳入仓库", () => {
+  assert.equal(fs.existsSync("AGENTS.md"), true, "README 链接的 AGENTS.md 不能只存在于某台开发机");
+});

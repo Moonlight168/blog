@@ -131,7 +131,7 @@ export function validateQuestionBlock(block: string, { prose = false, allowStar 
   const lines = block.trim().split(/\r?\n/);
   const title = lines[0] ?? "";
   if (!/^##\s+[^#].*[？?]$/u.test(title)) errors.push("题目必须使用 H2 且以问号结尾");
-  if (/^##\s+\d+[.、]/u.test(title)) errors.push("题目不能编号");
+  if (/^##\s+(?:Q\s*)?\d+(?:[.、]|[）)])/iu.test(title)) errors.push("题目不能编号");
   if (!allowStar && /⭐/u.test(title)) errors.push("题目不能自动添加星标");
   if (/[`#|]/u.test(title.slice(3))) errors.push("题目不能包含反引号、# 或竖线");
   if (/^#{3,}\s/m.test(block)) errors.push("答案只允许两级结构，不能使用三级标题");

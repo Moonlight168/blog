@@ -1,6 +1,7 @@
+import fs from "node:fs";
 import path from "node:path";
 
-import { DEFAULT_COMPACTION_SETTINGS, estimateContextTokens, shouldCompact } from "@earendil-works/pi-agent-core";
+import { DEFAULT_COMPACTION_SETTINGS, estimateContextTokens, shouldCompact, err, FileError } from "@earendil-works/pi-agent-core";
 import { BACKGROUND_CONTEXT } from "@earendil-works/pi-agent-core/harness/context";
 import { NodeExecutionEnv } from "@earendil-works/pi-agent-core/harness/env/nodejs";
 import { JsonlSessionRepo } from "@earendil-works/pi-agent-core/harness/session";
@@ -44,6 +45,48 @@ function shellEnvWithoutSecrets(): Record<string, string> {
 
 export function createEnv(cwd: string) {
   return new NodeExecutionEnv({ cwd, shellEnv: shellEnvWithoutSecrets() });
+}
+
+function isInside(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`));
+}
+
+/** 找到最近的现存祖先并解析符号链接，连“尚不存在的待写文件”也能做边界判断。 */
+function resolvedThroughExistingAncestor(candidate: string): string {
+  let ancestor = candidate;
+  while (!fs.existsSync(ancestor)) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) break;
+    ancestor = parent;
+  }
+  const canonicalAncestor = fs.realpathSync.native(ancestor);
+  return path.resolve(canonicalAncestor, path.relative(ancestor, candidate));
+}
+
+class ScopedExecutionEnv extends NodeExecutionEnv {
+  readonly #root: string;
+
+  constructor(cwd: string) {
+    super({ cwd, shellEnv: shellEnvWithoutSecrets() });
+    this.#root = fs.realpathSync.native(cwd);
+  }
+
+  override absolutePath(
+    input: string,
+    context: Parameters<NodeExecutionEnv["absolutePath"]>[1],
+  ): ReturnType<NodeExecutionEnv["absolutePath"]> {
+    const candidate = path.resolve(this.cwd, input);
+    if (!isInside(path.resolve(this.cwd), candidate) || !isInside(this.#root, resolvedThroughExistingAncestor(candidate))) {
+      return Promise.resolve(err<string, FileError>(new FileError("permission_denied", "Agent 不允许访问工作目录之外的路径", candidate)));
+    }
+    return super.absolutePath(candidate, context);
+  }
+}
+
+/** 只交给模型工具的受限环境；会话仓库仍使用 createEnv 访问 data/sessions。 */
+export function createToolEnv(cwd: string) {
+  return new ScopedExecutionEnv(cwd);
 }
 
 /**

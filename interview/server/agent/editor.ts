@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { AgentHarness, createBashTool } from "@earendil-works/pi-agent-core";
+import { AgentHarness, type AgentHarnessTool } from "@earendil-works/pi-agent-core";
 import { withAbortSignal } from "@earendil-works/pi-agent-core/harness/context";
 import { MemorySessionRepo } from "@earendil-works/pi-agent-core/harness/session";
+import { Type } from "@earendil-works/pi-ai";
 
 import { assertConfigured, makeModels } from "./model.ts";
-import { AGENT_CONTEXT, createEnv, createSessionRepo, openOrCreateSession } from "./session.ts";
-import { buildEditingTools, type ExecToolContext } from "./tools.ts";
+import { AGENT_CONTEXT, createEnv, createSessionRepo, createToolEnv, openOrCreateSession } from "./session.ts";
+import { buildEditingTools } from "./tools.ts";
 import { COMMIT_MESSAGE_PROMPT } from "../infra/git/subject.ts";
 import { readPrompt } from "../infra/prompts.ts";
 import type { ServiceConfig } from "../infra/config/index.ts";
@@ -115,17 +117,28 @@ export class DocumentEditorAgent {
    */
   async commitMessage({ file, dir, fallback, signal }: CommitMessageInput): Promise<string> {
     try {
-      const env = createEnv(dir);
-      // 内存版不收 cwd（那是 JsonlSessionRepo 要写进会话文件元数据的）；工作目录由 env 决定
+      if (path.basename(file) !== file) throw new Error("提交信息只允许读取当前目录下的文件");
+      const gitDiffTool = {
+        name: "git_diff",
+        label: "读取当前文件差异",
+        description: "读取本次保存目标文件尚未提交的 Git diff。无需参数。",
+        parameters: Type.Object({}),
+        execute: async () => ({
+          content: [{
+            type: "text" as const,
+            text: execFileSync("git", ["diff", "--", file], { cwd: dir, encoding: "utf8", maxBuffer: 1_048_576 }),
+          }],
+          details: {},
+        }),
+      } as unknown as AgentHarnessTool<undefined>;
+      // 内存版不落 JSONL；这里只保留模型生成提交说明所需的短会话。
       const session = await new MemorySessionRepo().create({}, AGENT_CONTEXT);
       const { harness } = await AgentHarness.create(
         {
           session,
           models: this.#models,
           model: this.#model,
-          // 只给 bash：这一步是「跑 git 看 diff」，不需要读写文件
-          tools: [createBashTool<ExecToolContext>()],
-          toolContext: { env },
+          tools: [gitDiffTool],
           systemPrompt: COMMIT_MESSAGE_PROMPT,
         },
         AGENT_CONTEXT,
@@ -193,7 +206,7 @@ export class DocumentEditorAgent {
   #runtimeFor(kind: DocumentKind, dir: string, file: string): Promise<{ lane: any; emit: (e: any) => void }> {
     // **按文件**而不是按目录：一个目录下常有多份稿子（同一个人有两份简历、
     // 自我介绍目录里有技术面/HR 面），按目录共用运行时会把另一份的全文压进模型上下文 ——
-    // 而它手上有 write/edit/bash，改错文件是现实的，改完接口还会报「没改动」。
+    // 而它手上有 write/edit，改错文件是现实的，改完接口还会报「没改动」。
     const key = `${kind}:${path.join(dir, file)}`;
     let pending = this.#runtimes.get(key);
     if (!pending) {
@@ -209,8 +222,9 @@ export class DocumentEditorAgent {
 
   async #create(kind: DocumentKind, dir: string, file: string) {
     // 工作目录就是文档所在目录：模型改的是真文件，不是副本
-    const env = createEnv(dir);
-    const repo = createSessionRepo(env);
+    const sessionEnv = createEnv(dir);
+    const toolEnv = createToolEnv(dir);
+    const repo = createSessionRepo(sessionEnv);
     // 会话 id 由**文件路径**派生，去掉尾部扩展名避免同人不同格式撞车；
     // 不用截断的 base64：截断后同目录下的兄弟文件会算出同一个 id。
     const sessionId = `edit-${kind}-${createHash("sha256").update(path.join(dir, file)).digest("hex").slice(0, 16)}`;
@@ -223,7 +237,7 @@ export class DocumentEditorAgent {
         models: this.#models,
         model: this.#model,
         tools: buildEditingTools(),
-        toolContext: { env },
+        toolContext: { env: toolEnv },
         systemPrompt: systemPromptFor(kind, readPrompt(SPEC_OF[kind])),
       },
       AGENT_CONTEXT,

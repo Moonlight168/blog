@@ -1,4 +1,5 @@
 import { focusPayload } from "./plan.ts";
+import { expired } from "./timer.ts";
 import { EVENT } from "../../../shared/events.ts";
 import type { Message, Session } from "../../../shared/types.ts";
 
@@ -22,6 +23,7 @@ export interface TurnResult {
 
 export async function handleInterviewMessage({ session, text, piAgent, agent, archive, listAttempts, onEvent, signal }: any): Promise<TurnResult> {
   if (session.status !== "active") throw new Error("面试已结束");
+  if (expired(session)) return advanceInterview({ session, ending: true, agent, listAttempts });
   const input = text.trim();
   if (NEXT_RE.test(input)) return advanceInterview({ session, ending: false, agent, listAttempts });
   if (END_RE.test(input)) return advanceInterview({ session, ending: true, agent, listAttempts });

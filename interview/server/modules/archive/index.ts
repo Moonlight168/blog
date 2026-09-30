@@ -190,7 +190,12 @@ async function writeQuestionBlock({ agent, knowledgeRoot, privateHistoryRoot, so
   const historyUrl = `${history.url}#${slugify(title)}`;
   const prose = isBehavioralChapter(sourceRelative);
 
-  const append = (answer: string) => appendAtomically(sourceFile, `\n${buildQuestionBlock({ title, answer, historyUrl, prose, allowStar })}`);
+  const append = (answer: string) => {
+    const frontmatter = fs.existsSync(sourceFile)
+      ? "\n"
+      : `---\ntitle: ${JSON.stringify(chapter)}\ndate: ${new Date().toISOString().slice(0, 10)}\ncategories: [${JSON.stringify(series)}]\norder: 0\n---\n\n`;
+    return appendAtomically(sourceFile, `${frontmatter}${buildQuestionBlock({ title, answer, historyUrl, prose, allowStar })}`);
+  };
   const strip = (message = "") => message.replace(/^题目不符合《面试宝典文章格式规范》：/, "");
   let candidate = standardAnswer;
   let lastReason = "";
@@ -249,11 +254,13 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
     const candidates = await questionIndex.candidates(question.title, 5);
     const exact = candidates.find((candidate) => candidate.normalized_title === normalizeTitle(question.title));
     const decision = exact ? { kind: "existing", questionId: exact.id } : await agent.judgeDuplicate({ title: question.title, candidates });
-    // 实战里候选来自题库、一定有 id；这里不因为 id 缺失就放弃复用 ——
-    // 那会让一道已入库的题被重复写一次，而重复写比类型不严更糟。
-    const existing = decision.kind === "existing"
-      ? questionIndex.getById(decision.questionId as string)
-      : null;
+    const decisionId = decision.kind === "existing" ? String(decision.questionId ?? "") : "";
+    if (decision.kind === "existing" && !candidates.some((candidate) => candidate.id === decisionId)) {
+      throw new Error(`模型判重返回了候选集之外的题目 ID：${decisionId || "(空)"}`);
+    }
+    const existing = decision.kind === "existing" ? questionIndex.getById(decisionId) : null;
+    if (decision.kind === "existing" && !existing) throw new Error(`判重命中的题目不存在：${decisionId}`);
+    const canonicalTitle = existing?.title ?? question.title;
     // 会话指定了章节就归到那一章；没指定（岗位定制、「全部」）则由题目自带的 topic 定位：
     // 岗位定制的分类也由模型定，「全部」则锁死在会话选的分类里
     const sourceRelative = existing?.source_path
@@ -275,7 +282,7 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
     const publicBefore = publicExisted ? fs.readFileSync(sourceFile, "utf8") : "";
     const historyExisted = fs.existsSync(history.file);
     const historyOriginal = historyExisted ? fs.readFileSync(history.file, "utf8") : "";
-    const historyNext = mergeHistory(historyOriginal, { chapter, title: existing?.title ?? question.title, date, rawAnswer });
+    const historyNext = mergeHistory(historyOriginal, { chapter, title: canonicalTitle, date, rawAnswer });
     let attemptId = null;
     let notice = null;
     let publicWritten = null;
@@ -298,8 +305,11 @@ export function createArchive({ questionIndex, agent, knowledgeRoot, privateHist
       fs.writeFileSync(historyTemp, historyNext, "utf8");
       fs.renameSync(historyTemp, history.file);
       historyWritten = historyNext;
-      const inserted = db.prepare("INSERT INTO attempts(session_id,question_title,raw_answer,evaluation,created_at,attempt_key,standard_answer) VALUES(?,?,?,?,?,?,?)")
-        .run(session.id, question.title, rawAnswer, JSON.stringify(evaluation), new Date().toISOString(), attemptKey, question.standardAnswer ?? "");
+      const inserted = db.prepare("INSERT INTO attempts(session_id,question_title,raw_answer,evaluation,created_at,attempt_key,standard_answer,question_id,source_path) VALUES(?,?,?,?,?,?,?,?,?)")
+        .run(
+          session.id, canonicalTitle, rawAnswer, JSON.stringify(evaluation), new Date().toISOString(), attemptKey,
+          question.standardAnswer ?? "", decision.kind === "existing" ? decisionId : "", sourceRelative,
+        );
       attemptId = inserted.lastInsertRowid;
       await questionIndex.refresh();
     } catch (error) {

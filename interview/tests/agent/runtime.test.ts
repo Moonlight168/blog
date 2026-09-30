@@ -9,7 +9,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { InterviewChatAgent } from "../../server/agent/runtime.ts";
-import { buildTools } from "../../server/agent/tools.ts";
+import { buildEditingTools, buildTools } from "../../server/agent/tools.ts";
 import type { Evaluation, SessionWithFocus } from "../../shared/types.ts";
 
 /**
@@ -65,12 +65,13 @@ function makeSession(resumePath: string): SessionWithFocus {
   };
 }
 
-test("工具集正好 5 个：pi 的四个能力 + 一个领域工具", () => {
+test("面试 Agent 只有读取资料和提交点评的最小权限", () => {
   const tools = buildTools({ onSubmitEvaluation: () => {} });
-  assert.deepEqual(
-    tools.map((tool) => tool.name).sort(),
-    ["bash", "edit", "read", "submit_evaluation", "write"],
-  );
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["read", "submit_evaluation"]);
+});
+
+test("文档编辑 Agent 可以定点读写，但不能执行任意命令", () => {
+  assert.deepEqual(buildEditingTools().map((tool) => tool.name).sort(), ["edit", "read", "write"]);
 });
 
 type Tool = ReturnType<typeof buildTools>[number];

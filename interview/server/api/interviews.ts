@@ -10,6 +10,7 @@ import { EVENT } from "../../shared/events.ts";
 import { slugify } from "../modules/archive/format.ts";
 import { normalizeTitle } from "../modules/question/text.ts";
 import { expired } from "../modules/interview/timer.ts";
+import { discardInterviewSession } from "../modules/interview/discard.ts";
 import { deleteAgentSession } from "../agent/session.ts";
 import { removeWorkspace, workspacePathOf } from "../agent/workspace.ts";
 import { advanceInterview, handleInterviewMessage } from "../modules/interview/flow.ts";
@@ -160,21 +161,23 @@ export default [
     pattern: PATTERN.interviewReport,
     handler: ({ params }) => {
       const session = requireSession(params.id);
-      const attempts = asRows<{ id: number; questionTitle: string; rawAnswer: string; evaluation: string; createdAt: string }>(
-        db.prepare("SELECT id,question_title AS questionTitle,raw_answer AS rawAnswer,evaluation,created_at AS createdAt FROM attempts WHERE session_id=? ORDER BY id").all(session.id),
+      const attempts = asRows<{ id: number; questionTitle: string; questionId: string; sourcePath: string; rawAnswer: string; evaluation: string; createdAt: string }>(
+        db.prepare("SELECT id,question_title AS questionTitle,question_id AS questionId,source_path AS sourcePath,raw_answer AS rawAnswer,evaluation,created_at AS createdAt FROM attempts WHERE session_id=? ORDER BY id").all(session.id),
       )
         .map((row) => {
-          // 反查题库，才知道这题归档到了哪里（没进知识库的题就查不到）
-          const question = db.prepare("SELECT source_path,history_url FROM questions WHERE normalized_title=?").get(normalizeTitle(String(row.questionTitle)));
+          const question = row.questionId
+            ? db.prepare("SELECT source_path,history_url FROM questions WHERE id=?").get(row.questionId)
+            : db.prepare("SELECT source_path,history_url FROM questions WHERE normalized_title=?").get(normalizeTitle(String(row.questionTitle)));
+          const sourcePath = String(question?.source_path ?? row.sourcePath ?? "") || null;
           return {
             ...row,
             evaluation: JSON.parse(String(row.evaluation)),
             historyUrl: question?.history_url ?? null,
-            sourcePath: question?.source_path ?? null,
+            sourcePath,
             // 带锚点，否则只能落到知识库页面顶部、还得自己往下翻。
             // 锚点用 slugify 生成，与 VuePress 渲染出的 h2 id 一致（已实测比对）。
-            knowledgeUrl: question?.source_path
-              ? `/series/knowledge/${String(question.source_path).replace(/\.md$/, ".html")}#${slugify(String(row.questionTitle))}`
+            knowledgeUrl: sourcePath
+              ? `/series/knowledge/${sourcePath.replace(/\.md$/, ".html")}#${slugify(String(row.questionTitle))}`
               : null,
           };
         });
@@ -224,21 +227,19 @@ export default [
         if (!action && !content) throw new HttpError(400, "消息不能为空");
 
         // 只有「下一题」会出题；出题前把已问过的题和本轮考点挂到 session 上供提示词使用
-        if (action === "next") await prepareGeneration(session, 1);
-        const wasExpired = !action && expired(session);
-        const result = action
-          ? await advanceInterview({ session, ending: action === "end", agent, listAttempts })
-          : await handleInterviewMessage({
+        const wasExpired = expired(session);
+        if (action === "next" && !wasExpired) await prepareGeneration(session, 1);
+        const result = wasExpired
+          ? await advanceInterview({ session, ending: true, agent, listAttempts })
+          : action
+            ? await advanceInterview({ session, ending: action === "end", agent, listAttempts })
+            : await handleInterviewMessage({
               session, text: content, piAgent, agent, archive, listAttempts,
               onEvent: emit, signal: requestController.signal,
             });
 
         try {
-          if (wasExpired && result.session.status === "active") {
-            const ended = await advanceInterview({ session: result.session, ending: true, agent, listAttempts });
-            result.messages.push(...ended.messages);
-          }
-          persistTurn(result.session, action ? null : content, result.messages);
+          persistTurn(result.session, action || wasExpired ? null : content, result.messages);
           result.commitArchive?.();
         } catch (error) {
           await result.rollbackArchive?.();
@@ -280,13 +281,23 @@ export default [
     /** 结束面试时选择「不保存」：丢弃这场会话记录（题目与回答已归档，不受影响） */
     method: "POST",
     pattern: PATTERN.interviewDiscard,
-    handler: ({ params }) => {
+    handler: async ({ params }) => {
+      if (sessionLocks.has(params.id)) throw new HttpError(409, "当前会话正在处理消息，请稍后重试");
       const session = requireSession(params.id);
-      db.prepare("DELETE FROM messages WHERE session_id=?").run(session.id);
-      db.prepare("DELETE FROM attempts WHERE session_id=?").run(session.id);
-      db.prepare("DELETE FROM agent_memories WHERE session_id=?").run(session.id);
-      db.prepare("DELETE FROM sessions WHERE id=?").run(session.id);
-      return { discarded: true };
+      sessionLocks.add(session.id);
+      const workspace = workspacePathOf(session.id);
+      try {
+        await discardInterviewSession({
+          db,
+          sessionId: session.id,
+          forgetAgent: () => piAgent.forget(session.id),
+          deleteAgentSession: () => deleteAgentSession(session.id, workspace),
+          removeWorkspace: () => removeWorkspace(session.id),
+        });
+        return { discarded: true };
+      } finally {
+        sessionLocks.delete(session.id);
+      }
     },
   },
 ] as Route[];

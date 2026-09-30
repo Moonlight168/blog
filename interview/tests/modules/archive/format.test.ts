@@ -32,6 +32,16 @@ test("builds a question block that follows the interview handbook", () => {
   assert.match(block, /\n→ \[回答历史\]\(\/private\/series\/答题历史\/.+\)\n$/);
 });
 
+test("题目标题拒绝面试宝典禁止的所有编号写法", () => {
+  const answer = "**锚点**：`先说结论`\n\n1. **结论**：这是回答";
+  const historyUrl = "/private/series/答题历史/Java/topic-答题记录.md#题目";
+
+  for (const title of ["Q1. 什么是状态机？", "1. 什么是状态机？", "1、什么是状态机？", "1）什么是状态机？"]) {
+    const errors = validateQuestionBlock(`## ${title}\n\n${answer}\n\n→ [回答历史](${historyUrl})\n`);
+    assert.ok(errors.includes("题目不能编号"), `${title} 应被识别为带编号标题`);
+  }
+});
+
 test("主句字数按汉字当量算：汉字 1、半角 0.5、空格与反引号不计", () => {
   assert.equal(widthUnits("中文"), 2);
   assert.equal(widthUnits("ab"), 1);

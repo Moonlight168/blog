@@ -3,7 +3,7 @@ import { AgentHarness } from "@earendil-works/pi-agent-core";
 import { assertConfigured, makeModels } from "./model.ts";
 import { withAbortSignal } from "@earendil-works/pi-agent-core/harness/context";
 
-import { AGENT_CONTEXT, compactIfNeeded, createEnv, createSessionRepo, openOrCreateSession } from "./session.ts";
+import { AGENT_CONTEXT, compactIfNeeded, createEnv, createSessionRepo, createToolEnv, openOrCreateSession } from "./session.ts";
 import { buildTools, type Evaluation } from "./tools.ts";
 import { prepareWorkspace } from "./workspace.ts";
 import type { ServiceConfig } from "../infra/config/index.ts";
@@ -13,7 +13,7 @@ import { EVENT } from "../../shared/events.ts";
 /**
  * 面试一轮的 agent 运行时。
  *
- * 工具全部来自 pi（read / write / edit / bash），只加一个领域工具 submit_evaluation；
+ * 工具只给 pi 的 read，再加一个领域工具 submit_evaluation；面试过程不需要写文件或执行命令。
  * 对话记录存在 pi 的 JSONL 会话里，上下文压缩交给 pi 的 compaction。
  *
  * 「回答 vs 追问」不靠模型专门报告：调了 submit_evaluation 就是回答，没调就是追问。
@@ -48,7 +48,7 @@ interface SessionRuntime {
  *
  * pi 是从 **Context** 里读中断信号的（`context.abortSignal`），光做
  * `signal?.throwIfAborted()` 只是在开头检查一次 —— 用户点「取消」之后模型照样跑、
- * token 照样烧，bash 子进程也照样在跑。旧版还有个 90 秒的兜底，
+ * token 照样烧，工具调用也不会停。旧版还有个 90 秒的兜底，
  * 换成 harness 之后一起丢了，这里补回来。
  */
 function contextWithSignal(signal: AbortSignal | undefined, timeoutMs: number) {
@@ -148,8 +148,9 @@ export class InterviewChatAgent {
       resumePath: session.resumePath,
       jdPath: session.jdPath,
     });
-    const env = createEnv(workspace);
-    const repo = createSessionRepo(env);
+    const sessionEnv = createEnv(workspace);
+    const toolEnv = createToolEnv(workspace);
+    const repo = createSessionRepo(sessionEnv);
     const piSession = await openOrCreateSession(repo, { sessionId: session.id, cwd: workspace });
 
     // 先建状态箱，再订阅事件 —— 监听器闭包要写到 runtime 自己的那份上
@@ -162,7 +163,7 @@ export class InterviewChatAgent {
         models: this.#models,
         model: this.#model,
         tools,
-        toolContext: { env },
+        toolContext: { env: toolEnv },
         systemPrompt: SYSTEM_PROMPT,
       },
       AGENT_CONTEXT,

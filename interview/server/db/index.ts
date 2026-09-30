@@ -50,7 +50,8 @@ export function openDatabase(file: string): Db {
     CREATE TABLE IF NOT EXISTS attempts (
       id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, question_title TEXT NOT NULL,
       raw_answer TEXT NOT NULL, evaluation TEXT NOT NULL, created_at TEXT NOT NULL, attempt_key TEXT,
-      standard_answer TEXT NOT NULL DEFAULT ''
+      standard_answer TEXT NOT NULL DEFAULT '', question_id TEXT NOT NULL DEFAULT '',
+      source_path TEXT NOT NULL DEFAULT ''
     );
     -- 考点计划：按「简历 + JD」（或章节）缓存一份有序考点表，cursor 是跨场共享的进度。
     -- cursor 单调递增，实际考点 = plan[cursor % plan.length]，第几轮 = floor(cursor / plan.length) + 1。
@@ -76,6 +77,8 @@ export function openDatabase(file: string): Db {
   if (!attemptColumns.has("attempt_key")) db.exec("ALTER TABLE attempts ADD COLUMN attempt_key TEXT");
   // 归档时被跳过的题，之后要靠它补录
   if (!attemptColumns.has("standard_answer")) db.exec("ALTER TABLE attempts ADD COLUMN standard_answer TEXT NOT NULL DEFAULT ''");
+  if (!attemptColumns.has("question_id")) db.exec("ALTER TABLE attempts ADD COLUMN question_id TEXT NOT NULL DEFAULT ''");
+  if (!attemptColumns.has("source_path")) db.exec("ALTER TABLE attempts ADD COLUMN source_path TEXT NOT NULL DEFAULT ''");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS attempts_attempt_key ON attempts(attempt_key) WHERE attempt_key IS NOT NULL");
   return db;
 }

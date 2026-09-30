@@ -7,7 +7,7 @@ import type { Evaluation, SessionWithFocus } from "../../../shared/types.ts";
 
 const QUESTION = { title: "当前题？", standardAnswer: "**锚点**：`短句`\n\n1. **要点**：短句" };
 const session = (over: Partial<SessionWithFocus> = {}): SessionWithFocus =>
-  makeSession({ id: "s1", status: "active", currentQuestion: { ...QUESTION }, ...over });
+  makeSession({ id: "s1", status: "active", startedAt: new Date().toISOString(), currentQuestion: { ...QUESTION }, ...over });
 
 interface EngineOptions {
   classifyAction?: "answer" | "followup";
@@ -86,6 +86,17 @@ test("追问只答疑，不点评不归档", async () => {
   assert.deepEqual(calls, ["piAgent"]);
   assert.deepEqual(result.messages.map((m) => m.kind), ["followup"]);
   assert.equal(result.session.completedCount, undefined);
+});
+
+test("面试到时后拒绝迟到回答并直接收尾", async () => {
+  const { engine, calls } = makeEngine();
+  const expired = session({ startedAt: "2020-01-01T00:00:00.000Z", durationMinutes: 1 });
+
+  const result = await engine.handle(expired, "这是迟到的回答");
+
+  assert.equal(result.session.status, "completed");
+  assert.deepEqual(result.messages.map((message) => message.kind), ["summary"]);
+  assert.deepEqual(calls, ["listAttempts:s1", "summarize"], "不能再调用点评或归档");
 });
 
 test("归档被跳过时用 notice 告知，但点评和标准答案照常给", async () => {

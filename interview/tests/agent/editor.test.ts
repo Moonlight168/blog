@@ -126,7 +126,7 @@ test("中断之后这份文档还能再改 —— 锁必须释放", async (t) =>
   assert.doesNotMatch(locked.message, /正在改/, "中断必须释放并发锁，否则用户停一次就永久改不动了");
 });
 
-// ---- 提交信息：交给 agent 跑 git diff 看真实改动 ----
+// ---- 提交信息：交给 agent 读取受限的 git diff 看真实改动 ----
 
 /** 假模型的一轮回复：可以只说一句话，也可以「先说一句 + 要调工具」——真实模型常是后者 */
 interface Turn {
@@ -191,7 +191,7 @@ test("提交信息：模型先说要去看 diff、再给结论，取的是结论
   // 工具跑完才给结论。这条钉住的是「取的是哪一条 assistant 文本」——
   // 取反方向时，存进历史的会是那句英文预告。
   const model = await scriptedModel(t, [
-    { text: "I'll check the git status and diff for that file.", toolCall: { name: "bash", arguments: { command: `git diff -- ${file}` } } },
+    { text: "I'll check the diff for that file.", toolCall: { name: "git_diff", arguments: {} } },
     { text: "简历：实习压到两项" },
   ]);
 
@@ -199,7 +199,7 @@ test("提交信息：模型先说要去看 diff、再给结论，取的是结论
 
   assert.equal(message, "简历：实习压到两项");
   assert.doesNotMatch(message, /I'll check/, "不能把动手前的预告当成提交信息");
-  // 第二轮请求里带着第一轮 bash 的结果 —— 那里面必须是真实的 diff，
+  // 第二轮请求里带着受限工具的结果 —— 那里面必须是真实的 diff，
   // 而不是模型自己猜的。把请求体解成对象再序列化，好让 \uXXXX 转义还原成中文。
   const second = JSON.stringify(JSON.parse(model.bodies[1] ?? "{}"));
   assert.match(second, /实习压到两项/, "diff 的新内容要出现在模型的输入里");
@@ -209,7 +209,7 @@ test("提交信息：模型先说要去看 diff、再给结论，取的是结论
 test("提交信息：标题 + 分点要整段保留，不能被截成一行", async (t) => {
   const { dir, file } = makeGitRepo(t);
   const model = await scriptedModel(t, [
-    { text: "I'll check the diff.", toolCall: { name: "bash", arguments: { command: `git diff -- ${file}` } } },
+    { text: "I'll check the diff.", toolCall: { name: "git_diff", arguments: {} } },
     { text: "简历：实习压到两项\n\n- 删掉一段实习\n- 技能栏同步收敛" },
   ]);
 

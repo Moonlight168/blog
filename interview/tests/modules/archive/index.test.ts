@@ -25,6 +25,7 @@ interface EnvOptions {
   reformat?: string | null;
   /** 传函数可以按候选章节决定归到哪儿；空串表示「没有章节装得下」 */
   matchChapter?: string | ((input: { chapters: string[] }) => string);
+  duplicateDecision?: { kind: "new" } | { kind: "existing"; questionId: string };
 }
 
 const COMPLIANT = "**锚点**：`状态定边界`\n\n1. **边界清晰**：用状态约束流程";
@@ -33,7 +34,7 @@ const JD_SESSION = makeSession({ id: "session-jd", completedCount: 0, mode: "jd"
 /** 选了「全部」章节：分类由会话定，章节由模型自报 */
 const ALL_SESSION = makeSession({ id: "session-all", completedCount: 0, mode: "interview", series: "Java", chapterPath: "" });
 
-function makeEnv({ candidates = [], existing = null, reformat = null, matchChapter = "" }: EnvOptions = {}) {
+function makeEnv({ candidates = [], existing = null, reformat = null, matchChapter = "", duplicateDecision = { kind: "new" } }: EnvOptions = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "archive-"));
   const knowledgeRoot = path.join(root, "knowledge");
   const privateHistoryRoot = path.join(root, "history");
@@ -43,11 +44,11 @@ function makeEnv({ candidates = [], existing = null, reformat = null, matchChapt
   const calls: string[] = [];
   const questionIndex: ArchiveIndex = {
     async candidates() { return candidates; },
-    getById() { return existing ?? undefined; },
+    getById(id) { return id === "q1" ? existing ?? undefined : undefined; },
     async refresh() { calls.push("refresh"); return { total: 0, changed: 0, embedded: 0, embeddingError: null }; },
   };
   const agent: ArchiveAgent = {
-    async judgeDuplicate() { calls.push("judgeDuplicate"); return { kind: "new" }; },
+    async judgeDuplicate() { calls.push("judgeDuplicate"); return duplicateDecision; },
     // 默认空串 = 模型认为该分类下没有章节装得下这道题 → 新建
     async matchChapter({ chapters }) {
       calls.push("matchChapter");
@@ -184,7 +185,9 @@ test("岗位定制：没有章节装得下时，才按模型选的分类新建",
   assert.ok(env.calls.includes("matchChapter"), "新建之前要先问一遍已有章节");
   const created = path.join(env.knowledgeDir, "JVM 调优.md");
   assert.ok(fs.existsSync(created), "确实没有能覆盖的章节时才新建");
-  assert.match(fs.readFileSync(created, "utf8"), /## G1 和 CMS 怎么选？/);
+  const content = fs.readFileSync(created, "utf8");
+  assert.match(content, /^---\ntitle: "JVM 调优"\ndate: \d{4}-\d{2}-\d{2}\ncategories: \["Java"\]\norder: 0\n---\n/u);
+  assert.match(content, /## G1 和 CMS 怎么选？/);
   assert.match(fs.readFileSync(env.knowledgeFile, "utf8"), /^# 多线程/, "不该动到别的章节");
 });
 
@@ -324,4 +327,37 @@ test("判定为已有题时复用原题，不重复写题块也不报 notice", a
   assert.ok(!env.calls.includes("reformatAnswer"), "已有题不涉及重写");
   assert.equal(fs.readFileSync(env.knowledgeFile, "utf8").trim(), "# 多线程", "已有题不该重复写入");
   assert.match(fs.readFileSync(env.historyFile, "utf8"), /再答一次/, "回答仍要并入该题历史");
+});
+
+test("语义判重命中旧题时 attempt 保存旧题的 canonical 标题", async () => {
+  const env = makeEnv({
+    candidates: [{ id: "q1", normalized_title: "为什么需要状态机" }],
+    existing: { title: "为什么需要状态机？", source_path: "Java/多线程.md" },
+    duplicateDecision: { kind: "existing", questionId: "q1" },
+  });
+
+  await submit(env, { title: "状态机主要解决什么问题？", rawAnswer: "让流程边界更清楚" });
+
+  const attempt = env.db.prepare("SELECT question_title,question_id,source_path FROM attempts").get();
+  assert.equal(attempt?.question_title, "为什么需要状态机？");
+  assert.equal(attempt?.question_id, "q1");
+  assert.equal(attempt?.source_path, "Java/多线程.md");
+  assert.match(fs.readFileSync(env.historyFile, "utf8"), /## 为什么需要状态机？/);
+});
+
+test("模型判重返回候选集之外的 ID 时拒绝写入", async () => {
+  const env = makeEnv({
+    candidates: [{ id: "q1", normalized_title: "为什么需要状态机" }],
+    existing: { title: "为什么需要状态机？", source_path: "Java/多线程.md" },
+    duplicateDecision: { kind: "existing", questionId: "not-a-candidate" },
+  });
+  const before = fs.readFileSync(env.knowledgeFile, "utf8");
+
+  await assert.rejects(
+    () => submit(env, { title: "状态机主要解决什么问题？" }),
+    /候选集之外/,
+  );
+
+  assert.equal(fs.readFileSync(env.knowledgeFile, "utf8"), before);
+  assert.equal(env.db.prepare("SELECT COUNT(*) AS total FROM attempts").get()?.total, 0);
 });

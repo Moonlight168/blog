@@ -1,17 +1,16 @@
-import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-agent-core";
+import { createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-agent-core";
 import type { AgentHarnessTool, ExecutionEnv } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
 
 /**
- * 工具装配：pi 自带的四个能力全用上，只留一个领域工具。
+ * 工具装配遵循最小权限：面试只读资料，文档编辑才获得 edit/write。
  *
  * 为什么只有 submit_evaluation 是自写的：pi 没有「结构化产出」这个轮子
  * （`operationResult` 那套是 harness 内部的 operation 生命周期记录，不是给模型的工具），
  * 而「评分 + 点评」是本应用的业务契约，没有替身。
  *
- * 原先的两个自造工具已删除：
- *   - 简历 / JD / 题库都在会话工作目录里，用 pi 的 read 与 bash(grep) 直接找
- *   - 「回答 vs 追问」由「有没有调 submit_evaluation」天然区分，不需要模型专门报告
+ * 简历 / JD / 规则都在会话工作目录里，面试 Agent 用 pi 的 read 按需读取。
+ * 「回答 vs 追问」由「有没有调 submit_evaluation」天然区分，不需要模型专门报告。
  */
 
 /** 内置工具要从 toolContext 取 env；这个接口与 pi 内部的 ExecutionToolContext 等价，
@@ -51,24 +50,19 @@ export function buildTools({ onSubmitEvaluation }: BuildToolsOptions): AgentHarn
     },
   } as unknown as AgentHarnessTool<ExecToolContext>;
 
-  return [...executionTools(), submitEvaluation];
+  return [createReadTool<ExecToolContext>(), submitEvaluation];
 }
 
 /**
- * 改文档场景的工具集：只有 pi 的四个能力。
+ * 改文档场景的工具集：只有 pi 的 read / write / edit，不开放任意命令执行。
  *
  * 没有 submit 类工具 —— 模型的产出就是**它对文件做的改动本身**，
  * 服务端改完从盘上读回来即可，不需要它再报一遍。
  */
 export function buildEditingTools(): AgentHarnessTool<ExecToolContext>[] {
-  return executionTools();
-}
-
-function executionTools(): AgentHarnessTool<ExecToolContext>[] {
   return [
     createReadTool<ExecToolContext>(),
     createWriteTool<ExecToolContext>(),
     createEditTool<ExecToolContext>(),
-    createBashTool<ExecToolContext>(),
   ];
 }

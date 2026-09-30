@@ -31,6 +31,7 @@ docs/
 
 # 忽略候选人简历与项目说明（含个人信息，不上传）
 AGENTS.md
+!interview/AGENTS.md
 
 # 本地面试助手运行数据与密钥
 interview/data/
