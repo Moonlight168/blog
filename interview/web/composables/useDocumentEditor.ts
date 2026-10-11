@@ -408,7 +408,7 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
       if (data.commit.committed || data.commit.unchanged) {
         toast.success(data.commit.committed ? `已保存 ${data.commit.hash}` : "已保存");
       } else {
-        toast.warning(`写进磁盘了，但没进版本库：${data.commit.reason ?? "原因未知"}。先解决它，再点一次「保存」`);
+        toast.warning(data.commit.reason ?? "保存失败，请稍后重试");
       }
       return true;
     } catch (error) {

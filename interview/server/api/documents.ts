@@ -11,8 +11,8 @@ import { requireRepo } from "../infra/git/repo.ts";
 import { setDirectory } from "../infra/config/env-dir.ts";
 import { editorAgent } from "../context.ts";
 import {
-  commitDocument, discardDocument, documentContentAt, documentHistory, listResumeGroups, listSelfIntros,
-  readDocument, resolverOf, rollbackDocument, writeDocument,
+  commitDocument, discardDocument, documentContentAt, documentHistory, documentWorkingDiff,
+  listResumeGroups, listSelfIntros, readDocument, resolverOf, rollbackDocument, writeDocument,
 } from "../modules/document/index.ts";
 import { findBrowser, htmlToPdf, pdfFileName } from "../modules/document/pdf.ts";
 
@@ -68,18 +68,40 @@ async function saveFlow(kind: DocumentKind, input: any): Promise<unknown> {
     return { ...written, uncommitted: readDocument(kind, config.resumeDir, file).uncommitted, commit: null };
   }
 
-  // 先写盘、再问模型：agent 要跑 `git diff`，改动得先落到工作区才有得看。
-  // 这也是它比「改前改后两份全文」强的地方 —— 它看的是**真实改动的行**，编不出来。
-  const scope = kind === "resume" ? "简历" : "自我介绍";
-  const message = String(input.message ?? "").trim()
-    || await editorAgent.commitMessage({
-      file: current.file,
-      dir: path.dirname(current.path),
-      fallback: `${scope}：编辑器保存`,
-    });
+  // 先写盘、再问模型：模型要看的是**真实改动的行**，改动得先落到工作区。
+  // diff 由服务端 git 取好喂给模型（模型不碰命令行）；取不到 diff 或模型失败就
+  // **不提交**，让用户稍后重试 —— 绝不把失败自白当成提交信息写进历史。
+  const provided = String(input.message ?? "").trim();
+  const message = provided || await commitMessageFor(kind, current);
+  if (message === null) {
+    return { ...written, commit: { committed: false, reason: SAVE_FAILED_HINT }, uncommitted: true };
+  }
   const commit = commitDocument(kind, config.resumeDir, file, message);
   // 提交成了、或内容本来就和 HEAD 一样，都算「盘上没有未提交的改动」
   return { ...written, commit, uncommitted: !(commit.committed || commit.unchanged) };
+}
+
+/** 生成提交信息 / 提交失败时给用户的一句话 —— 编辑器本就边改边落盘，不必再说「已存盘」 */
+const SAVE_FAILED_HINT = "保存失败，请稍后重试";
+
+/**
+ * 让模型根据服务端取好的 diff 写提交信息。
+ * 拿不到 diff 或生成失败都返回 null，调用方据此放弃这次提交（内容已在盘上，用户稍后重试）。
+ */
+async function commitMessageFor(kind: DocumentKind, current: { file: string }): Promise<string | null> {
+  const diff = documentWorkingDiff(kind, config.resumeDir, current.file);
+  if (diff === null) {
+    console.error(`[commit-msg] 读不到 ${current.file} 的工作区 diff，本次不提交`);
+    return null;
+  }
+  // 盘上和 HEAD 一致时没有要描述的改动，直接走提交（commitFile 会回报 unchanged），不必问模型
+  if (!diff.trim()) return `${kind === "resume" ? "简历" : "自我介绍"}：编辑器保存`;
+  try {
+    return await editorAgent.commitMessage({ diff });
+  } catch (error) {
+    console.error(`[commit-msg] ${current.file} 生成提交信息失败，本次不提交：${(error as Error).message}`);
+    return null;
+  }
 }
 
 /**

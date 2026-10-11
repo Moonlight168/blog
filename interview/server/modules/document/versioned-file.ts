@@ -97,6 +97,19 @@ export function commitFile(target: DocTarget, message: string): CommitResult {
 }
 
 /**
+ * 工作区相对 HEAD 的改动（喂给模型写提交信息用）。
+ *
+ * 对比基准是 HEAD 而不是 index：调用方可能在 add 之后才需要它，那时工作区已入索引，
+ * 裸 `git diff` 会是空的。null = git 执行失败（调用方据此放弃这次生成），
+ * 空串 = 盘上与 HEAD 一致（没有需要描述的改动）。
+ */
+export function workingDiff(target: DocTarget): string | null {
+  const info = repoRelative(target.path);
+  if (!info) return null;
+  return git(info.repo, ["diff", "HEAD", "--no-ext-diff", "--", info.relative], true);
+}
+
+/**
  * 提交历史（新→旧）。用 --numstat 一次把每次改了多少行也带出来，免得每次提交再单独跑一遍 diff。
  */
 export function historyOf(target: DocTarget, limit = 50): CommitInfo[] {
