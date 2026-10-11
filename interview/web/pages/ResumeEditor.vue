@@ -31,7 +31,7 @@ let previewQueued = false;
 
 const {
   content: html, file, name, filePath,
-  saved, uncommitted, baseMtime, dirty, edited,
+  uncommitted, flushToDisk,
   versions, cursor, canUndo, canRedo, flushVersion, undo, redo,
   editing, toggleEditing, syncFromDisk, applyLoaded, onInput: baseOnInput,
   instruction, chatLog, clearChatOpen, chatBox, chatSummary, chatSummaryCount, loadChat, clearChat, saveChatSummary,
@@ -70,6 +70,8 @@ async function save() {
 const resumesOfPerson = computed(() => people.value.find((item) => item.id === person.value)?.resumes ?? []);
 
 async function load(wanted = "") {
+  // 换文件之前先把还在防抖里的输入落盘：不写就随 content 一起被新文件顶掉
+  await flushToDisk();
   loading.value = true;
   try {
     const data = await api<{
@@ -86,7 +88,7 @@ async function load(wanted = "") {
     lastExportName.value = "";
     localStorage.removeItem(EXPORT_NAME_KEY);
     if (!data.browser) toast.warning("没找到 Chrome 或 Edge，预览与导出会失败");
-    applyLoaded({ file: data.file, name: data.name, path: data.path, content: data.html, mtime: data.mtime, uncommitted: data.uncommitted });
+    applyLoaded({ file: data.file, name: data.name, path: data.path, content: data.html, uncommitted: data.uncommitted });
     await refreshPdf();
   } catch (error) {
     // 记住的那份没了（改名/删除）就退回默认，别让页面直接卡在报错上
@@ -360,12 +362,12 @@ onMounted(async () => {
         </n-button>
       </div>
       <div class="re-tools">
-        <n-tag v-if="dirty" type="warning" size="small" round>未保存</n-tag>
+        <n-tag v-if="uncommitted" type="warning" size="small" round>未保存</n-tag>
         <n-tag v-else size="small" round>已保存</n-tag>
         <!-- 和自我介绍同一套摆放：历史属于「落盘」这一组，紧贴保存左边；
              它动的是 git 提交，「回撤/前进」动的是内存里的撤销栈，两回事 -->
         <n-button size="small" @click="openHistory">历史</n-button>
-        <n-button size="small" type="primary" :loading="saving" :disabled="busy || !dirty" @click="save">保存</n-button>
+        <n-button size="small" type="primary" :loading="saving" :disabled="busy || !uncommitted" @click="save">保存</n-button>
         <n-button size="small" :loading="discarding" :disabled="busy || !uncommitted" @click="discard">放弃改动</n-button>
         <n-button size="small" :loading="exporting" :disabled="busy" @click="openExport">导出 PDF</n-button>
         <button

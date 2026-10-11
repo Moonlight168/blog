@@ -48,26 +48,26 @@ async function saveFlow(kind: DocumentKind, input: any): Promise<unknown> {
   if (!body.trim()) throw new HttpError(400, kind === "resume" ? "简历内容不能为空" : "自我介绍不能为空");
 
   const current = readDocument(kind, config.resumeDir, file);
-  // 没有可提交的仓库就整个拒绝，一个字节都不写：写下去会变成
-  // 「盘上是新的、历史里没有、界面还说已保存」，比直接报错难查得多
+  // 没有可提交的仓库就整个拒绝，一个字节都不写：写下去会变成「盘上是新的、历史里没有」，
+  // 而界面按 git 算出来的「未保存」也永远提交不掉
   try {
     requireRepo(current.path);
   } catch (error) {
     throw new HttpError(400, (error as Error).message);
   }
 
-  const notices: string[] = [];
-  const externallyChanged = current.mtime !== null
-    && typeof input.baseMtime === "number"
-    && Math.abs(current.mtime - input.baseMtime) > 1;
-  if (externallyChanged) {
-    const archived = commitDocument(kind, config.resumeDir, file, kind === "resume" ? "简历：外部改动存档" : "自我介绍：外部改动存档");
-    notices.push(archived.committed
-      ? `文件在编辑器外被改过，已把外部版本存成 ${archived.hash}`
-      : "文件在编辑器外被改过，内容与磁盘一致，无需存档");
+  const written = writeDocument(kind, config.resumeDir, file, body);
+
+  /**
+   * `commit:false` = 编辑器边改边落盘的那一次：只写文件，不提交、也不问模型。
+   *
+   * 编辑器没有「缓冲区」这一层 —— 网页里敲的字和 AI 改的字都直接落在同一个文件上
+   * （git 的工作区），只有点「保存」才提交。所以这一步必须便宜。
+   */
+  if (input.commit === false) {
+    return { ...written, uncommitted: readDocument(kind, config.resumeDir, file).uncommitted, commit: null };
   }
 
-  const written = writeDocument(kind, config.resumeDir, file, body);
   // 先写盘、再问模型：agent 要跑 `git diff`，改动得先落到工作区才有得看。
   // 这也是它比「改前改后两份全文」强的地方 —— 它看的是**真实改动的行**，编不出来。
   const scope = kind === "resume" ? "简历" : "自我介绍";
@@ -78,7 +78,8 @@ async function saveFlow(kind: DocumentKind, input: any): Promise<unknown> {
       fallback: `${scope}：编辑器保存`,
     });
   const commit = commitDocument(kind, config.resumeDir, file, message);
-  return { ...written, commit, externallyChanged, notices };
+  // 提交成了、或内容本来就和 HEAD 一样，都算「盘上没有未提交的改动」
+  return { ...written, commit, uncommitted: !(commit.committed || commit.unchanged) };
 }
 
 /**
@@ -118,6 +119,8 @@ async function reviseFlow(
   return {
     action: changed ? "revise" : "answer",
     reply: outcome.reply,
+    // 模型直接改的是文件，改没改、提交没提交都由 git 说了算 —— 前端照着它显示「未保存」
+    uncommitted: readDocument(kind, config.resumeDir, file).uncommitted,
     ...(changed ? { [contentKeyOf(kind)]: outcome.content } : {}),
   };
 }
