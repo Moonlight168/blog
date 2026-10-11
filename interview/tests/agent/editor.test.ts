@@ -131,6 +131,8 @@ test("中断之后这份文档还能再改 —— 锁必须释放", async (t) =>
 /** 假模型的一轮回复：可以只说一句话，也可以「先说一句 + 要调工具」——真实模型常是后者 */
 interface Turn {
   text?: string;
+  /** 只有思考、没有正文的一轮 —— 真实模型输出被长度上限截断时就是这样 */
+  reasoning?: string;
   toolCall?: { name: string; arguments: unknown };
 }
 
@@ -146,6 +148,7 @@ async function scriptedModel(t: TestContext, turns: Turn[]): Promise<{ baseUrl: 
     index += 1;
     const delta: Record<string, unknown> = { role: "assistant" };
     if (turn?.text) delta.content = turn.text;
+    if (turn?.reasoning) delta.reasoning_content = turn.reasoning;
     if (turn?.toolCall) {
       delta.tool_calls = [{
         index: 0,
@@ -232,6 +235,23 @@ test("改稿：第 2 次显示的是本轮的回复，不是上一轮的", async
 
   assert.equal(first.reply, "第 1 轮的回复");
   assert.equal(second.reply, "第 2 轮的回复", "第二次改稿必须显示本轮的回复");
+});
+
+test("改稿：本轮只有思考、没有正文时，不能拿上一轮的回复冒充", async (t) => {
+  const { dir, file } = makeDoc(t);
+  // 真实场景：粘一整份简历进去，模型把输出预算全花在思考上、撞上长度上限被截断，
+  // 这一轮只剩一个断掉的 thinking 块 —— 没有 text，也没有工具调用。
+  const model = await scriptedModel(t, [
+    { text: "第 1 轮的回复" },
+    { reasoning: "我在逐段比对……（这里被截断了" },
+  ]);
+  const agent = makeAgent(model.baseUrl);
+
+  const first = await agent.revise({ kind: "resume", file, dir, instruction: "第一次改" });
+  const second = await agent.revise({ kind: "resume", file, dir, instruction: "第二次改" });
+
+  assert.equal(first.reply, "第 1 轮的回复");
+  assert.equal(second.reply, "", "本轮没有正文就该返回空，由上层给「模型这次没有给出回复」");
 });
 
 test("提交信息：模型套了代码块围栏或引号，也要清干净", async (t) => {

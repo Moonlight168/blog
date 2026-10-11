@@ -132,6 +132,7 @@ export class DocumentEditorAgent {
       );
       try {
         const lane = await harness.lane("main", AGENT_CONTEXT);
+        const boundary = await newestEntryId({ lane });
         // 与 #reviseOnce 同一套：信号要进 Context，pi 是从 context.abortSignal 读中断的
         const controller = new AbortController();
         if (signal) {
@@ -144,7 +145,7 @@ export class DocumentEditorAgent {
           withAbortSignal(controller.signal, AGENT_CONTEXT),
         );
         if (result?.ok === false) return fallback;
-        return commitMessageOf(await lastAssistantText({ lane })) || fallback;
+        return commitMessageOf(await lastAssistantText({ lane }, boundary)) || fallback;
       } finally {
         await harness.close(AGENT_CONTEXT);
       }
@@ -159,6 +160,8 @@ export class DocumentEditorAgent {
   async #reviseOnce({ kind, file, dir, instruction, signal, onEvent = () => {} }: ReviseInput): Promise<ReviseOutcome> {
     const runtime = await this.#runtimeFor(kind, dir, file);
     runtime.emit = onEvent;
+    // 划界：本轮之后新增的条目才是这一轮说的话
+    const boundary = await newestEntryId(runtime);
 
     const prompt = `请修改工作目录下的 ${file}。\n\n用户要求：${instruction}`;
     // 信号与超时都要进 Context：pi 是从 context.abortSignal 读中断的。
@@ -184,7 +187,9 @@ export class DocumentEditorAgent {
     }
 
     return {
-      reply: await lastAssistantText(runtime),
+      // 本轮没有正文就返回空 —— 上层会给出「模型这次没有给出回复」，
+      // 绝不能退回上一轮的回复来充数
+      reply: await lastAssistantText(runtime, boundary),
       // 从**盘上**读回来，而不是让模型把全文再吐一遍
       content: fs.readFileSync(path.join(dir, file), "utf8"),
     };
@@ -248,17 +253,20 @@ export class DocumentEditorAgent {
 }
 
 /**
- * 取这个会话里**最后**一条有正文的 assistant 消息。
+ * 取**本轮**新增的那几条里，最后一条有正文的 assistant 消息。
  *
- * `lane.findEntries` 返回的顺序是**新 → 旧**，所以要从数组开头往后找。
- * 反过来找会拿到整段会话里**最早**的那条 —— 一轮工具调用里，最早那条正是模型
- * 动手前的预告（「I'll check the git status and diff」），不是它看到 diff 之后的结论。
- * 同理，改稿 lane 是按文件复用累积的，从尾巴找会一直返回上一轮的回复。
+ * 必须按轮划界。整个会话往前找的话，本轮没有正文时会拿到**上一轮**的回复 ——
+ * 而本轮没有正文是会真发生的：模型的输出被长度上限截断时，这一轮只剩一个断掉的
+ * thinking 块，没有 text 也没有工具调用。界面于是把上一轮的话当成这一轮的回答显示，
+ * 用户看到的就是「我改了三次，它每次都回同一句」。
+ *
+ * `afterId` 是发问前最新那条的 id：新条目排在它前面，扫到它就说明本轮到此为止。
  */
-async function lastAssistantText(runtime: { lane: any }): Promise<string> {
+async function lastAssistantText(runtime: { lane: any }, afterId?: string): Promise<string> {
   const entries = await runtime.lane.findEntries(undefined, AGENT_CONTEXT);
-  for (let index = 0; index < entries.length; index += 1) {
-    const message = entries[index]?.message;
+  for (const entry of entries) {
+    if (afterId && entry.id === afterId) break;
+    const message = entry?.message;
     if (message?.role !== "assistant") continue;
     const text = (message.content || [])
       .filter((block: any) => block.type === "text")
@@ -268,6 +276,12 @@ async function lastAssistantText(runtime: { lane: any }): Promise<string> {
     if (text) return text;
   }
   return "";
+}
+
+/** 发问前最新那条的 id —— 用来划出「本轮新增」的边界，见 lastAssistantText */
+async function newestEntryId(runtime: { lane: any }): Promise<string | undefined> {
+  const entries = await runtime.lane.findEntries(undefined, AGENT_CONTEXT);
+  return entries[0]?.id;
 }
 
 /**
