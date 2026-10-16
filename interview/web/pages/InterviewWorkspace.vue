@@ -610,6 +610,7 @@ async function submit(body: Record<string, unknown>, restoreDraft?: () => void) 
 }
 
 async function send(value = draft.value) {
+  if (sending.value) return;
   const content = value.trim();
   if (!content) return;
   const previous = draft.value;
@@ -790,11 +791,11 @@ onBeforeUnmount(() => { window.clearInterval(timer); activeRequest.value?.abort(
           <span>Enter 发送 · Shift + Enter 换行 · 长按空格语音输入</span>
           <div class="composer-actions">
             <span v-if="aiStage" class="muted">{{ aiStage }}</span>
-            <n-button v-if="activeRequest" size="small" tertiary @click="activeRequest?.abort()">取消 AI</n-button>
             <n-button :disabled="!session || finished || sending" :loading="pausing" @click="togglePause">{{ paused ? '继续' : '暂停' }}</n-button>
             <n-button :disabled="!active || sending || pausing" @click="endConfirmOpen = true">结束</n-button>
             <n-button :disabled="!active || sending || pausing" @click="act('next')">下一题</n-button>
-            <n-button type="primary" :disabled="!active || !draft.trim() || pausing" :loading="sending" @click="send()">发送</n-button>
+            <n-button v-if="activeRequest" type="warning" :disabled="activeRequest.signal.aborted" @click="activeRequest?.abort()">停止生成</n-button>
+            <n-button v-else type="primary" :disabled="!active || !draft.trim() || pausing" :loading="sending" @click="send()">发送</n-button>
           </div>
         </div>
       </div>

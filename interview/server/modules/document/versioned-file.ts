@@ -167,6 +167,7 @@ export function discardChanges(target: DocTarget) {
     file: target.file,
     path: target.path,
     content: fs.readFileSync(target.path, "utf8"),
+    mtime: fs.statSync(target.path).mtimeMs,
     uncommitted: differsFromHead(info.repo, info.relative),
   };
 }

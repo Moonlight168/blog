@@ -5,7 +5,7 @@ import path from "node:path";
 import { assertConfigured, makeModels } from "./model.ts";
 import { withAbortSignal } from "@earendil-works/pi-agent-core/harness/context";
 
-import { AGENT_CONTEXT, assertRunSucceeded, compactIfNeeded, createEnv, createSessionRepo, createToolEnv, openOrCreateSession } from "./session.ts";
+import { AGENT_CONTEXT, assertRunSucceeded, compactIfNeeded, createEnv, createSessionRepo, createToolEnv, openOrCreateSession, readTurnReply } from "./session.ts";
 import { buildTools, type Evaluation } from "./tools.ts";
 import { prepareWorkspace } from "./workspace.ts";
 import type { ServiceConfig } from "../infra/config/index.ts";
@@ -114,7 +114,11 @@ export class InterviewChatAgent {
       assertRunSucceeded(result);
 
       if (runtime.evaluation) return { action: "answer", evaluation: runtime.evaluation };
-      return { action: "followup", reply: await lastAssistantText(runtime) };
+      return { action: "followup", reply: await readTurnReply(runtime.lane) };
+    } catch (error) {
+      // 请求的 Context 已被中止，清理必须使用独立 Context，否则操作会一直占用 lane。
+      await runtime.lane.abort(AGENT_CONTEXT);
+      throw error;
     } finally {
       done();
     }
@@ -182,21 +186,4 @@ export class InterviewChatAgent {
     if (open.length) await lane.abort(AGENT_CONTEXT);
     return Object.assign(state, { workspace, lane });
   }
-}
-
-/** 助手最后一段正文。追问的回复就是它 —— 没有工具承载，只能从对话记录里取。 */
-async function lastAssistantText(runtime: SessionRuntime): Promise<string> {
-  const entries = await runtime.lane.findEntries({ order: "newestFirst" }, AGENT_CONTEXT);
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
-    const message = entry?.type === "message" ? entry.message : undefined;
-    if (message?.role !== "assistant") continue;
-    const text = (message.content || [])
-      .filter((block: any) => block.type === "text")
-      .map((block: any) => block.text)
-      .join("")
-      .trim();
-    if (text) return text;
-  }
-  return "";
 }

@@ -11,6 +11,63 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { useDocumentEditor } = await import("../../web/composables/useDocumentEditor.ts");
 
+test("读取改稿前置文件时已经锁定，停止后不发送模型请求", async (t) => {
+  const scope = effectScope();
+  t.after(() => scope.stop());
+  const editor = scope.run(() => useDocumentEditor({ kind: "resume" }))!;
+  editor.file.value = "sample.html";
+  editor.content.value = editor.saved.value = "原稿";
+  editor.instruction.value = "修改";
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", (_url: string, options: RequestInit) => {
+    calls++;
+    return new Promise<Response>((_resolve, reject) => {
+      options.signal?.addEventListener("abort", () => reject(new DOMException("停止", "AbortError")), { once: true });
+    });
+  });
+  const pending = editor.revise();
+  assert.equal(editor.busy.value, true);
+  editor.abortRevise();
+  await pending;
+  assert.equal(calls, 1);
+  assert.equal(editor.busy.value, false);
+  assert.equal(editor.instruction.value, "修改");
+});
+
+test("读盘期间的新输入不会被迟到的响应覆盖", async (t) => {
+  const scope = effectScope();
+  t.after(() => scope.stop());
+  const editor = scope.run(() => useDocumentEditor({ kind: "resume" }))!;
+  editor.file.value = "sample.html";
+  editor.content.value = editor.saved.value = "原稿";
+  let resolve!: (response: Response) => void;
+  t.mock.method(globalThis, "fetch", () => new Promise<Response>((done) => { resolve = done; }));
+  const pending = editor.syncFromDisk();
+  editor.content.value = "新输入";
+  resolve(Response.json({ html: "磁盘版本", mtime: 2, uncommitted: false }));
+  assert.equal(await pending, false);
+  assert.equal(editor.content.value, "新输入");
+});
+
+test("离开编辑页会中止等待中的读取并释放忙碌状态", async (t) => {
+  const scope = effectScope();
+  const editor = scope.run(() => useDocumentEditor({ kind: "resume" }))!;
+  editor.file.value = "sample.html";
+  editor.instruction.value = "修改";
+  let signal: AbortSignal | null | undefined;
+  t.mock.method(globalThis, "fetch", (_url: string, options: RequestInit) => {
+    signal = options.signal;
+    return new Promise<Response>((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(new DOMException("停止", "AbortError")), { once: true });
+    });
+  });
+  const pending = editor.revise();
+  scope.stop();
+  await pending;
+  assert.equal(signal?.aborted, true);
+  assert.equal(editor.busy.value, false);
+});
+
 test("清空对话先重置服务端历史，失败保留界面记录", async (t) => {
   const scope = effectScope();
   t.after(() => scope.stop());

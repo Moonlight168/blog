@@ -239,6 +239,7 @@ export default [
             });
 
         try {
+          requestController.signal.throwIfAborted();
           persistTurn(result.session, action || wasExpired ? null : content, result.messages);
           result.commitArchive?.();
         } catch (error) {

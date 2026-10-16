@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onScopeDispose, ref, watch } from "vue";
 import { useMessage } from "naive-ui";
 
 import { api, apiStream } from "../api/index.ts";
@@ -152,11 +152,17 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
    *
    * 有未保存改动时不读——那才是他正在编辑、正要保存的东西。
    */
-  async function syncFromDisk(): Promise<boolean> {
+  async function syncFromDisk(signal?: AbortSignal): Promise<boolean> {
     if (edited.value || !file.value) return false;
+    const requestedFile = file.value;
+    const requestedContent = content.value;
+    const requestedMtime = baseMtime.value;
     const latest = await api<{ html?: string; markdown?: string; mtime: number | null; uncommitted: boolean }>(
       `${API.document(kind)}?file=${encodeURIComponent(file.value)}`,
+      { signal },
     );
+    signal?.throwIfAborted();
+    if (file.value !== requestedFile || content.value !== requestedContent || baseMtime.value !== requestedMtime || edited.value) return false;
     if (latest.mtime === baseMtime.value) return false;
     const next = (kind === "resume" ? latest.html : latest.markdown) ?? "";
     content.value = next;
@@ -247,6 +253,12 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
   /** 中断这次改稿；没在改就什么都不做 */
   let reviseAbort: AbortController | null = null;
   function abortRevise() { reviseAbort?.abort(); }
+  let disposed = false;
+  onScopeDispose(() => {
+    disposed = true;
+    abortRevise();
+    if (snapshotTimer) window.clearTimeout(snapshotTimer);
+  });
 
   /**
    * 改完之后把盘上真实的样子读回来；返回**盘上是不是真的跟编辑器不一样**。
@@ -286,15 +298,21 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
       toast.warning("先把编辑器里的改动保存了再让 AI 改 —— 它直接改文件，看不到你还没保存的内容");
       return;
     }
-    try { await syncFromDisk(); } catch { /* 读不到就按内存里的走，别为此拦住 */ }
-    instruction.value = "";      // 先清输入框，别让这句话一直挂着
     revising.value = true;
     reviseProgress.value = "正在读文档…";
-    const before = content.value;
+    let before = content.value;
+    const requestedFile = file.value;
     const controller = new AbortController();
     reviseAbort = controller;
     let streamed = "";
+    let dispatched = false;
     try {
+      await syncFromDisk(controller.signal);
+      controller.signal.throwIfAborted();
+      if (edited.value || file.value !== requestedFile) return;
+      before = content.value;
+      instruction.value = "";
+      dispatched = true;
       chatLog.value.push({ role: "user", text: ask });
       const data = await apiStream<{ action: "revise" | "answer"; reply: string; html?: string; markdown?: string; mtime: number | null; uncommitted: boolean }>(
         API.documentRevise(kind),
@@ -329,6 +347,11 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
       if (streamed || changed) await afterRevise?.(changed);
       return { changed, before };
     } catch (error) {
+      if (disposed) return;
+      if (!dispatched) {
+        if (!controller.signal.aborted) toast.error((error as Error).message);
+        return;
+      }
       // 「点停止」和「真的失败」都要走这里重新读盘：模型是**直接改文件**的，
       // 它可能在中断/报错之前已经改了一部分，而编辑器还停在旧文本上。
       const aborted = controller.signal.aborted;

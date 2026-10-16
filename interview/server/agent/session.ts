@@ -146,3 +146,18 @@ export function assertRunSucceeded(result: Awaited<ReturnType<AgentLane["prompt"
   if (!result.ok) throw new Error(result.error?.message || "AI 处理失败");
   if (result.value.status === "failed") throw new Error(result.value.error?.message || "模型调用失败，请重试");
 }
+
+/** 只取当前用户消息之后的最后一条助手消息，空回复不能回溯成旧结果。 */
+export async function readTurnReply(lane: AgentLane): Promise<string> {
+  const entries = await lane.findEntries({ order: "newestFirst" }, AGENT_CONTEXT);
+  for (const entry of entries) {
+    if (entry.type !== "message") continue;
+    const message = entry.message;
+    if (message.role === "user") break;
+    if (message.role !== "assistant") continue;
+    const text = message.content.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
+    if (text) return text;
+    break;
+  }
+  throw new Error("模型本轮未返回正文，请重试");
+}

@@ -168,6 +168,14 @@ test("连续两次追问分别返回当轮回复，不重复早期回答", async
   assert.equal(second.reply, "AOF 是命令日志");
 });
 
+test("本轮空回复不能冒充上一轮追问的回答", async (t) => {
+  const baseUrl = await fakeModel(t, [], ["上一轮回答", ""]);
+  const agent = new InterviewChatAgent({ config: { baseUrl, apiKey: "test", model: "fake-model" } });
+  const session = makeSession(makeResume(t));
+  await agent.run({ session, text: "第一问" });
+  await assert.rejects(agent.run({ session, text: "第二问" }), /未返回正文/);
+});
+
 test("首答与重启恢复都使用建会话快照，并传完整题干", async (t) => {
   const resumePath = makeResume(t);
   const session = makeSession(resumePath);
@@ -218,4 +226,22 @@ test("生成中进程退出后可恢复同一场面试", async (t) => {
   recovering = true;
   const agent = new InterviewChatAgent({ config: { baseUrl, apiKey: "fake-key", model: "fake-model" } });
   assert.equal((await agent.run({ session, text: "继续追问" })).reply, "恢复成功");
+});
+
+test("取消后不重启也能在同一场继续发送", async (t) => {
+  const controller = new AbortController();
+  let calls = 0;
+  const server = http.createServer(async (request, response) => {
+    for await (const _ of request) { /* 收到后再取消，确保运行时已经启动 */ }
+    if (++calls === 1) { controller.abort(); return; }
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant", content: "继续成功" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const agent = new InterviewChatAgent({ config: { baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, apiKey: "test", model: "fake-model" } });
+  const session = makeSession(makeResume(t));
+  await assert.rejects(agent.run({ session, text: "第一次", signal: controller.signal }));
+  assert.equal((await agent.run({ session, text: "继续" })).reply, "继续成功");
 });

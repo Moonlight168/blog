@@ -9,7 +9,7 @@ import { MemorySessionRepo } from "@earendil-works/pi-agent-core/harness/session
 import { Type } from "@earendil-works/pi-ai";
 
 import { assertConfigured, makeModels } from "./model.ts";
-import { AGENT_CONTEXT, assertRunSucceeded, createEnv, createSessionRepo, createToolEnv, deleteAgentSession, openOrCreateSession } from "./session.ts";
+import { AGENT_CONTEXT, assertRunSucceeded, createEnv, createSessionRepo, createToolEnv, deleteAgentSession, openOrCreateSession, readTurnReply } from "./session.ts";
 import { buildEditingTools } from "./tools.ts";
 import { COMMIT_MESSAGE_PROMPT } from "../infra/git/subject.ts";
 import { readPrompt } from "../infra/prompts.ts";
@@ -183,7 +183,7 @@ export class DocumentEditorAgent {
           withAbortSignal(controller.signal, AGENT_CONTEXT),
         );
         assertRunSucceeded(result);
-        return commitMessageOf(await lastAssistantText({ lane })) || fallback;
+        return commitMessageOf(await readTurnReply(lane)) || fallback;
       } finally {
         await harness.close(AGENT_CONTEXT);
       }
@@ -212,13 +212,16 @@ export class DocumentEditorAgent {
     let result;
     try {
       result = await runtime.lane.prompt(prompt, undefined, context);
+    } catch (error) {
+      await runtime.lane.abort(AGENT_CONTEXT);
+      throw error;
     } finally {
       clearTimeout(timer);
     }
     assertRunSucceeded(result);
 
     return {
-      reply: await lastAssistantText(runtime),
+      reply: await readTurnReply(runtime.lane),
       // 从**盘上**读回来，而不是让模型把全文再吐一遍
       content: fs.readFileSync(path.join(dir, file), "utf8"),
     };
@@ -279,30 +282,6 @@ export class DocumentEditorAgent {
     }
     return Object.assign(runtime, { lane, harness });
   }
-}
-
-/**
- * 取这个会话里**最后**一条有正文的 assistant 消息。
- *
- * `lane.findEntries` 返回的顺序是**新 → 旧**，所以要从数组开头往后找。
- * 反过来找会拿到整段会话里**最早**的那条 —— 一轮工具调用里，最早那条正是模型
- * 动手前的预告（「I'll check the git status and diff」），不是它看到 diff 之后的结论。
- * 同理，改稿 lane 是按文件复用累积的，从尾巴找会一直返回上一轮的回复。
- */
-async function lastAssistantText(runtime: { lane: AgentLane }): Promise<string> {
-  const entries = await runtime.lane.findEntries(undefined, AGENT_CONTEXT);
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
-    const message = entry?.type === "message" ? entry.message : undefined;
-    if (message?.role !== "assistant") continue;
-    const text = (message.content || [])
-      .filter((block: any) => block.type === "text")
-      .map((block: any) => block.text)
-      .join("")
-      .trim();
-    if (text) return text;
-  }
-  return "";
 }
 
 /**

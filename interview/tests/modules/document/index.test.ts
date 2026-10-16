@@ -53,6 +53,7 @@ test("放弃失败保存留下的暂存改动时恢复上次提交，并保留�
 
   assert.equal(discarded.content, original);
   assert.equal(discarded.uncommitted, false);
+  assert.equal(discarded.mtime, fs.statSync(discarded.path).mtimeMs);
   assert.equal(execFileSync("git", ["-C", repo, "diff", "--cached", "--name-only"], { encoding: "utf8" }).trim(), "other.txt");
 });
 

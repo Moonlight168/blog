@@ -29,7 +29,7 @@ interface Decoy {
 }
 
 /** 永不回包的假服务：请求进来了就挂住，直到被中断 */
-async function hangingModel(t: TestContext): Promise<Decoy> {
+async function hangingModel(t: TestContext, recover = false): Promise<Decoy> {
   let requests = 0;
   let markArrived: () => void = () => {};
   const arrived = new Promise<void>((resolve) => { markArrived = resolve; });
@@ -37,6 +37,11 @@ async function hangingModel(t: TestContext): Promise<Decoy> {
   const server = http.createServer(async (request, response) => {
     for await (const _ of request) { /* 读完再挂住，模拟「模型正在想」 */ }
     requests += 1;
+    if (recover && requests > 1) {
+      response.writeHead(200, { "Content-Type": "text/event-stream" });
+      response.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant", content: "恢复成功" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+      return;
+    }
     markArrived();
     // 不 writeHead、不 end —— 一直挂着，只有连接被中断才会结束
     request.on("close", () => { /* 客户端断了，什么都不用做 */ });
@@ -104,7 +109,7 @@ test("改到一半中断：立刻停手，而不是等模型自己结束", async
 
 test("中断之后这份文档还能再改 —— 锁必须释放", async (t) => {
   const { dir, file } = makeDoc(t);
-  const model = await hangingModel(t);
+  const model = await hangingModel(t, true);
   // 同一个 agent 实例：锁在实例上，换实例就测不到它了
   const agent = makeAgent(model.baseUrl);
 
@@ -115,15 +120,8 @@ test("中断之后这份文档还能再改 —— 锁必须释放", async (t) =>
   controller.abort();
   await assert.rejects(first);
 
-  // 第二次：用一个**没被中断**的 signal，才会真的走到并发锁那一步
-  // （revise 里 throwIfAborted 在锁检查之前，预中断的调用永远测不到锁）
-  // 地址指向一个没人监听的端口，于是它会因为连不上而失败 —— 正好用来区分两种失败
-  const locked = await agent
-    .revise({ kind: "resume", file, dir, instruction: "再来一次" })
-    .then(() => null, (error: unknown) => error as Error);
-
-  assert.ok(locked, "这份文档指向一个不存在的服务，应当失败");
-  assert.doesNotMatch(locked.message, /正在改/, "中断必须释放并发锁，否则用户停一次就永久改不动了");
+  const second = await agent.revise({ kind: "resume", file, dir, instruction: "再来一次" });
+  assert.equal(second.reply, "恢复成功");
 });
 
 // ---- 提交信息：交给 agent 读取受限的 git diff 看真实改动 ----
@@ -238,6 +236,14 @@ test("改稿提示词区分咨询和修改，简历排版只有一套页数字�
   assert.match(prompt, /2 页内/);
   assert.doesNotMatch(prompt, /12\.5px|单页 A4/);
   assert.equal(fs.readFileSync(path.join(dir, file), "utf8"), "<html>原样</html>");
+});
+
+test("本轮空回复不能冒充上一轮的改稿说明", async (t) => {
+  const { dir, file } = makeDoc(t);
+  const model = await scriptedModel(t, [{ text: "上一轮说明" }, { text: "" }]);
+  const agent = makeAgent(model.baseUrl);
+  await agent.revise({ kind: "resume", file, dir, instruction: "第一问" });
+  await assert.rejects(agent.revise({ kind: "resume", file, dir, instruction: "第二问" }), /未返回正文/);
 });
 
 test("提交信息：标题 + 分点要整段保留，不能被截成一行", async (t) => {
