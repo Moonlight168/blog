@@ -615,7 +615,10 @@ async function send(value = draft.value) {
   if (!content) return;
   const previous = draft.value;
   draft.value = "";
-  await submit({ content }, () => { draft.value = previous; });
+  await submit({ content }, () => {
+    // 等待期间可能已经输入下一条消息，取消或失败时不能覆盖它。
+    if (!draft.value) draft.value = previous;
+  });
 }
 
 /** 「下一题」「结束」是明确动作，直接告诉服务端，不经过模型判断。 */
