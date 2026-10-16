@@ -45,6 +45,17 @@ export async function handleInterviewMessage({ session, text, piAgent, agent, ar
     signal.throwIfAborted();
   }
   session.completedCount = (session.completedCount ?? 0) + 1;
+  let summaryMessages: Message[] = [];
+  if (session.mode === "written" && (session.paperIndex ?? 0) + 1 >= (session.paperQuestions?.length ?? 0)) {
+    try {
+      // archive 已写入本次作答；此时读取总评数据才会包含末题。
+      summaryMessages = (await advanceInterview({ session, ending: true, agent, listAttempts })).messages;
+      signal?.throwIfAborted();
+    } catch (error) {
+      await archived?.rollback?.();
+      throw error;
+    }
+  }
   return {
     session,
     commitArchive: archived?.commit,
@@ -53,6 +64,7 @@ export async function handleInterviewMessage({ session, text, piAgent, agent, ar
       { role: "assistant" as const, kind: "evaluation", content: evaluation.comment, evaluation },
       ...(archived?.notice ? [{ role: "assistant" as const, kind: "notice", content: `${archived.notice}。这次回答已记录，可在「复习」里看到。` }] : []),
       { role: "assistant", kind: "answer", content: session.currentQuestion?.standardAnswer || "（这道题暂无标准答案）" },
+      ...summaryMessages,
     ] as Message[],
   };
 }

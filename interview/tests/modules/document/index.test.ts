@@ -41,6 +41,21 @@ function makeRoot(folders: Record<string, Record<string, string>> = {}): string 
 
 const HTML = "<html><body>正文</body></html>";
 
+test("放弃失败保存留下的暂存改动时恢复上次提交，并保留其他文件的暂存", () => {
+  const { repo, resumeDir, file } = makeRepoWithResume();
+  const original = readDocument("resume", resumeDir, file).content;
+  writeDocument("resume", resumeDir, file, "<html>暂存稿</html>");
+  fs.writeFileSync(path.join(repo, "other.txt"), "保留我的暂存", "utf8");
+  execFileSync("git", ["-C", repo, "add", "--", "."]);
+  writeDocument("resume", resumeDir, file, "<html>未暂存稿</html>");
+
+  const discarded = discardDocument("resume", resumeDir, file);
+
+  assert.equal(discarded.content, original);
+  assert.equal(discarded.uncommitted, false);
+  assert.equal(execFileSync("git", ["-C", repo, "diff", "--cached", "--name-only"], { encoding: "utf8" }).trim(), "other.txt");
+});
+
 test("按人分组：一级目录即一个人，人员名取简历文件名的第一段", () => {
   const root = makeRoot({
     zhangsan: { "张三-Java后端(AI应用)-27届.html": HTML, "张三-AI全栈开发-27届.html": HTML },
@@ -51,6 +66,19 @@ test("按人分组：一级目录即一个人，人员名取简历文件名的�
   assert.deepEqual(groups.map((g) => g.id), ["lisi", "zhangsan"]);
   assert.deepEqual(groups.map((g) => g.label), ["李四", "张三"], "显示名取简历文件名的第一段");
   assert.equal(groups.find((g) => g.id === "zhangsan")?.resumes.length, 2);
+});
+
+test("不同人员的同名简历具有独立标识，编辑不会写到另一个人", () => {
+  const root = makeRoot({ alice: { "resume.html": "<html>Alice</html>" }, bob: { "resume.html": "<html>Bob</html>" } });
+  const groups = listResumeGroups(root);
+  const alice = groups.find((group) => group.id === "alice")!.resumes[0].file;
+  const bob = groups.find((group) => group.id === "bob")!.resumes[0].file;
+  assert.notEqual(alice, bob);
+  assert.equal(readDocument("resume", root, bob).content, "<html>Bob</html>");
+  writeDocument("resume", root, bob, "<html>Bob updated</html>");
+  assert.equal(readDocument("resume", root, bob).content, "<html>Bob updated</html>");
+  assert.equal(readDocument("resume", root, alice).content, "<html>Alice</html>");
+  assert.equal(resolveResumeDoc(root, "resume.html"), null, "旧的歧义标识不能猜测人员");
 });
 
 test("人员名推不出来时退回目录名，不硬猜", () => {
@@ -66,7 +94,7 @@ test("只认 html，跳过非 html、jobs 目录与隐藏目录", () => {
   });
   const groups = listResumeGroups(root);
   assert.deepEqual(groups.map((g) => g.id), ["zhangsan"]);
-  assert.deepEqual(groups[0].resumes.map((r) => r.file), ["张三-后端.html"]);
+  assert.deepEqual(groups[0].resumes.map((r) => r.file), ["zhangsan/张三-后端.html"]);
 });
 
 test("目录不存在时返回空数组，而不是抛错", () => {
@@ -75,8 +103,9 @@ test("目录不存在时返回空数组，而不是抛错", () => {
 
 test("只解析扫描结果里出现过的文件（路径穿越拿不到别处的文件）", () => {
   const root = makeRoot({ zhangsan: { "张三-后端.html": HTML } });
-  assert.equal(resolveResumeDoc(root, "张三-后端.html")?.file, "张三-后端.html");
-  for (const evil of ["../张三-后端.html", "zhangsan/张三-后端.html", "../../etc/passwd", ""]) {
+  assert.equal(resolveResumeDoc(root, "张三-后端.html")?.file, "zhangsan/张三-后端.html");
+  assert.equal(resolveResumeDoc(root, "zhangsan/张三-后端.html")?.file, "zhangsan/张三-后端.html");
+  for (const evil of ["../张三-后端.html", "zhangsan/../张三-后端.html", "../../etc/passwd", ""]) {
     assert.equal(resolveResumeDoc(root, evil), null, `${evil} 不该被解析到`);
   }
   assert.throws(() => readDocument("resume", root, "../x.html"), /没有这份简历/);

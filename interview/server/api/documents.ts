@@ -62,9 +62,12 @@ async function saveFlow(kind: DocumentKind, input: any): Promise<unknown> {
     && Math.abs(current.mtime - input.baseMtime) > 1;
   if (externallyChanged) {
     const archived = commitDocument(kind, config.resumeDir, file, kind === "resume" ? "简历：外部改动存档" : "自我介绍：外部改动存档");
+    if (!archived.committed && !archived.unchanged) {
+      throw new HttpError(409, `外部改动存档失败，已保留磁盘上的稿件：${archived.reason || "原因未知"}。请解决后重试保存`);
+    }
     notices.push(archived.committed
       ? `文件在编辑器外被改过，已把外部版本存成 ${archived.hash}`
-      : "文件在编辑器外被改过，内容与磁盘一致，无需存档");
+      : "文件在编辑器外被改过，内容与已保存版本一致，无需存档");
   }
 
   const written = writeDocument(kind, config.resumeDir, file, body);
@@ -73,7 +76,7 @@ async function saveFlow(kind: DocumentKind, input: any): Promise<unknown> {
   const scope = kind === "resume" ? "简历" : "自我介绍";
   const message = String(input.message ?? "").trim()
     || await editorAgent.commitMessage({
-      file: current.file,
+      file: path.basename(current.path),
       dir: path.dirname(current.path),
       fallback: `${scope}：编辑器保存`,
     });
@@ -107,18 +110,21 @@ async function reviseFlow(
   const before = fs.existsSync(target.path) ? fs.readFileSync(target.path, "utf8") : "";
   const outcome = await editorAgent.revise({
     kind,
-    file: target.file,
+    file: path.basename(target.path),
     dir: path.dirname(target.path),
     instruction,
     onEvent,
     signal,
   });
-  const changed = outcome.content !== before;
+  const current = readDocument(kind, config.resumeDir, file);
+  const changed = current.content !== before;
 
   return {
     action: changed ? "revise" : "answer",
     reply: outcome.reply,
-    ...(changed ? { [contentKeyOf(kind)]: outcome.content } : {}),
+    [contentKeyOf(kind)]: current.content,
+    mtime: current.mtime,
+    uncommitted: current.uncommitted,
   };
 }
 
@@ -171,6 +177,17 @@ function contentKeyOf(kind: DocumentKind): "html" | "markdown" {
 
 /** 6 个操作对两种文档是同构的，所以只写一遍、按 :kind 分派 */
 const shared: Route[] = [
+  {
+    method: "POST", pattern: PATTERN.documentResetChat,
+    handler: async ({ params, body }) => {
+      const kind = kindOf(params);
+      const file = fileOf(body);
+      const target = resolverOf(kind).resolve(config.resumeDir, file);
+      if (!target) throw new HttpError(404, resolverOf(kind).missing(file));
+      await editorAgent.resetConversation({ kind, dir: path.dirname(target.path), file: path.basename(target.path) });
+      return { cleared: true };
+    },
+  },
   { method: "GET", pattern: PATTERN.document, handler: ({ params, query }) => readFlow(kindOf(params), query) },
   { method: "POST", pattern: PATTERN.document, handler: ({ params, body }) => saveFlow(kindOf(params), body) },
   {

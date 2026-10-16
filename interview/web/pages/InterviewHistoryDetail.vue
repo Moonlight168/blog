@@ -43,14 +43,10 @@ async function refile(attempt: Attempt) {
   if (!current) return;
   refilingId.value = attempt.id;
   try {
-    const data = await api<{ historyUrl: string; sourcePath: string }>(
+    await api(
       API.interviewArchiveAnswer(String(route.params.id), attempt.id), { method: "POST" });
-    const attempts = current.attempts.map((item) =>
-      (item.id === attempt.id ? { ...item, historyUrl: data.historyUrl, sourcePath: data.sourcePath } : item));
-    detail.value = {
-      ...current, attempts,
-      archivedCount: new Set(attempts.filter((item) => item.historyUrl).map((item) => item.questionTitle)).size,
-    };
+    // 重新读取服务端的归档状态与锚点链接，补录成功后不用刷新页面。
+    detail.value = await api(API.interviewReport(String(route.params.id)));
     message.success("已补录进知识库");
   } catch (error) {
     message.error(error instanceof Error ? error.message : "补录失败");
@@ -116,7 +112,7 @@ onMounted(async () => { try { detail.value = await api(API.interviewReport(Strin
             <div class="attempt-head">
               <span class="message-label">问题 {{ index + 1 }}</span>
               <div class="attempt-links">
-                <template v-if="attempt.historyUrl || attempt.sourcePath">
+                <template v-if="attempt.historyUrl || attempt.knowledgeUrl">
                   <a v-if="attempt.historyUrl" class="review-link" :href="docsLink(attempt.historyUrl)" target="_blank" rel="noreferrer">答题历史</a>
                   <a v-if="attempt.knowledgeUrl" class="review-link" :href="knowledgeLink(attempt.knowledgeUrl)" target="_blank" rel="noreferrer">知识库</a>
                 </template>

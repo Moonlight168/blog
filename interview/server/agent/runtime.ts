@@ -1,9 +1,11 @@
-import { AgentHarness } from "@earendil-works/pi-agent-core";
+import { AgentHarness, type AgentLane } from "@earendil-works/pi-agent-core";
+import fs from "node:fs";
+import path from "node:path";
 
 import { assertConfigured, makeModels } from "./model.ts";
 import { withAbortSignal } from "@earendil-works/pi-agent-core/harness/context";
 
-import { AGENT_CONTEXT, compactIfNeeded, createEnv, createSessionRepo, createToolEnv, openOrCreateSession } from "./session.ts";
+import { AGENT_CONTEXT, assertRunSucceeded, compactIfNeeded, createEnv, createSessionRepo, createToolEnv, openOrCreateSession } from "./session.ts";
 import { buildTools, type Evaluation } from "./tools.ts";
 import { prepareWorkspace } from "./workspace.ts";
 import type { ServiceConfig } from "../infra/config/index.ts";
@@ -37,7 +39,7 @@ export interface RunOutcome {
 /** 一场面试的运行时状态。evaluation 与 emit 都**按会话各存一份**，不跨会话共享。 */
 interface SessionRuntime {
   workspace: string;
-  lane: any;
+  lane: AgentLane;
   evaluation: Evaluation | null;
   emit: (event: TurnEvent) => void;
 }
@@ -98,6 +100,7 @@ export class InterviewChatAgent {
     const question = session.currentQuestion;
     const prompt = [
       `当前题目：${question?.title || "（尚未出题）"}`,
+      `完整题干：${question?.prompt || question?.title || "无"}`,
       `标准答案：${question?.standardAnswer || "无"}`,
       `候选人消息：${text}`,
     ].join("\n");
@@ -108,12 +111,7 @@ export class InterviewChatAgent {
     try {
       await compactIfNeeded(runtime.lane, context);
       const result = await runtime.lane.prompt(prompt, undefined, context);
-      if (result?.ok === false) throw new Error(result.error?.message || "AI 处理失败");
-      // ok:true 也可能是失败：pi 在「模型调用本身出错」时照样以 ok 返回，只是 status 是 failed。
-      // 不判它就会拿上一轮的 assistant 正文当成这一轮的回复 —— 用户看到的是复读。
-      if (result?.value?.status === "failed") {
-        throw new Error(result.value.error?.message || "模型调用失败，请重试");
-      }
+      assertRunSucceeded(result);
 
       if (runtime.evaluation) return { action: "answer", evaluation: runtime.evaluation };
       return { action: "followup", reply: await lastAssistantText(runtime) };
@@ -130,7 +128,10 @@ export class InterviewChatAgent {
   #runtimeFor(session: Session): Promise<SessionRuntime> {
     let pending = this.#runtimes.get(session.id);
     if (!pending) {
-      pending = this.#create(session);
+      pending = this.#create(session).catch((error) => {
+        this.#runtimes.delete(session.id);
+        throw error;
+      });
       this.#runtimes.set(session.id, pending);
     }
     return pending;
@@ -139,14 +140,16 @@ export class InterviewChatAgent {
   /**
    * 一场面试只建一次运行时：工作目录、JSONL 会话、harness、lane 都复用。
    *
-   * 工作目录在这里**冻结**（拷贝 prompts 的当前内容）—— 会话跑到一半改仓库里的规范，
-   * 不该影响已经在跑的这场。所以只在首轮建一次，之后不再重建。
+   * 工作目录从建会话时的持久化快照还原，首次回答与重启恢复使用相同规则。
    */
   async #create(session: Session): Promise<SessionRuntime> {
     const workspace = prepareWorkspace({
       sessionId: session.id,
       resumePath: session.resumePath,
       jdPath: session.jdPath,
+      skillSnapshot: session.skillSnapshot,
+      resumeExcerpt: session.resumeExcerpt,
+      jdExcerpt: session.jdExcerpt,
     });
     const sessionEnv = createEnv(workspace);
     const toolEnv = createToolEnv(workspace);
@@ -154,8 +157,8 @@ export class InterviewChatAgent {
     const piSession = await openOrCreateSession(repo, { sessionId: session.id, cwd: workspace });
 
     // 先建状态箱，再订阅事件 —— 监听器闭包要写到 runtime 自己的那份上
-    const runtime: SessionRuntime = { workspace, lane: null, evaluation: null, emit: () => {} };
-    const tools = buildTools({ onSubmitEvaluation: (evaluation) => { runtime.evaluation = evaluation; } });
+    const state = { evaluation: null as Evaluation | null, emit: (_event: TurnEvent) => {} };
+    const tools = buildTools({ onSubmitEvaluation: (evaluation) => { state.evaluation = evaluation; } });
 
     const { harness, open } = await AgentHarness.create(
       {
@@ -164,27 +167,29 @@ export class InterviewChatAgent {
         model: this.#model,
         tools,
         toolContext: { env: toolEnv },
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: `${SYSTEM_PROMPT}\n\n本场固定评分规则（必须遵守）：\n${fs.readFileSync(path.join(workspace, "prompts/interviewer.md"), "utf8")}`,
       },
       AGENT_CONTEXT,
     );
 
     harness.events.on("message_update", (event: any) => {
       const delta = event?.event;
-      if (delta?.type === "text_delta" && delta.delta) runtime.emit({ type: EVENT.draft, kind: "followup", content: delta.delta });
+      if (delta?.type === "text_delta" && delta.delta) state.emit({ type: EVENT.draft, kind: "followup", content: delta.delta });
     });
-    harness.events.on("tool_start", (event: any) => runtime.emit({ type: EVENT.tool, name: event?.toolName }));
+    harness.events.on("tool_start", (event: any) => state.emit({ type: EVENT.tool, name: event?.toolName }));
 
-    runtime.lane = await harness.lane("main", AGENT_CONTEXT);
-    return runtime;
+    const lane = await harness.lane("main", AGENT_CONTEXT);
+    if (open.length) await lane.abort(AGENT_CONTEXT);
+    return Object.assign(state, { workspace, lane });
   }
 }
 
 /** 助手最后一段正文。追问的回复就是它 —— 没有工具承载，只能从对话记录里取。 */
 async function lastAssistantText(runtime: SessionRuntime): Promise<string> {
-  const entries = await runtime.lane.findEntries(undefined, AGENT_CONTEXT);
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const message = entries[index]?.message;
+  const entries = await runtime.lane.findEntries({ order: "newestFirst" }, AGENT_CONTEXT);
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const message = entry?.type === "message" ? entry.message : undefined;
     if (message?.role !== "assistant") continue;
     const text = (message.content || [])
       .filter((block: any) => block.type === "text")

@@ -16,6 +16,41 @@ const TOPICS: TopicSeries[] = [
 ];
 
 const JD = "岗位职责：参与 AI 应用落地，熟悉 LangGraph 与 RAG";
+
+test("收到响应头但正文挂起时仍会超时", async (t) => {
+  const realTimeout = globalThis.setTimeout;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const streams: ReadableStreamDefaultController[] = [];
+  let cleanup = false;
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    if (cleanup) throw new Error("test cleanup");
+    const body = new ReadableStream({ start(controller) {
+      streams.push(controller);
+      init.signal!.addEventListener("abort", () => controller.error(new DOMException("timeout", "AbortError")), { once: true });
+    } });
+    setImmediate(() => t.mock.timers.tick(60_001));
+    return new Response(body);
+  });
+  const agent = new InterviewAgent({ config: { baseUrl: "https://fake.test", apiKey: "test", model: "fake" }, questionIndex: { topics: () => [] } });
+  const pending = agent.generatePaper({ session: makeSession(), count: 1 }).then(() => "success", (error: Error) => error.message);
+  const outcome = await Promise.race([pending, new Promise<string>((resolve) => realTimeout(() => resolve("still waiting"), 200))]);
+  cleanup = true;
+  for (const stream of streams) { try { stream.error(new Error("test cleanup")); } catch { /* 已结束 */ } }
+  await pending;
+  assert.match(outcome, /超时/);
+});
+
+test("书面测评全部章节要求归属，并拒绝缺少归属的新题", async () => {
+  const session = makeSession({ mode: "written", chapterPath: "" });
+  await withStubbedChat({ questions: [{ title: "集合？", prompt: "说明集合", standardAnswer: "答案" }] }, async (agent, body) => {
+    await assert.rejects(agent.generatePaper({ session, count: 1 }), /章节归属/);
+    assert.match(body().messages[0].content, /topic/);
+    assert.match(body().messages[0].content, /集合、多线程/);
+  });
+  await withStubbedChat({ questions: [{ title: "集合？", prompt: "说明集合", standardAnswer: "答案", topic: "集合" }] }, async (agent) => {
+    assert.equal((await agent.generatePaper({ session, count: 1 }))[0].topic, "集合");
+  });
+});
 const ANSWER = "1. **要点**：短句";
 
 /** 一次请求里我们关心的部分：发给模型的 messages */

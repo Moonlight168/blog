@@ -176,13 +176,13 @@ export default [
             sourcePath,
             // 带锚点，否则只能落到知识库页面顶部、还得自己往下翻。
             // 锚点用 slugify 生成，与 VuePress 渲染出的 h2 id 一致（已实测比对）。
-            knowledgeUrl: sourcePath
+            knowledgeUrl: question && sourcePath
               ? `/series/knowledge/${sourcePath.replace(/\.md$/, ".html")}#${slugify(String(row.questionTitle))}`
               : null,
           };
         });
       const titles = new Set(attempts.map((item) => item.questionTitle));
-      const archived = new Set(attempts.filter((item) => item.historyUrl).map((item) => item.questionTitle));
+      const archived = new Set(attempts.filter((item) => item.knowledgeUrl).map((item) => item.questionTitle));
       return {
         session,
         messages: messagesFor(session.id),
@@ -270,12 +270,12 @@ export default [
     /** 暂停 / 继续：只改会话状态与暂停计时，不调用模型 */
     method: "POST",
     pattern: PATTERN.interviewPause,
-    handler: ({ params }) => setPaused(params.id, true),
+    handler: ({ params }) => setPaused(params.id, false),
   },
   {
     method: "POST",
     pattern: PATTERN.interviewResume,
-    handler: ({ params }) => setPaused(params.id, false),
+    handler: ({ params }) => setPaused(params.id, true),
   },
   {
     /** 结束面试时选择「不保存」：丢弃这场会话记录（题目与回答已归档，不受影响） */

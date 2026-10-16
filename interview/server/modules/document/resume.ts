@@ -33,7 +33,7 @@ export function listResumeGroups(resumeDir: string) {
       .map((item) => {
         const full = path.join(dir, item.name);
         return {
-          file: item.name,
+          file: `${entry.name}/${item.name}`,
           name: path.basename(item.name).replace(/\.[^.]+$/, ""),
           path: full,
           // 最近改过的排前面：进页面默认停在「当前在维护的那份」上，
@@ -58,9 +58,10 @@ function personNameOf(resumes: Array<{ name: string }>): string {
 export function resolveResumeDoc(resumeDir: string, file: unknown): ResumeTarget | null {
   const wanted = String(file ?? "").trim();
   if (!wanted) return null;
-  for (const group of listResumeGroups(resumeDir)) {
-    const hit = group.resumes.find((item) => item.file === wanted || item.path === wanted);
-    if (hit) return hit;
-  }
-  return null;
+  const resumes = listResumeGroups(resumeDir).flatMap((group) => group.resumes);
+  const exact = resumes.find((item) => item.file === wanted || item.path === wanted);
+  if (exact) return exact;
+  // 兼容旧版保存的文件名；同名属于多人时必须重新选择，不能猜。
+  const legacy = resumes.filter((item) => path.basename(item.path) === wanted);
+  return legacy.length === 1 ? legacy[0] : null;
 }

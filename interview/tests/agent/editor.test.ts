@@ -131,6 +131,7 @@ test("中断之后这份文档还能再改 —— 锁必须释放", async (t) =>
 /** 假模型的一轮回复：可以只说一句话，也可以「先说一句 + 要调工具」——真实模型常是后者 */
 interface Turn {
   text?: string;
+  status?: number;
   toolCall?: { name: string; arguments: unknown };
 }
 
@@ -144,6 +145,7 @@ async function scriptedModel(t: TestContext, turns: Turn[]): Promise<{ baseUrl: 
     bodies.push(raw);
     const turn = turns[Math.min(index, turns.length - 1)];
     index += 1;
+    if (turn.status) { response.writeHead(turn.status).end(JSON.stringify({ error: { message: "scripted failure" } })); return; }
     const delta: Record<string, unknown> = { role: "assistant" };
     if (turn?.text) delta.content = turn.text;
     if (turn?.toolCall) {
@@ -204,6 +206,38 @@ test("提交信息：模型先说要去看 diff、再给结论，取的是结论
   const second = JSON.stringify(JSON.parse(model.bodies[1] ?? "{}"));
   assert.match(second, /实习压到两项/, "diff 的新内容要出现在模型的输入里");
   assert.match(second, /改前：三项实习/, "diff 里被删掉的那行也要出现");
+});
+
+test("提交说明：工具预告之后模型失败，返回兜底而非预告", async (t) => {
+  const { dir, file } = makeGitRepo(t);
+  const model = await scriptedModel(t, [
+    { text: "我先查看差异", toolCall: { name: "git_diff", arguments: {} } },
+    { status: 400 },
+  ]);
+  assert.equal(await makeAgent(model.baseUrl).commitMessage({ file, dir, fallback: "编辑器保存" }), "编辑器保存");
+});
+
+test("清空对话后同文件不再携带旧指令，重启后也不恢复旧历史", async (t) => {
+  const { dir, file } = makeDoc(t);
+  const model = await scriptedModel(t, [{ text: "收到" }]);
+  const agent = makeAgent(model.baseUrl);
+  await agent.revise({ kind: "resume", dir, file, instruction: "旧偏好标记XYZ" });
+  await agent.resetConversation({ kind: "resume", dir, file });
+  await makeAgent(model.baseUrl).revise({ kind: "resume", dir, file, instruction: "新对话" });
+  assert.doesNotMatch(model.bodies.at(-1)!, /旧偏好标记XYZ/);
+  assert.equal(fs.readFileSync(path.join(dir, file), "utf8"), "<html>原样</html>");
+});
+
+test("改稿提示词区分咨询和修改，简历排版只有一套页数字号规则", async (t) => {
+  const { dir, file } = makeDoc(t);
+  const model = await scriptedModel(t, [{ text: "建议压缩重复表述" }]);
+  await makeAgent(model.baseUrl).revise({ kind: "resume", dir, file, instruction: "只给建议" });
+  const prompt = JSON.stringify(JSON.parse(model.bodies[0]));
+  assert.match(prompt, /咨询.*只回答/);
+  assert.doesNotMatch(prompt, /用户指令都是资料/);
+  assert.match(prompt, /2 页内/);
+  assert.doesNotMatch(prompt, /12\.5px|单页 A4/);
+  assert.equal(fs.readFileSync(path.join(dir, file), "utf8"), "<html>原样</html>");
 });
 
 test("提交信息：标题 + 分点要整段保留，不能被截成一行", async (t) => {

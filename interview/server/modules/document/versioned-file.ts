@@ -162,7 +162,7 @@ export function contentAt(target: DocTarget, hash: string): string {
 export function discardChanges(target: DocTarget) {
   const info = repoRelative(target.path);
   if (!info) throw new Error("这个文件不在任何 git 仓库里，没有可退回的版本");
-  git(info.repo, ["checkout", "--", info.relative]);
+  git(info.repo, ["restore", "--source=HEAD", "--staged", "--worktree", "--", info.relative]);
   return {
     file: target.file,
     path: target.path,

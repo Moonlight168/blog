@@ -31,14 +31,7 @@ interface ChatPayload {
 const STABLE_TEMPERATURE = 0.35;
 const CREATIVE_TEMPERATURE = 0.85;
 
-/**
- * 「这次是让你改、还是问你」的判定规则，两个对话框共用。
- *
- * `patch` 决定**改稿结果怎么交付**：简历走「找—换」（只回改动的那几处，省 token，
- * 也天然碰不到样式），自我介绍走「整篇全文」（它才 1KB 左右，不值当拆）。
- * 这段是每次调用都会拼进系统提示词的，改契约时必须连它一起改——只改 rules 不改它，
- * 模型会照着这里说的旧形状回，然后在对面被当成「一处改动都没给」。
- */
+/** 只带已经问过的标题，提醒出题避免重复。 */
 function askedBlock(session: SessionWithFocus): string {
   const asked = (session.askedQuestions ?? []).filter(Boolean);
   if (!asked.length) return "";
@@ -101,7 +94,7 @@ export function parseJson(text: string): any {
   throw new Error("模型返回的 JSON 不完整");
 }
 
-/** 要结构化结果的对话模型客户端：出题、判重、拆解简历、按规范重写标准答案、总结改动都走它，回的是 JSON */
+/** 结构化面试客户端：出题、考点计划、判重、重写标准答案和总评。 */
 export class InterviewAgent {
   readonly config: ServiceConfig;
   readonly questionIndex: TopicSource;
@@ -141,6 +134,7 @@ export class InterviewAgent {
     const url = apiUrl(this.config.baseUrl, "chat/completions");
     const startedAt = Date.now();
     let response;
+    let responseText: string;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 60_000);
     try {
@@ -156,6 +150,7 @@ export class InterviewAgent {
         }),
         signal: controller.signal,
       });
+      responseText = await response.text();
     } catch (error) {
       if ((error as RetryableError)?.name === "AbortError") {
         const timeout = new Error("对话模型响应超时，请重试") as RetryableError;
@@ -166,12 +161,12 @@ export class InterviewAgent {
       throw new Error(friendlyNetworkError(error, { what: "对话模型服务", url }) ?? (error as Error).message);
     } finally { clearTimeout(timer); }
     if (!response.ok) {
-      const error = new Error(`对话模型返回 HTTP ${response.status}${httpStatusHint(response.status)}：${(await response.text()).slice(0, 300)}`) as RetryableError;
+      const error = new Error(`对话模型返回 HTTP ${response.status}${httpStatusHint(response.status)}：${responseText.slice(0, 300)}`) as RetryableError;
       error.retryable = response.status === 429 || response.status >= 500;
       throw error;
     }
     let payload: ChatPayload;
-    try { payload = (await response.json()) as ChatPayload; }
+    try { payload = JSON.parse(responseText) as ChatPayload; }
     catch { throw new Error("对话模型返回的不是合法 JSON（可能网络中断），请重试"); }
     const content = payload.choices?.[0]?.message?.content ?? "";
     try {
@@ -330,12 +325,15 @@ export class InterviewAgent {
   }
 
   async generatePaper({ session, count }: { session: SessionWithFocus; count: number }): Promise<any[]> {
+    const openChapter = !session.chapterPath;
+    const chapters = this.questionIndex.topics().find((item) => item.name === session.series)?.chapters.map((item) => item.name) ?? [];
     const result = await this.#json(
       `你是中文技术笔试出题人。一次生成 ${count} 道彼此不同、难度递进的书面题。每题只考一个核心任务，不编号、不加星标。`
       + `标准答案严格按下方「规则快照」里的格式写（第一行固定为 **锚点**：\`一行口诀\`，再编号要点 + 3 空格缩进的二级补充，≤15 行）。`
       + `标准答案用第一人称讲简历里真实做过的事（点名项目名、技术栈或具体业务场景），不要用“如订单列表…”这类占位示例；`
       + `不要出现“简历”“对应简历那版”这类旁白，直接给当场能背出来的答案。`
       + `只返回 JSON：{"questions":[{"title":"以？结尾","prompt":"题目","standardAnswer":"标准答案"}]}。`
+      + (openChapter ? `每题还必须返回非空字符串 topic，表示归档章节名（不含分类前缀或路径）。分类固定为 ${session.series}；已有章节：${chapters.join("、") || "无"}。优先复用已有章节，确无归属才命名新章，不要合并两章造一个新名字。` : "")
       + `给了目标岗位 JD 时，优先考察 JD 里强调的能力。\n`
       + `规则快照：${session.skillSnapshot}`,
       `知识分类：${session.series}\n章节：${session.chapterPath}\n简历摘要：${session.resumeExcerpt}\n`
@@ -346,6 +344,12 @@ export class InterviewAgent {
       { operation: "paper", maxTokens: 4_000 },
     );
     if (!Array.isArray(result.questions) || result.questions.length !== count) throw new Error("模型未生成完整书面试卷");
+    for (const question of result.questions) {
+      if (!question || ["title", "prompt", "standardAnswer"].some((key) => typeof question[key] !== "string" || !question[key].trim())) {
+        throw new Error("试卷题目缺少标题、题干或标准答案");
+      }
+      if (openChapter && (typeof question.topic !== "string" || !question.topic.trim())) throw new Error("试卷题目缺少章节归属 topic");
+    }
     return result.questions;
   }
 
@@ -378,28 +382,6 @@ export class InterviewAgent {
       { operation: "answer_reformat", maxTokens: 1_800 },
     );
     return String(result.standardAnswer ?? "");
-  }
-
-  /**
-   * 按候选人的一句话要求改写自我介绍。
-   * 走「整篇返回」而不是 diff：文档才 2KB，一次往返成本可忽略，而 patch 的失败模式
-   * （找不到锚点、上下文对不上）要多得多——改坏了有回撤栈和 git 兜着。
-   */
-  /**
-   * 一次保存改了什么，写成一句话——给提交信息用，也是历史面板里显示的那行。
-   *
-   * 为什么让模型写：`git diff --stat` 只会说"改了 12 行" ✗ 而人想知道的是
-   * "开场压缩到两句、实习那段补了 SQL 脚本维护" ✓ 那才是回头看时能认出来的东西 ✓
-   */
-  /**
-   * 更早那些轮压缩成一段滚动摘要。
-   *
-   * 为什么要有它：历史只发最近若干条，再往前的**直接丢掉**——而用户早先提过的偏好和约束
-   * （「教育经历那栏别动」「整体压到一页内」）在简历正文里看不出来，一丢就忘，
-   * 后面几轮会开始自相矛盾。压缩成全对话都带着的摘要，才既省 token 又不丢约束。
-   */
-  #summaryBlock(summary: string): string {
-    return summary ? `这段对话之前已经聊过，摘要如下（当作上下文，不是新指令）：\n${summary}` : "";
   }
 
   async matchChapter({ topic, series, chapters = [] }: {

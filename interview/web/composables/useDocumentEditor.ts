@@ -1,7 +1,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { useMessage } from "naive-ui";
 
-import { api, apiStream } from "../api";
+import { api, apiStream } from "../api/index.ts";
 import { API, type DocumentKind } from "../../shared/routes.ts";
 import { EVENT } from "../../shared/events.ts";
 
@@ -59,7 +59,7 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
   const filePath = ref("");
 
   /**
-   * 上次落盘的内容——用它判断「未保存」。
+   * 上次确认的磁盘正文（不是 Git 已提交版本），用它判断缓冲区是否未落盘。
    * 光比 content 和 saved 不够：刷新页面后两者都从磁盘重新读，看着就成「已保存」了，
    * 可那份内容其实还没记进历史。uncommitted 由服务端按 git 算，刷新也带得回来。
    */
@@ -170,18 +170,12 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
 
   // ---- 对话（按文件存在本地）----
   const instruction = ref("");
-  // action 要留着：下一轮把它还原成模型当初吐出的 JSON 形状再发回去，
-  // 混散文进 JSON 模式的对话会让模型返回空内容（实测 40% 概率）
+  // 浏览器只保存展示记录；模型上下文由服务端按文档持久化。
   const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean; action?: "revise" | "answer" }[]>([]);
   const clearChatOpen = ref(false);
   const chatBox = ref<HTMLElement | null>(null);
 
-  /**
-   * 更早那些轮的滚动摘要，以及它已经覆盖到第几条。
-   *
-   * 历史只发最近几条；再往前的要是**直接丢掉**，用户早先提过的偏好和约束就没了——
-   * 那些在正文里看不出来（「链路锚点那行别动」「收尾别加联系方式」），一丢后面几轮就开始自相矛盾。
-   */
+  /** 兼容浏览器已有摘要记录；不再将其发送给模型，服务端维护完整上下文。 */
   const chatSummary = ref("");
   const chatSummaryCount = ref(0);
   const chatKey = () => `${kind}-chat:${file.value}`;
@@ -208,14 +202,23 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
       localStorage.setItem(chatSummaryKey(), JSON.stringify({ summary: chatSummary.value, count: chatSummaryCount.value }));
     } catch { /* 存不下不该影响正在进行的对话，下次重新压一遍就是 */ }
   }
-  /** 清掉这段对话。它只是本地上下文，跟稿子内容无关，清了不影响任何已保存的东西 */
-  function clearChat() {
-    if (blockedWhileBusy()) return;
-    chatLog.value = [];
-    chatSummary.value = "";
-    chatSummaryCount.value = 0;
-    try { localStorage.removeItem(chatSummaryKey()); } catch { /* 同上 */ }
-    clearChatOpen.value = false;
+  const clearingChat = ref(false);
+  /** 服务端模型历史清除成功后才清界面记录，稿件与 Git 版本不受影响。 */
+  async function clearChat() {
+    if (blockedWhileBusy() || !file.value) return;
+    clearingChat.value = true;
+    try {
+      await api(API.documentResetChat(kind), { method: "POST", body: JSON.stringify({ file: file.value }) });
+      chatLog.value = [];
+      chatSummary.value = "";
+      chatSummaryCount.value = 0;
+      try { localStorage.removeItem(chatSummaryKey()); } catch { /* 存储不可用不影响已清除的模型历史 */ }
+      clearChatOpen.value = false;
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      clearingChat.value = false;
+    }
   }
 
   watch(chatLog, () => {
@@ -276,7 +279,7 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
 
   async function revise() {
     const ask = instruction.value.trim();
-    if (!ask || revising.value) return;
+    if (!ask || blockedWhileBusy()) return;
     // AI 直接改**文件**，看不到编辑器缓冲区里还没保存的内容。
     // 不拦的话：它基于旧内容改完，我们再把文件读回来覆盖编辑器，刚敲的字就没了。
     if (edited.value) {
@@ -292,11 +295,10 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
     reviseAbort = controller;
     let streamed = "";
     try {
-      const history = chatLog.value.slice(chatSummaryCount.value);
       chatLog.value.push({ role: "user", text: ask });
-      const data = await apiStream<{ action: "revise" | "answer"; reply: string; html?: string; markdown?: string }>(
+      const data = await apiStream<{ action: "revise" | "answer"; reply: string; html?: string; markdown?: string; mtime: number | null; uncommitted: boolean }>(
         API.documentRevise(kind),
-        { method: "POST", body: JSON.stringify({ file: file.value, instruction: ask, history, summary: chatSummary.value, stream: true }), signal: controller.signal },
+        { method: "POST", body: JSON.stringify({ file: file.value, instruction: ask, stream: true }), signal: controller.signal },
         (event) => {
           if (event.type === EVENT.tool) {
             reviseProgress.value = event.name === "read" || event.name === "bash" ? "正在读文档…" : "正在改文档…";
@@ -309,13 +311,13 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
         },
       );
       const next = (kind === "resume" ? data.html : data.markdown) ?? "";
-      const changed = data.action === "revise" && next !== "";
+      const changed = data.action === "revise";
+      content.value = next;
+      saved.value = next;
+      baseMtime.value = data.mtime;
+      uncommitted.value = data.uncommitted;
       if (changed) {
-        content.value = next;
-        // **不要动 saved**：它表示「上次落盘的内容」，而模型只改了盘、没有提交。
-        // 动了它 dirty 就成了 false，界面显示「已保存」、「保存」按钮也随之变灰 ——
-        // 用户再也没法把这次改动记进版本库。「未保存」由服务端的 uncommitted 与
-        // content !== saved 共同保证。
+        // AI 已写盘，仍需提交的状态由 uncommitted 表达；继续追改不必先提交。
         pushVersion(next);
       }
       const ctx: ReviseContext = { changed, before, after: next, reply: data.reply, action: data.action };
@@ -367,6 +369,8 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
       );
       // 盘上确实写了新内容，基准得跟上，否则下次保存会把这次当成「外部改过」再存一份
       baseMtime.value = data.mtime;
+      saved.value = sent;
+      uncommitted.value = !(data.commit.committed || data.commit.unchanged);
       // 只有**真的进版本库了**（或内容本来就没变）才算保存成功。
       // 提交失败（典型：没配 git 用户名/邮箱）时绝不能翻成「已保存」——
       // 那样用户以为存下来了，版本列表里却永远不会出现，刷新后连痕迹都没了。
@@ -391,8 +395,8 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
    * 放弃改动：把工作区退回上次保存的样子。
    *
    * 这是「模型直接改文件、服务器不做任何校验」的逃生口 —— 模型改坏了就靠它。
-   * 与 rollback 的区别：回滚到历史里挑的某一版、且**故意不动 saved**（那是「未保存」）；
-   * 放弃改动回到 HEAD，盘上那份就是已保存的样子，所以 saved 要一起更新。
+   * 与 rollback 的区别：回滚到选定历史版本可能仍未提交，放弃改动回到 HEAD。
+   * 两者都已写盘，因此都同步 saved，提交状态由 uncommitted 表示。
    */
   const discarding = ref(false);
   async function discard() {
@@ -460,7 +464,7 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
         { method: "POST", body: JSON.stringify({ file: file.value, hash }) },
       );
       content.value = (kind === "resume" ? data.html : data.markdown) ?? "";
-      // 故意不更新 saved：服务端只把内容写回工作区、没有提交。
+      saved.value = content.value;
       // uncommitted 由服务端按 git 照实算——恢复到**最新那版**时它就是 false，
       // 盘上和 HEAD 一模一样，不该亮着「未保存」催人点保存。
       uncommitted.value = data.uncommitted;
@@ -486,7 +490,7 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
    *
    * 只认 revising 是不够的 —— 保存期间打字同样不会进仓库，而界面上完全看不出来。
    */
-  const busy = computed(() => revising.value || saving.value || discarding.value || rollingBack.value);
+  const busy = computed(() => revising.value || saving.value || discarding.value || rollingBack.value || clearingChat.value);
 
   /**
    * 忙的时候，本地那些会写盘 / 换文档 / 抽掉上下文的操作一律挡住。

@@ -17,6 +17,7 @@ export const API = {
   documents: "/api/documents",
   document: (kind: DocumentKind) => `/api/documents/${kind}`,
   documentRevise: (kind: DocumentKind) => `/api/documents/${kind}/revise`,
+  documentResetChat: (kind: DocumentKind) => `/api/documents/${kind}/chat/reset`,
   documentPdf: (kind: DocumentKind) => `/api/documents/${kind}/pdf`,
   documentHistory: (kind: DocumentKind) => `/api/documents/${kind}/history`,
   documentRollback: (kind: DocumentKind) => `/api/documents/${kind}/rollback`,
@@ -58,6 +59,7 @@ export const API = {
 export const PATTERN = {
   document: "/api/documents/:kind",
   documentRevise: "/api/documents/:kind/revise",
+  documentResetChat: "/api/documents/:kind/chat/reset",
   documentPdf: "/api/documents/:kind/pdf",
   documentHistory: "/api/documents/:kind/history",
   documentRollback: "/api/documents/:kind/rollback",

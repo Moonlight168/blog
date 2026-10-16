@@ -6,6 +6,38 @@ import { makeSession } from "../../helpers/factories.ts";
 import type { Evaluation, SessionWithFocus } from "../../../shared/types.ts";
 
 const QUESTION = { title: "当前题？", standardAnswer: "**锚点**：`短句`\n\n1. **要点**：短句" };
+
+test("末题归档后自动收尾，总评读取含末题的记录并保留回滚句柄", async () => {
+  const attempts: Array<{ title: string; score: number; comment: string }> = [];
+  const rollback = async () => {};
+  const target = session({ mode: "written", paperQuestions: [QUESTION], paperIndex: 0 });
+  const result = await handleInterviewMessage({
+    session: target, text: "回答",
+    piAgent: { run: async () => ({ action: "answer", evaluation: { score: 83, comment: "末题点评" } }) },
+    archive: async () => { attempts.push({ title: QUESTION.title, score: 83, comment: "末题点评" }); return { rollback }; },
+    listAttempts: () => attempts,
+    agent: { summarize: async ({ attempts: received }: { attempts: typeof attempts }) => {
+      assert.deepEqual(received, [{ title: QUESTION.title, score: 83, comment: "末题点评" }]);
+      return "含末题总评";
+    } },
+  });
+  assert.equal(result.session.status, "completed");
+  assert.deepEqual(result.messages.map((message) => message.kind), ["evaluation", "answer", "summary"]);
+  assert.equal(result.rollbackArchive, rollback);
+});
+
+test("末题生成总评期间取消也回滚归档，不返回可提交结果", async () => {
+  const controller = new AbortController();
+  let rolledBack = false;
+  await assert.rejects(handleInterviewMessage({
+    session: session({ mode: "written", paperQuestions: [QUESTION], paperIndex: 0 }), text: "回答", signal: controller.signal,
+    piAgent: { run: async () => ({ action: "answer", evaluation: { score: 83, comment: "点评" } }) },
+    archive: async () => ({ rollback: async () => { rolledBack = true; } }),
+    listAttempts: () => [],
+    agent: { summarize: async () => { controller.abort(); return "总评"; } },
+  }), /abort/i);
+  assert.equal(rolledBack, true);
+});
 const session = (over: Partial<SessionWithFocus> = {}): SessionWithFocus =>
   makeSession({ id: "s1", status: "active", startedAt: new Date().toISOString(), currentQuestion: { ...QUESTION }, ...over });
 

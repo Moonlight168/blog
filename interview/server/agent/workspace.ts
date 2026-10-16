@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { config } from "../infra/config/index.ts";
 import { readResume } from "../modules/document/scan.ts";
+import { readPrompt } from "../infra/prompts.ts";
 
 /**
  * 会话工作目录：agent 能看到的全部文件都在这里，此外哪儿也不给。
@@ -14,12 +15,14 @@ import { readResume } from "../modules/document/scan.ts";
  */
 
 const WORKSPACE_ROOT = path.join(config.dataDir, "workspaces");
-const PROMPTS_DIR = path.join(config.appRoot, "prompts");
 
 export interface WorkspaceInput {
   sessionId: string;
   resumePath: string;
   jdPath?: string;
+  skillSnapshot?: string;
+  resumeExcerpt?: string;
+  jdExcerpt?: string;
 }
 
 export function workspacePathOf(sessionId: string): string {
@@ -34,23 +37,18 @@ export function workspacePathOf(sessionId: string): string {
  *   resume.md  面试用的简历正文（已从 HTML 转 Markdown）
  *   jd.md      目标岗位，有才建
  */
-export function prepareWorkspace({ sessionId, resumePath, jdPath }: WorkspaceInput): string {
+export function prepareWorkspace({ sessionId, resumePath, jdPath, skillSnapshot, resumeExcerpt, jdExcerpt }: WorkspaceInput): string {
   const dir = workspacePathOf(sessionId);
-  fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, "prompts"), { recursive: true });
-
-  if (fs.existsSync(PROMPTS_DIR)) {
-    for (const entry of fs.readdirSync(PROMPTS_DIR, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const skill = path.join(PROMPTS_DIR, entry.name, "SKILL.md");
-      if (fs.existsSync(skill)) fs.copyFileSync(skill, path.join(dir, "prompts", `${entry.name}.md`));
-    }
-  }
-
-  fs.writeFileSync(path.join(dir, "resume.md"), readResume(resumePath), "utf8");
-
+  // 持久化快照是权威来源；旧会话没有快照时优先保留已有副本。
+  const writeSnapshot = (file: string, snapshot: string | undefined, fallback: () => string) => {
+    const target = path.join(dir, file);
+    if (snapshot !== undefined || !fs.existsSync(target)) fs.writeFileSync(target, snapshot ?? fallback(), "utf8");
+  };
+  writeSnapshot("prompts/interviewer.md", skillSnapshot, () => readPrompt("interviewer"));
+  writeSnapshot("resume.md", resumeExcerpt, () => readResume(resumePath));
   const jd = String(jdPath ?? "").trim();
-  if (jd && fs.existsSync(jd)) fs.writeFileSync(path.join(dir, "jd.md"), readResume(jd), "utf8");
+  if (jdExcerpt !== undefined || (jd && fs.existsSync(jd))) writeSnapshot("jd.md", jdExcerpt, () => readResume(jd));
 
   return dir;
 }

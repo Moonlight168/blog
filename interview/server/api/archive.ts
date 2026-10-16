@@ -32,18 +32,21 @@ export default [
       const standardAnswer = String(attempt.standard_answer) || fallback || "";
       if (!standardAnswer) throw new HttpError(400, "这题的标准答案没有留存，无法补录");
 
+      const chapterPath = String(attempt.source_path ?? "").trim() || session.chapterPath;
+      if (!chapterPath) throw new HttpError(400, "这题的归档章节没有留存，无法补录");
+
       const result = await withArchiveLock(() => refileQuestion({
         agent,
         questionIndex,
         knowledgeRoot: config.knowledgeRoot,
         privateHistoryRoot: config.privateHistoryRoot,
-        chapterPath: session.chapterPath,
+        chapterPath,
         title,
         standardAnswer,
       }));
       if (!result.ok) throw new HttpError(400, `补录失败：${result.reason}`);
       if (!attempt.standard_answer) db.prepare("UPDATE attempts SET standard_answer=? WHERE id=?").run(standardAnswer, attempt.id);
-      return { historyUrl: result.historyUrl, sourcePath: session.chapterPath };
+      return { historyUrl: result.historyUrl, sourcePath: chapterPath };
     },
   },
 ] as Route[];

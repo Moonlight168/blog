@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { DEFAULT_COMPACTION_SETTINGS, estimateContextTokens, shouldCompact, err, FileError } from "@earendil-works/pi-agent-core";
+import { DEFAULT_COMPACTION_SETTINGS, estimateContextTokens, shouldCompact, err, FileError, type AgentLane } from "@earendil-works/pi-agent-core";
 import { BACKGROUND_CONTEXT } from "@earendil-works/pi-agent-core/harness/context";
 import { NodeExecutionEnv } from "@earendil-works/pi-agent-core/harness/env/nodejs";
 import { JsonlSessionRepo } from "@earendil-works/pi-agent-core/harness/session";
@@ -127,7 +127,7 @@ export async function openOrCreateSession(
  * 上下文快满了就压一次。没到阈值、或压缩失败都返回 false —— 调用方照常继续，
  * 压缩不该成为一轮问答失败的理由。
  */
-export async function compactIfNeeded(lane: { findEntries: Function; compact: Function }, context: typeof AGENT_CONTEXT): Promise<boolean> {
+export async function compactIfNeeded(lane: AgentLane, context: typeof AGENT_CONTEXT): Promise<boolean> {
   const entries = await lane.findEntries(undefined, context);
   const messages = entries.filter((entry: any) => entry.type === "message").map((entry: any) => entry.message);
   const usage = estimateContextTokens(messages);
@@ -139,4 +139,10 @@ export async function compactIfNeeded(lane: { findEntries: Function; compact: Fu
     return false;
   }
   return true;
+}
+
+/** pi 的 ok 只表示调用被接受；模型执行失败还会落在 value.status。 */
+export function assertRunSucceeded(result: Awaited<ReturnType<AgentLane["prompt"]>>): void {
+  if (!result.ok) throw new Error(result.error?.message || "AI 处理失败");
+  if (result.value.status === "failed") throw new Error(result.value.error?.message || "模型调用失败，请重试");
 }
