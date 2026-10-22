@@ -19,7 +19,7 @@ const versioned = ref(true);
 
 const {
   content: text, file: currentFile, filePath,
-  saved, uncommitted, baseMtime, dirty, edited,
+  uncommitted, flushToDisk,
   versions, cursor, canUndo, canRedo, flushVersion, undo, redo, onInput,
   editing, toggleEditing: baseToggleEditing, syncFromDisk, applyLoaded,
   instruction, chatLog, clearChatOpen, chatBox, chatSummary, chatSummaryCount, loadChat, clearChat, saveChatSummary,
@@ -57,6 +57,8 @@ async function toggleEditing() {
 const previewText = ref("");
 
 async function load(file = "") {
+  // 换文件之前先把还在防抖里的输入落盘：不写就随 content 一起被新文件顶掉
+  await flushToDisk();
   loading.value = true;
   try {
     const data = await api<{
@@ -67,7 +69,7 @@ async function load(file = "") {
     if (data.file) localStorage.setItem(STORAGE_KEY, data.file);
     versioned.value = data.versioned;
     editing.value = false;
-    applyLoaded({ file: data.file, name: data.name, path: data.path, content: data.markdown, mtime: data.mtime, uncommitted: data.uncommitted });
+    applyLoaded({ file: data.file, name: data.name, path: data.path, content: data.markdown, uncommitted: data.uncommitted });
   } catch (error) {
     toast.error((error as Error).message);
   } finally {
@@ -126,11 +128,11 @@ onMounted(async () => {
         <span class="si-count">步骤 {{ cursor + 1 }}/{{ versions.length }}</span>
       </div>
       <div class="si-tools">
-        <n-tag v-if="dirty" type="warning" size="small" round>未保存</n-tag>
+        <n-tag v-if="uncommitted" type="warning" size="small" round>未保存</n-tag>
         <n-tag v-else size="small" round>已保存</n-tag>
         <span class="si-count">{{ text.length }} 字</span>
         <n-button size="small" @click="openHistory">历史</n-button>
-        <n-button size="small" type="primary" :loading="saving" :disabled="busy || !dirty" @click="save">保存</n-button>
+        <n-button size="small" type="primary" :loading="saving" :disabled="busy || !uncommitted" @click="save">保存</n-button>
         <n-button size="small" :loading="discarding" :disabled="busy || !uncommitted" @click="discard">放弃改动</n-button>
       </div>
     </div>

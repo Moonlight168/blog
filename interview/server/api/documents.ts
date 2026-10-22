@@ -11,8 +11,8 @@ import { requireRepo } from "../infra/git/repo.ts";
 import { setDirectory } from "../infra/config/env-dir.ts";
 import { editorAgent } from "../context.ts";
 import {
-  commitDocument, discardDocument, documentContentAt, documentHistory, listResumeGroups, listSelfIntros,
-  readDocument, resolverOf, rollbackDocument, writeDocument,
+  commitDocument, discardDocument, documentContentAt, documentHistory, documentWorkingDiff,
+  listResumeGroups, listSelfIntros, readDocument, resolverOf, rollbackDocument, writeDocument,
 } from "../modules/document/index.ts";
 import { findBrowser, htmlToPdf, pdfFileName } from "../modules/document/pdf.ts";
 
@@ -48,40 +48,60 @@ async function saveFlow(kind: DocumentKind, input: any): Promise<unknown> {
   if (!body.trim()) throw new HttpError(400, kind === "resume" ? "简历内容不能为空" : "自我介绍不能为空");
 
   const current = readDocument(kind, config.resumeDir, file);
-  // 没有可提交的仓库就整个拒绝，一个字节都不写：写下去会变成
-  // 「盘上是新的、历史里没有、界面还说已保存」，比直接报错难查得多
+  // 没有可提交的仓库就整个拒绝，一个字节都不写：写下去会变成「盘上是新的、历史里没有」，
+  // 而界面按 git 算出来的「未保存」也永远提交不掉
   try {
     requireRepo(current.path);
   } catch (error) {
     throw new HttpError(400, (error as Error).message);
   }
 
-  const notices: string[] = [];
-  const externallyChanged = current.mtime !== null
-    && typeof input.baseMtime === "number"
-    && Math.abs(current.mtime - input.baseMtime) > 1;
-  if (externallyChanged) {
-    const archived = commitDocument(kind, config.resumeDir, file, kind === "resume" ? "简历：外部改动存档" : "自我介绍：外部改动存档");
-    if (!archived.committed && !archived.unchanged) {
-      throw new HttpError(409, `外部改动存档失败，已保留磁盘上的稿件：${archived.reason || "原因未知"}。请解决后重试保存`);
-    }
-    notices.push(archived.committed
-      ? `文件在编辑器外被改过，已把外部版本存成 ${archived.hash}`
-      : "文件在编辑器外被改过，内容与已保存版本一致，无需存档");
+  const written = writeDocument(kind, config.resumeDir, file, body);
+
+  /**
+   * `commit:false` = 编辑器边改边落盘的那一次：只写文件，不提交、也不问模型。
+   *
+   * 编辑器没有「缓冲区」这一层 —— 网页里敲的字和 AI 改的字都直接落在同一个文件上
+   * （git 的工作区），只有点「保存」才提交。所以这一步必须便宜。
+   */
+  if (input.commit === false) {
+    return { ...written, uncommitted: readDocument(kind, config.resumeDir, file).uncommitted, commit: null };
   }
 
-  const written = writeDocument(kind, config.resumeDir, file, body);
-  // 先写盘、再问模型：agent 要跑 `git diff`，改动得先落到工作区才有得看。
-  // 这也是它比「改前改后两份全文」强的地方 —— 它看的是**真实改动的行**，编不出来。
-  const scope = kind === "resume" ? "简历" : "自我介绍";
-  const message = String(input.message ?? "").trim()
-    || await editorAgent.commitMessage({
-      file: path.basename(current.path),
-      dir: path.dirname(current.path),
-      fallback: `${scope}：编辑器保存`,
-    });
+  // 先写盘、再问模型：模型要看的是**真实改动的行**，改动得先落到工作区。
+  // diff 由服务端 git 取好喂给模型（模型不碰命令行）；取不到 diff 或模型失败就
+  // **不提交**，让用户稍后重试 —— 绝不把失败自白当成提交信息写进历史。
+  const provided = String(input.message ?? "").trim();
+  const message = provided || await commitMessageFor(kind, current);
+  if (message === null) {
+    return { ...written, commit: { committed: false, reason: SAVE_FAILED_HINT }, uncommitted: true };
+  }
   const commit = commitDocument(kind, config.resumeDir, file, message);
-  return { ...written, commit, externallyChanged, notices };
+  // 提交成了、或内容本来就和 HEAD 一样，都算「盘上没有未提交的改动」
+  return { ...written, commit, uncommitted: !(commit.committed || commit.unchanged) };
+}
+
+/** 生成提交信息 / 提交失败时给用户的一句话 —— 编辑器本就边改边落盘，不必再说「已存盘」 */
+const SAVE_FAILED_HINT = "保存失败，请稍后重试";
+
+/**
+ * 让模型根据服务端取好的 diff 写提交信息。
+ * 拿不到 diff 或生成失败都返回 null，调用方据此放弃这次提交（内容已在盘上，用户稍后重试）。
+ */
+async function commitMessageFor(kind: DocumentKind, current: { file: string }): Promise<string | null> {
+  const diff = documentWorkingDiff(kind, config.resumeDir, current.file);
+  if (diff === null) {
+    console.error(`[commit-msg] 读不到 ${current.file} 的工作区 diff，本次不提交`);
+    return null;
+  }
+  // 盘上和 HEAD 一致时没有要描述的改动，直接走提交（commitFile 会回报 unchanged），不必问模型
+  if (!diff.trim()) return `${kind === "resume" ? "简历" : "自我介绍"}：编辑器保存`;
+  try {
+    return await editorAgent.commitMessage({ diff });
+  } catch (error) {
+    console.error(`[commit-msg] ${current.file} 生成提交信息失败，本次不提交：${(error as Error).message}`);
+    return null;
+  }
 }
 
 /**
@@ -117,14 +137,14 @@ async function reviseFlow(
     signal,
   });
   const current = readDocument(kind, config.resumeDir, file);
-  const changed = current.content !== before;
+  const changed = outcome.content !== before;
 
   return {
     action: changed ? "revise" : "answer",
     reply: outcome.reply,
-    [contentKeyOf(kind)]: current.content,
-    mtime: current.mtime,
+    // 模型直接改的是文件，改没改、提交没提交都由 git 说了算 —— 前端照着它显示「未保存」
     uncommitted: current.uncommitted,
+    ...(changed ? { [contentKeyOf(kind)]: outcome.content } : {}),
   };
 }
 

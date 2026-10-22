@@ -59,22 +59,13 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
   const filePath = ref("");
 
   /**
-   * 上次确认的磁盘正文（不是 Git 已提交版本），用它判断缓冲区是否未落盘。
-   * 光比 content 和 saved 不够：刷新页面后两者都从磁盘重新读，看着就成「已保存」了，
-   * 可那份内容其实还没记进历史。uncommitted 由服务端按 git 算，刷新也带得回来。
+   * 「盘上有还没提交的改动」—— 由服务端按 git 算，刷新也带得回来。
+   *
+   * 这是「未保存」的**唯一**判据。编辑器没有「缓冲区」这一层：网页里敲的字和
+   * AI 改的字都直接落在同一个文件上（git 的工作区），点「保存」才提交。
+   * 于是也就不需要「内容是不是外部改的」这种区分 —— 盘上是什么就是什么。
    */
-  const saved = ref("");
   const uncommitted = ref(false);
-  /** 载入时的文件 mtime；服务端用它识别「编辑期间被别处改过」 */
-  const baseMtime = ref<number | null>(null);
-
-  const dirty = computed(() => content.value !== saved.value || uncommitted.value);
-  /**
-   * 编辑器里改过、还没落盘。和 dirty 不是一回事：恢复过一版之后 dirty 也是 true，
-   * 但那份内容**已经在盘上**了。syncFromDisk 要判断的是「缓冲区里有没有还没落盘的东西」，
-   * 用 dirty 会让它恢复后永远不肯重读磁盘。
-   */
-  const edited = computed(() => content.value !== saved.value);
 
   /**
    * 载入 / 重新载入之后把状态一次性对齐。
@@ -83,16 +74,68 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
    * 文件还没定下来时读到的键是上一份的（首次是空后缀），拿到空数组本身是一次变化，
    * 会触发下面的 deep watcher 把 [] 写进**正确**的那把键 —— 等于打开页面就清空对话。
    */
-  function applyLoaded(next: { file: string; name: string; path: string; content: string; mtime: number | null; uncommitted: boolean }) {
+  function applyLoaded(next: { file: string; name: string; path: string; content: string; uncommitted: boolean }) {
     file.value = next.file;
     name.value = next.name;
     filePath.value = next.path;
     content.value = next.content;
-    saved.value = next.content;
     uncommitted.value = next.uncommitted;
-    baseMtime.value = next.mtime;
     resetVersions(next.content);
     loadChat();
+  }
+
+  // ---- 边改边落盘 ----
+  /** 停手多久之后把内容写进文件。防抖不是限制用户，是别让每个按键都发一次 HTTP */
+  const WRITE_DEBOUNCE_MS = 500;
+  let writeTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * 排队中、还没发出去的那一次写。
+   *
+   * **必须在排队时就把「哪个文件、写什么内容」定下来**，不能在发送时才去读
+   * `file.value` / `content.value`：用户完全可能在这 500ms 里切到另一份稿子，
+   * 那时这两个已经指向新文件了 —— 会把上一份的内容写进新文件里（实测丢过数据）。
+   */
+  let pending: { file: string; content: string } | null = null;
+  /** 正在飞的那次写盘；新的写要等它落地，否则旧内容可能后到、把新的盖回去 */
+  let writing: Promise<boolean> | null = null;
+
+  function scheduleWrite() {
+    clearTimeout(writeTimer);
+    pending = { file: file.value, content: content.value };
+    writeTimer = setTimeout(() => { void flushToDisk(); }, WRITE_DEBOUNCE_MS);
+  }
+
+  /**
+   * 把排队中的那一次写出去 —— **只写，不提交**。
+   *
+   * 没有排队中的写就什么都不做（不是"把当前内容写一遍"）。切文件前调它一次，
+   * 保证刚敲的字跟着它**自己的**文件落盘，而不是被新文件顶掉。
+   */
+  async function flushToDisk(): Promise<boolean> {
+    clearTimeout(writeTimer);
+    writeTimer = undefined;
+    const job = pending;
+    pending = null;
+    if (!job?.file) return false;
+    if (writing) await writing;
+
+    const payload = kind === "resume"
+      ? { file: job.file, html: job.content, commit: false }
+      : { file: job.file, markdown: job.content, commit: false };
+    const task = api<{ uncommitted: boolean }>(API.document(kind), { method: "POST", body: JSON.stringify(payload) })
+      .then((data) => {
+        // 已经切到别的文件了就别拿这份的结果去覆盖界面上的状态
+        if (job.file === file.value) uncommitted.value = data.uncommitted;
+        return true;
+      })
+      .catch((error) => {
+        // 落盘失败要让用户知道：不然他以为改的都在盘上，其实只在浏览器内存里
+        toast.error(`写盘失败：${(error as Error).message}`);
+        return false;
+      })
+      .finally(() => { writing = null; });
+    writing = task;
+    return task;
   }
 
   // ---- 回撤 / 前进 ----
@@ -121,6 +164,7 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
     if (!canUndo.value) return;
     cursor.value -= 1;
     content.value = versions.value[cursor.value];
+    scheduleWrite();
     await afterRestore?.();
   }
   async function redo() {
@@ -129,12 +173,14 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
     if (!canRedo.value) return;
     cursor.value += 1;
     content.value = versions.value[cursor.value];
+    scheduleWrite();
     await afterRestore?.();
   }
   function onInput(event: Event) {
     content.value = (event.target as HTMLTextAreaElement).value;
     window.clearTimeout(snapshotTimer);
     snapshotTimer = window.setTimeout(() => pushVersion(content.value), 800);
+    scheduleWrite();
   }
 
   /** 预览栏是否切到编辑态 */
@@ -146,42 +192,47 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
   }
 
   /**
-   * 没有未保存改动时，把文件重新读一遍。两处需要它：
-   * - **刷新预览之前**：否则渲染的是内存里那份，外面改过也看不到
-   * - **让 AI 改之前**（更要紧）：模型基于陈旧内容改写，一保存就把外面的改动盖掉了
+   * 把文件重新读一遍，编辑器跟着走。两处需要它：
+   * - **刷新预览之前**：否则渲染的是内存里那份
+   * - **让 AI 改之前**：模型基于盘上那份改，编辑器得先和它对齐
    *
-   * 有未保存改动时不读——那才是他正在编辑、正要保存的东西。
+   * 先 flushToDisk 把还在防抖里的输入落下去 —— 否则刚敲的那几下会被读回来的旧内容盖掉。
+   * 落盘之后两边内容一致，读回来的不一样就说明**是别处改的**，如实重新载入。
    */
   async function syncFromDisk(signal?: AbortSignal): Promise<boolean> {
-    if (edited.value || !file.value) return false;
+    if (!file.value) return false;
     const requestedFile = file.value;
     const requestedContent = content.value;
-    const requestedMtime = baseMtime.value;
-    const latest = await api<{ html?: string; markdown?: string; mtime: number | null; uncommitted: boolean }>(
+    await flushToDisk();
+    const latest = await api<{ html?: string; markdown?: string; uncommitted: boolean }>(
       `${API.document(kind)}?file=${encodeURIComponent(file.value)}`,
       { signal },
     );
-    signal?.throwIfAborted();
-    if (file.value !== requestedFile || content.value !== requestedContent || baseMtime.value !== requestedMtime || edited.value) return false;
-    if (latest.mtime === baseMtime.value) return false;
     const next = (kind === "resume" ? latest.html : latest.markdown) ?? "";
-    content.value = next;
-    saved.value = next;
     uncommitted.value = latest.uncommitted;
-    baseMtime.value = latest.mtime;
+    // 读盘期间用户又敲了字或换了文件：这份响应已经过期，不能把新输入盖掉
+    if (file.value !== requestedFile || content.value !== requestedContent) return false;
+    if (next === content.value) return false;
+    content.value = next;
     resetVersions(next);
-    toast.info("文件在外部被改过，已重新载入");
+    toast.info("文件在编辑器外被改过，已重新载入");
     return true;
   }
 
   // ---- 对话（按文件存在本地）----
   const instruction = ref("");
-  // 浏览器只保存展示记录；模型上下文由服务端按文档持久化。
+  // action 要留着：下一轮把它还原成模型当初吐出的 JSON 形状再发回去，
+  // 混散文进 JSON 模式的对话会让模型返回空内容（实测 40% 概率）
   const chatLog = ref<{ role: "user" | "assistant"; text: string; error?: boolean; action?: "revise" | "answer" }[]>([]);
   const clearChatOpen = ref(false);
   const chatBox = ref<HTMLElement | null>(null);
 
-  /** 兼容浏览器已有摘要记录；不再将其发送给模型，服务端维护完整上下文。 */
+  /**
+   * 更早那些轮的滚动摘要，以及它已经覆盖到第几条。
+   *
+   * 历史只发最近几条；再往前的要是**直接丢掉**，用户早先提过的偏好和约束就没了——
+   * 那些在正文里看不出来（「链路锚点那行别动」「收尾别加联系方式」），一丢后面几轮就开始自相矛盾。
+   */
   const chatSummary = ref("");
   const chatSummaryCount = ref(0);
   const chatKey = () => `${kind}-chat:${file.value}`;
@@ -253,12 +304,8 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
   /** 中断这次改稿；没在改就什么都不做 */
   let reviseAbort: AbortController | null = null;
   function abortRevise() { reviseAbort?.abort(); }
-  let disposed = false;
-  onScopeDispose(() => {
-    disposed = true;
-    abortRevise();
-    if (snapshotTimer) window.clearTimeout(snapshotTimer);
-  });
+  // 离开编辑页（切走路由）时把等待中的请求一并停掉，否则它会挂着直到超时
+  onScopeDispose(abortRevise);
 
   /**
    * 改完之后把盘上真实的样子读回来；返回**盘上是不是真的跟编辑器不一样**。
@@ -272,15 +319,13 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
   async function reloadAfterRevise(): Promise<boolean> {
     if (!file.value) return false;
     try {
-      const latest = await api<{ html?: string; markdown?: string; mtime: number | null; uncommitted: boolean }>(
+      const latest = await api<{ html?: string; markdown?: string; uncommitted: boolean }>(
         `${API.document(kind)}?file=${encodeURIComponent(file.value)}`,
       );
       const next = (kind === "resume" ? latest.html : latest.markdown) ?? "";
-      if (next === content.value && latest.mtime === baseMtime.value) return false;
-      content.value = next;
-      saved.value = next;
       uncommitted.value = latest.uncommitted;
-      baseMtime.value = latest.mtime;
+      if (next === content.value) return false;
+      content.value = next;
       resetVersions(next);
       await afterRestore?.();
       return true;
@@ -291,32 +336,29 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
 
   async function revise() {
     const ask = instruction.value.trim();
-    if (!ask || blockedWhileBusy()) return;
-    // AI 直接改**文件**，看不到编辑器缓冲区里还没保存的内容。
-    // 不拦的话：它基于旧内容改完，我们再把文件读回来覆盖编辑器，刚敲的字就没了。
-    if (edited.value) {
-      toast.warning("先把编辑器里的改动保存了再让 AI 改 —— 它直接改文件，看不到你还没保存的内容");
-      return;
-    }
-    revising.value = true;
-    reviseProgress.value = "正在读文档…";
-    let before = content.value;
-    const requestedFile = file.value;
+    if (!ask || revising.value) return;
     const controller = new AbortController();
     reviseAbort = controller;
+    const requestedFile = file.value;
+    const requestedContent = content.value;
+    revising.value = true;
+    reviseProgress.value = "正在读文档…";
+    const before = content.value;
     let streamed = "";
-    let dispatched = false;
     try {
-      await syncFromDisk(controller.signal);
-      controller.signal.throwIfAborted();
-      if (edited.value || file.value !== requestedFile) return;
-      before = content.value;
-      instruction.value = "";
-      dispatched = true;
+      // 不用先判「编辑器里有没有没保存的东西」：手改和 AI 改动的是**同一个文件**，
+      // syncFromDisk 会先把防抖里的输入落盘，模型看到的就是最新那份。
+      try { await syncFromDisk(controller.signal); } catch { /* 读不到就按内存里的走，别为此拦住 */ }
+      if (controller.signal.aborted) return { changed: false, before };
+      instruction.value = "";      // 先清输入框，别让这句话一直挂着
+      if (file.value !== requestedFile || content.value !== requestedContent) {
+        return { changed: false, before };   // 读盘后文件已变，这条指令对不上了
+      }
+      const history = chatLog.value.slice(chatSummaryCount.value);
       chatLog.value.push({ role: "user", text: ask });
-      const data = await apiStream<{ action: "revise" | "answer"; reply: string; html?: string; markdown?: string; mtime: number | null; uncommitted: boolean }>(
+      const data = await apiStream<{ action: "revise" | "answer"; reply: string; html?: string; markdown?: string; uncommitted?: boolean }>(
         API.documentRevise(kind),
-        { method: "POST", body: JSON.stringify({ file: file.value, instruction: ask, stream: true }), signal: controller.signal },
+        { method: "POST", body: JSON.stringify({ file: file.value, instruction: ask, history, summary: chatSummary.value, stream: true }), signal: controller.signal },
         (event) => {
           if (event.type === EVENT.tool) {
             reviseProgress.value = event.name === "read" || event.name === "bash" ? "正在读文档…" : "正在改文档…";
@@ -328,14 +370,13 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
           }
         },
       );
+      if (typeof data.uncommitted === "boolean") uncommitted.value = data.uncommitted;
       const next = (kind === "resume" ? data.html : data.markdown) ?? "";
-      const changed = data.action === "revise";
-      content.value = next;
-      saved.value = next;
-      baseMtime.value = data.mtime;
-      uncommitted.value = data.uncommitted;
+      const changed = data.action === "revise" && next !== "";
+      // 等模型期间用户换了文件：这段回复属于上一个文件，不能贴到现在的编辑器上
+      if (file.value !== requestedFile) return { changed: false, before };
       if (changed) {
-        // AI 已写盘，仍需提交的状态由 uncommitted 表达；继续追改不必先提交。
+        content.value = next;
         pushVersion(next);
       }
       const ctx: ReviseContext = { changed, before, after: next, reply: data.reply, action: data.action };
@@ -347,11 +388,6 @@ export function useDocumentEditor({ kind, afterRestore, afterRevise, previewComm
       if (streamed || changed) await afterRevise?.(changed);
       return { changed, before };
     } catch (error) {
-      if (disposed) return;
-      if (!dispatched) {
-        if (!controller.signal.aborted) toast.error((error as Error).message);
-        return;
-      }
       // 「点停止」和「真的失败」都要走这里重新读盘：模型是**直接改文件**的，
       // 它可能在中断/报错之前已经改了一部分，而编辑器还停在旧文本上。
       const aborted = controller.signal.aborted;
@@ -378,33 +414,28 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
   async function save() {
     if (blockedWhileBusy()) return false;
     saving.value = true;
-    // 发出去的是这一份快照；saved 也必须用它。
-    // 直接读 content.value 的话，一旦内容在保存期间变过，就会把**没写进仓库**的新内容
-    // 标成「已保存」—— 用户以为存下来了，其实没有。
+    // 排队中的那次落盘作废：下面这份快照就是最新内容，再发一次旧的反倒会把它盖回去
+    clearTimeout(writeTimer);
+    writeTimer = undefined;
+    pending = null;
+    // 这次保存要把「点下去那一刻的内容」提交上去，所以发的是这一份快照
     const sent = content.value;
     try {
       const payload = kind === "resume"
-        ? { file: file.value, html: sent, baseMtime: baseMtime.value }
-        : { file: file.value, markdown: sent, baseMtime: baseMtime.value };
-      const data = await api<{ mtime: number; notices: string[]; commit: { committed: boolean; hash?: string; reason?: string; unchanged?: boolean } }>(
+        ? { file: file.value, html: sent }
+        : { file: file.value, markdown: sent };
+      const data = await api<{ uncommitted: boolean; commit: { committed: boolean; hash?: string; reason?: string; unchanged?: boolean } }>(
         API.document(kind),
         { method: "POST", body: JSON.stringify(payload) },
       );
-      // 盘上确实写了新内容，基准得跟上，否则下次保存会把这次当成「外部改过」再存一份
-      baseMtime.value = data.mtime;
-      saved.value = sent;
-      uncommitted.value = !(data.commit.committed || data.commit.unchanged);
-      // 只有**真的进版本库了**（或内容本来就没变）才算保存成功。
-      // 提交失败（典型：没配 git 用户名/邮箱）时绝不能翻成「已保存」——
-      // 那样用户以为存下来了，版本列表里却永远不会出现，刷新后连痕迹都没了。
+      // 未保存与否一律听服务端的（它按 git 算）：这样「提交失败」不会被误报成已保存 ——
+      // 那会让用户以为存下来了，版本列表里却永远不会出现，刷新后连痕迹都没了。
+      uncommitted.value = data.uncommitted;
       if (data.commit.committed || data.commit.unchanged) {
-        saved.value = sent;
-        uncommitted.value = false;
         toast.success(data.commit.committed ? `已保存 ${data.commit.hash}` : "已保存");
       } else {
-        toast.warning(`写进磁盘了，但没进版本库：${data.commit.reason ?? "原因未知"}。先解决它，再点一次「保存」`);
+        toast.warning(data.commit.reason ?? "保存失败，请稍后重试");
       }
-      for (const notice of data.notices) toast.warning(notice);
       return true;
     } catch (error) {
       toast.error((error as Error).message);
@@ -418,8 +449,7 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
    * 放弃改动：把工作区退回上次保存的样子。
    *
    * 这是「模型直接改文件、服务器不做任何校验」的逃生口 —— 模型改坏了就靠它。
-   * 与 rollback 的区别：回滚到选定历史版本可能仍未提交，放弃改动回到 HEAD。
-   * 两者都已写盘，因此都同步 saved，提交状态由 uncommitted 表示。
+   * 与 rollback 的区别：回滚到历史里挑的某一版；放弃改动直接回到 HEAD。
    */
   const discarding = ref(false);
   async function discard() {
@@ -432,9 +462,7 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
       );
       const next = (kind === "resume" ? data.html : data.markdown) ?? "";
       content.value = next;
-      saved.value = next;
       uncommitted.value = data.uncommitted;
-      baseMtime.value = data.mtime;
       // 用 pushVersion 而不是 resetVersions：万一放弃错了，还能靠「← 回撤」找回来
       pushVersion(next);
       toast.success("已放弃改动，回到上次保存的那版");
@@ -487,11 +515,9 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
         { method: "POST", body: JSON.stringify({ file: file.value, hash }) },
       );
       content.value = (kind === "resume" ? data.html : data.markdown) ?? "";
-      saved.value = content.value;
-      // uncommitted 由服务端按 git 照实算——恢复到**最新那版**时它就是 false，
+      // uncommitted 由服务端按 git 照实算 —— 恢复到**最新那版**时它就是 false，
       // 盘上和 HEAD 一模一样，不该亮着「未保存」催人点保存。
       uncommitted.value = data.uncommitted;
-      baseMtime.value = data.mtime;
       // 用 pushVersion 而不是 resetVersions：恢复不留提交，万一恢复错了，
       // 至少还能靠「← 回撤」把恢复前的内容找回来
       pushVersion(content.value);
@@ -529,7 +555,7 @@ function defaultReplyText({ changed, reply }: ReviseContext): string {
 
   return {
     content, file, name, filePath,
-    saved, uncommitted, baseMtime, dirty, edited,
+    uncommitted, flushToDisk,
     versions, cursor, canUndo, canRedo,
     pushVersion, resetVersions, flushVersion, undo, redo, onInput,
     editing, toggleEditing, syncFromDisk, applyLoaded,

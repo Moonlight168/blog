@@ -1,15 +1,13 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { AgentHarness, type AgentHarnessTool, type AgentLane } from "@earendil-works/pi-agent-core";
+import { AgentHarness, type AgentLane } from "@earendil-works/pi-agent-core";
 import { withAbortSignal } from "@earendil-works/pi-agent-core/harness/context";
 import { MemorySessionRepo } from "@earendil-works/pi-agent-core/harness/session";
-import { Type } from "@earendil-works/pi-ai";
 
 import { assertConfigured, makeModels } from "./model.ts";
-import { AGENT_CONTEXT, assertRunSucceeded, createEnv, createSessionRepo, createToolEnv, deleteAgentSession, openOrCreateSession, readTurnReply } from "./session.ts";
+import { AGENT_CONTEXT, assertRunSucceeded, createEnv, createSessionRepo, createToolEnv, deleteAgentSession, openOrCreateSession } from "./session.ts";
 import { buildEditingTools } from "./tools.ts";
 import { COMMIT_MESSAGE_PROMPT } from "../infra/git/subject.ts";
 import { readPrompt } from "../infra/prompts.ts";
@@ -45,14 +43,13 @@ export interface ReviseOutcome {
 }
 
 export interface CommitMessageInput {
-  /** 文档在工作目录里的文件名（相对路径） */
-  file: string;
-  /** 文档所在目录 —— agent 就在这里跑 git */
-  dir: string;
-  /** 模型没给出可用摘要时的兜底文案 */
-  fallback: string;
+  /** 这次保存的 unified diff —— 由服务端 git 取好喂进来，模型不碰命令行 */
+  diff: string;
   signal?: AbortSignal;
 }
+
+/** 生成提交信息的超时：写一行说明不该等太久，超了就按失败处理，让用户稍后重试 */
+const COMMIT_MESSAGE_TIMEOUT_MS = 30_000;
 
 const SPEC_OF: Record<DocumentKind, string> = {
   resume: "resume-editor",
@@ -133,7 +130,11 @@ export class DocumentEditorAgent {
   }
 
   /**
-   * 写提交信息：让 agent 自己跑 `git diff` 看**真实改了哪些行**。
+   * 写提交信息：把服务端取好的 diff 喂给模型，让它归纳成一句话 + 分点。
+   *
+   * **不给模型任何工具** —— 它只做纯文本归纳，git 由服务端跑（见 documents.saveFlow）。
+   * 曾经让它自己跑 `git diff`：Windows 上 pi 的 bash 走 WSL，服务一抽风就无输出，
+   * 模型把「我跑不了命令」当结果返回，那段自白直接进了提交历史。
    *
    * 每次**新开一个一次性会话**，而且用 `MemorySessionRepo`（只在内存里，不落 JSONL）——
    * 只为一句话在 data/sessions 下留个会话文件不值当。
@@ -141,63 +142,58 @@ export class DocumentEditorAgent {
    * 不复用改稿那条 lane：手工保存时，那条上下文里可能是几天前的一次改动，
    * 模型会照着旧印象描述，而不是照着 diff —— 那正是要避免的错。
    */
-  async commitMessage({ file, dir, fallback, signal }: CommitMessageInput): Promise<string> {
+  async commitMessage({ diff, signal }: CommitMessageInput): Promise<string> {
+    // 内存版不收 cwd（那是 JsonlSessionRepo 要写进会话文件元数据的）；只做一次归纳，不需要工作目录
+    const session = await new MemorySessionRepo().create({}, AGENT_CONTEXT);
+    const { harness } = await AgentHarness.create(
+      {
+        session,
+        models: this.#models,
+        model: this.#model,
+        tools: [],
+        systemPrompt: COMMIT_MESSAGE_PROMPT,
+      },
+      AGENT_CONTEXT,
+    );
     try {
-      if (path.basename(file) !== file) throw new Error("提交信息只允许读取当前目录下的文件");
-      const gitDiffTool = {
-        name: "git_diff",
-        label: "读取当前文件差异",
-        description: "读取本次保存目标文件尚未提交的 Git diff。无需参数。",
-        parameters: Type.Object({}),
-        execute: async () => ({
-          content: [{
-            type: "text" as const,
-            text: execFileSync("git", ["diff", "--", file], { cwd: dir, encoding: "utf8", maxBuffer: 1_048_576 }),
-          }],
-          details: {},
-        }),
-      } as unknown as AgentHarnessTool<undefined>;
-      // 内存版不落 JSONL；这里只保留模型生成提交说明所需的短会话。
-      const session = await new MemorySessionRepo().create({}, AGENT_CONTEXT);
-      const { harness } = await AgentHarness.create(
-        {
-          session,
-          models: this.#models,
-          model: this.#model,
-          tools: [gitDiffTool],
-          systemPrompt: COMMIT_MESSAGE_PROMPT,
-        },
-        AGENT_CONTEXT,
-      );
+      const lane = await harness.lane("main", AGENT_CONTEXT);
+      const boundary = await newestEntryId({ lane });
+      // 与 #reviseOnce 同一套：信号要进 Context，pi 是从 context.abortSignal 读中断的
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new Error("生成提交信息超时")), COMMIT_MESSAGE_TIMEOUT_MS);
+      if (signal) {
+        if (signal.aborted) controller.abort(signal.reason);
+        else signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+      }
       try {
-        const lane = await harness.lane("main", AGENT_CONTEXT);
-        // 与 #reviseOnce 同一套：信号要进 Context，pi 是从 context.abortSignal 读中断的
-        const controller = new AbortController();
-        if (signal) {
-          if (signal.aborted) controller.abort(signal.reason);
-          else signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
-        }
         const result = await lane.prompt(
-          `看一眼 ${file} 这次改了什么，写这次保存的提交信息。`,
+          `这次保存的 diff：\n\n${diff}`,
           undefined,
           withAbortSignal(controller.signal, AGENT_CONTEXT),
         );
-        assertRunSucceeded(result);
-        return commitMessageOf(await readTurnReply(lane)) || fallback;
+        if (result?.ok === false) throw new Error(result.error?.message || "模型调用失败");
+        // ok:true 也可能是失败：pi 在「模型调用本身出错」时照样以 ok 返回，只是 status 是 failed
+        if (result?.value?.status === "failed") throw new Error(result.value.error?.message || "模型调用失败");
+        const message = commitMessageOf(await lastAssistantText({ lane }, boundary));
+        if (!message) throw new Error("模型没有返回提交信息");
+        return message;
       } finally {
-        await harness.close(AGENT_CONTEXT);
+        clearTimeout(timer);
       }
     } catch (error) {
-      // 提交信息写不出来不该拦住保存：退回一句朴素的，先把内容落盘。
-      // 但要说一声，否则「为什么这次历史里是『编辑器保存』」没人查得出。
-      console.warn(`写提交信息失败，退回兜底文案：${(error as Error).message}`);
-      return fallback;
+      // 生成不出来就不提交 —— 用户会看到「已存盘但未提交，请稍后重试」，细节留在这里
+      console.error(`[commit-msg] 生成提交信息失败：${(error as Error).message}`, error);
+      throw error;
+    } finally {
+      await harness.close(AGENT_CONTEXT);
     }
   }
 
   async #reviseOnce({ kind, file, dir, instruction, signal, onEvent = () => {} }: ReviseInput): Promise<ReviseOutcome> {
     const runtime = await this.#runtimeFor(kind, dir, file);
     runtime.emit = onEvent;
+    // 划界：本轮之后新增的条目才是这一轮说的话
+    const boundary = await newestEntryId(runtime);
 
     const prompt = `当前文档：${file}。请按本轮请求决定只回答还是修改此文件。\n\n用户请求：${instruction}`;
     // 信号与超时都要进 Context：pi 是从 context.abortSignal 读中断的。
@@ -221,7 +217,9 @@ export class DocumentEditorAgent {
     assertRunSucceeded(result);
 
     return {
-      reply: await readTurnReply(runtime.lane),
+      // 本轮没有正文就返回空 —— 上层会给出「模型这次没有给出回复」，
+      // 绝不能退回上一轮的回复来充数
+      reply: await lastAssistantText(runtime, boundary),
       // 从**盘上**读回来，而不是让模型把全文再吐一遍
       content: fs.readFileSync(path.join(dir, file), "utf8"),
     };
@@ -282,6 +280,38 @@ export class DocumentEditorAgent {
     }
     return Object.assign(runtime, { lane, harness });
   }
+}
+
+/**
+ * 取**本轮**新增的那几条里，最后一条有正文的 assistant 消息。
+ *
+ * 必须按轮划界。整个会话往前找的话，本轮没有正文时会拿到**上一轮**的回复 ——
+ * 而本轮没有正文是会真发生的：模型的输出被长度上限截断时，这一轮只剩一个断掉的
+ * thinking 块，没有 text 也没有工具调用。界面于是把上一轮的话当成这一轮的回答显示，
+ * 用户看到的就是「我改了三次，它每次都回同一句」。
+ *
+ * `afterId` 是发问前最新那条的 id：新条目排在它前面，扫到它就说明本轮到此为止。
+ */
+async function lastAssistantText(runtime: { lane: any }, afterId?: string): Promise<string> {
+  const entries = await runtime.lane.findEntries(undefined, AGENT_CONTEXT);
+  for (const entry of entries) {
+    if (afterId && entry.id === afterId) break;
+    const message = entry?.message;
+    if (message?.role !== "assistant") continue;
+    const text = (message.content || [])
+      .filter((block: any) => block.type === "text")
+      .map((block: any) => block.text)
+      .join("")
+      .trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+/** 发问前最新那条的 id —— 用来划出「本轮新增」的边界，见 lastAssistantText */
+async function newestEntryId(runtime: { lane: any }): Promise<string | undefined> {
+  const entries = await runtime.lane.findEntries(undefined, AGENT_CONTEXT);
+  return entries[0]?.id;
 }
 
 /**

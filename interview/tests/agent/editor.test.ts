@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { initRepo, commitAll } from "../helpers/repo.ts";
 import { config } from "../../server/infra/config/index.ts";
 import { DocumentEditorAgent } from "../../server/agent/editor.ts";
 
@@ -29,7 +28,7 @@ interface Decoy {
 }
 
 /** 永不回包的假服务：请求进来了就挂住，直到被中断 */
-async function hangingModel(t: TestContext, recover = false): Promise<Decoy> {
+async function hangingModel(t: TestContext): Promise<Decoy> {
   let requests = 0;
   let markArrived: () => void = () => {};
   const arrived = new Promise<void>((resolve) => { markArrived = resolve; });
@@ -37,11 +36,6 @@ async function hangingModel(t: TestContext, recover = false): Promise<Decoy> {
   const server = http.createServer(async (request, response) => {
     for await (const _ of request) { /* 读完再挂住，模拟「模型正在想」 */ }
     requests += 1;
-    if (recover && requests > 1) {
-      response.writeHead(200, { "Content-Type": "text/event-stream" });
-      response.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant", content: "恢复成功" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
-      return;
-    }
     markArrived();
     // 不 writeHead、不 end —— 一直挂着，只有连接被中断才会结束
     request.on("close", () => { /* 客户端断了，什么都不用做 */ });
@@ -109,7 +103,7 @@ test("改到一半中断：立刻停手，而不是等模型自己结束", async
 
 test("中断之后这份文档还能再改 —— 锁必须释放", async (t) => {
   const { dir, file } = makeDoc(t);
-  const model = await hangingModel(t, true);
+  const model = await hangingModel(t);
   // 同一个 agent 实例：锁在实例上，换实例就测不到它了
   const agent = makeAgent(model.baseUrl);
 
@@ -120,17 +114,24 @@ test("中断之后这份文档还能再改 —— 锁必须释放", async (t) =>
   controller.abort();
   await assert.rejects(first);
 
-  const second = await agent.revise({ kind: "resume", file, dir, instruction: "再来一次" });
-  assert.equal(second.reply, "恢复成功");
+  // 第二次：用一个**没被中断**的 signal，才会真的走到并发锁那一步
+  // （revise 里 throwIfAborted 在锁检查之前，预中断的调用永远测不到锁）
+  // 地址指向一个没人监听的端口，于是它会因为连不上而失败 —— 正好用来区分两种失败
+  const locked = await agent
+    .revise({ kind: "resume", file, dir, instruction: "再来一次" })
+    .then(() => null, (error: unknown) => error as Error);
+
+  assert.ok(locked, "这份文档指向一个不存在的服务，应当失败");
+  assert.doesNotMatch(locked.message, /正在改/, "中断必须释放并发锁，否则用户停一次就永久改不动了");
 });
 
-// ---- 提交信息：交给 agent 读取受限的 git diff 看真实改动 ----
+// ---- 提交信息：把服务端取好的 diff 交给模型归纳 ----
 
-/** 假模型的一轮回复：可以只说一句话，也可以「先说一句 + 要调工具」——真实模型常是后者 */
+/** 假模型的一轮回复：只有文本，或「只有思考、没有正文」——后者是输出被长度上限截断的样子 */
 interface Turn {
   text?: string;
-  status?: number;
-  toolCall?: { name: string; arguments: unknown };
+  /** 只有思考、没有正文的一轮 —— 真实模型输出被长度上限截断时就是这样 */
+  reasoning?: string;
 }
 
 /** 按脚本回包的假服务，播完就重复最后一轮。同时记下每次请求体 */
@@ -143,21 +144,13 @@ async function scriptedModel(t: TestContext, turns: Turn[]): Promise<{ baseUrl: 
     bodies.push(raw);
     const turn = turns[Math.min(index, turns.length - 1)];
     index += 1;
-    if (turn.status) { response.writeHead(turn.status).end(JSON.stringify({ error: { message: "scripted failure" } })); return; }
     const delta: Record<string, unknown> = { role: "assistant" };
     if (turn?.text) delta.content = turn.text;
-    if (turn?.toolCall) {
-      delta.tool_calls = [{
-        index: 0,
-        id: `call-${index}`,
-        type: "function",
-        function: { name: turn.toolCall.name, arguments: JSON.stringify(turn.toolCall.arguments) },
-      }];
-    }
+    if (turn?.reasoning) delta.reasoning_content = turn.reasoning;
     response.writeHead(200, { "Content-Type": "text/event-stream" });
     response.write(`data: ${JSON.stringify({
       id: "chatcmpl-test", object: "chat.completion.chunk", created: 1, model: "fake-model",
-      choices: [{ index: 0, delta, finish_reason: turn?.toolCall ? "tool_calls" : "stop" }],
+      choices: [{ index: 0, delta, finish_reason: "stop" }],
       usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
     })}\n\n`);
     response.end("data: [DONE]\n\n");
@@ -171,48 +164,108 @@ async function scriptedModel(t: TestContext, turns: Turn[]): Promise<{ baseUrl: 
 }
 
 /**
- * 造一个「已提交一版、又改了但没提交」的仓库 —— 正是点「保存」那一刻的状态。
- * 写提交信息就是在这一刻发生的。
+ * 服务端 git 取好的 diff —— 提交信息这步只消费它，不再自己跑 git。
+ * （曾经让模型自己跑 `git diff`：Windows 上 pi 走 WSL，服务一抽风就无输出，
+ * 模型把「我跑不了命令」当结果返回，那段自白直接进了提交历史。）
  */
-function makeGitRepo(t: TestContext): { dir: string; file: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "commit-msg-"));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const file = "张三-后端.html";
-  fs.writeFileSync(path.join(dir, file), "<html>改前：三项实习</html>", "utf8");
-  initRepo(dir);
-  commitAll(dir, "1.0 初版");
-  fs.writeFileSync(path.join(dir, file), "<html>改后：实习压到两项</html>", "utf8");
-  return { dir, file };
-}
+const SAMPLE_DIFF = [
+  "diff --git a/张三-后端.html b/张三-后端.html",
+  "--- a/张三-后端.html",
+  "+++ b/张三-后端.html",
+  "@@ -1 +1 @@",
+  "-<html>改前：三项实习</html>",
+  "+<html>改后：实习压到两项</html>",
+  "",
+].join("\n");
 
-test("提交信息：模型先说要去看 diff、再给结论，取的是结论", async (t) => {
-  const { dir, file } = makeGitRepo(t);
-  // 真实模型就是这样的：第一轮先念一句「我去看看 git status 和 diff」并调工具，
-  // 工具跑完才给结论。这条钉住的是「取的是哪一条 assistant 文本」——
-  // 取反方向时，存进历史的会是那句英文预告。
-  const model = await scriptedModel(t, [
-    { text: "I'll check the diff for that file.", toolCall: { name: "git_diff", arguments: {} } },
-    { text: "简历：实习压到两项" },
-  ]);
+test("提交信息：diff 由服务端喂进去，模型只归纳成一句话", async (t) => {
+  const model = await scriptedModel(t, [{ text: "简历：实习压到两项" }]);
 
-  const message = await makeAgent(model.baseUrl).commitMessage({ file, dir, fallback: "简历：编辑器保存" });
+  const message = await makeAgent(model.baseUrl).commitMessage({ diff: SAMPLE_DIFF });
 
   assert.equal(message, "简历：实习压到两项");
-  assert.doesNotMatch(message, /I'll check/, "不能把动手前的预告当成提交信息");
-  // 第二轮请求里带着受限工具的结果 —— 那里面必须是真实的 diff，
-  // 而不是模型自己猜的。把请求体解成对象再序列化，好让 \uXXXX 转义还原成中文。
-  const second = JSON.stringify(JSON.parse(model.bodies[1] ?? "{}"));
-  assert.match(second, /实习压到两项/, "diff 的新内容要出现在模型的输入里");
-  assert.match(second, /改前：三项实习/, "diff 里被删掉的那行也要出现");
+  // diff 必须出现在请求体里 —— 证明模型看到的是服务端取的真实改动，而不是自己猜的。
+  // 把请求体解成对象再序列化，好让 \uXXXX 转义还原成中文。
+  const body = JSON.stringify(JSON.parse(model.bodies[0] ?? "{}"));
+  assert.match(body, /实习压到两项/, "diff 的新内容要出现在模型的输入里");
+  assert.match(body, /改前：三项实习/, "diff 里被删掉的那行也要出现");
 });
 
-test("提交说明：工具预告之后模型失败，返回兜底而非预告", async (t) => {
-  const { dir, file } = makeGitRepo(t);
+test("提交信息：标题 + 分点要整段保留，不能被截成一行", async (t) => {
+  const model = await scriptedModel(t, [{ text: "简历：实习压到两项\n\n- 删掉一段实习\n- 技能栏同步收敛" }]);
+
+  const message = await makeAgent(model.baseUrl).commitMessage({ diff: SAMPLE_DIFF });
+
+  assert.match(message, /^简历：实习压到两项/, "第一行是标题");
+  assert.match(message, /- 删掉一段实习/);
+  assert.match(message, /- 技能栏同步收敛/, "分点不能被截掉 —— 它们是历史面板悬浮时看的详情");
+});
+
+test("改稿：第 2 次显示的是本轮的回复，不是上一轮的", async (t) => {
+  const { dir, file } = makeDoc(t);
+  // 改稿 lane 按文件复用（同一份稿子的连续几轮共享上下文），所以到第 2 轮时
+  // 会话里已经有两条 assistant 文本了 —— 取错方向就会一直显示第 1 轮的回复。
+  const model = await scriptedModel(t, [{ text: "第 1 轮的回复" }, { text: "第 2 轮的回复" }]);
+  const agent = makeAgent(model.baseUrl);
+
+  const first = await agent.revise({ kind: "resume", file, dir, instruction: "第一次改" });
+  const second = await agent.revise({ kind: "resume", file, dir, instruction: "第二次改" });
+
+  assert.equal(first.reply, "第 1 轮的回复");
+  assert.equal(second.reply, "第 2 轮的回复", "第二次改稿必须显示本轮的回复");
+});
+
+test("改稿：本轮只有思考、没有正文时，不能拿上一轮的回复冒充", async (t) => {
+  const { dir, file } = makeDoc(t);
+  // 真实场景：粘一整份简历进去，模型把输出预算全花在思考上、撞上长度上限被截断，
+  // 这一轮只剩一个断掉的 thinking 块 —— 没有 text，也没有工具调用。
   const model = await scriptedModel(t, [
-    { text: "我先查看差异", toolCall: { name: "git_diff", arguments: {} } },
-    { status: 400 },
+    { text: "第 1 轮的回复" },
+    { reasoning: "我在逐段比对……（这里被截断了" },
   ]);
-  assert.equal(await makeAgent(model.baseUrl).commitMessage({ file, dir, fallback: "编辑器保存" }), "编辑器保存");
+  const agent = makeAgent(model.baseUrl);
+
+  const first = await agent.revise({ kind: "resume", file, dir, instruction: "第一次改" });
+  const second = await agent.revise({ kind: "resume", file, dir, instruction: "第二次改" });
+
+  assert.equal(first.reply, "第 1 轮的回复");
+  assert.equal(second.reply, "", "本轮没有正文就该返回空，由上层给「模型这次没有给出回复」");
+});
+
+test("提交信息：模型套了代码块围栏或引号，也要清干净", async (t) => {
+  const model = await scriptedModel(t, [{ text: "```\n「简历：技能栏重排」\n```" }]);
+
+  const message = await makeAgent(model.baseUrl).commitMessage({ diff: SAMPLE_DIFF });
+
+  assert.equal(message, "简历：技能栏重排");
+});
+
+test("提交信息：模型连不上就报错，不拿失败自白当提交信息", async (t) => {
+  // 指向一个没人监听的端口。生成不出来就抛错 —— 上层给「保存失败，请稍后重试」，
+  // 绝不把模型含糊的输出（或错误自白）写进历史。
+  await assert.rejects(
+    () => makeAgent("http://127.0.0.1:1/v1").commitMessage({ diff: SAMPLE_DIFF }),
+  );
+});
+
+test("提交信息：模型只给了思考、没有正文时，同样报错而不是提交空话", async (t) => {
+  const model = await scriptedModel(t, [{ reasoning: "我在读 diff……（被截断了" }]);
+
+  await assert.rejects(
+    () => makeAgent(model.baseUrl).commitMessage({ diff: SAMPLE_DIFF }),
+  );
+});
+
+test("提交信息：不落 JSONL —— 会话只在内存里", async (t) => {
+  const model = await scriptedModel(t, [{ text: "简历：技能栏重排" }]);
+  const sessionsRoot = path.join(config.dataDir, "sessions");
+  const count = () => (fs.existsSync(sessionsRoot) ? fs.readdirSync(sessionsRoot).length : 0);
+  const before = count();
+
+  await makeAgent(model.baseUrl).commitMessage({ diff: SAMPLE_DIFF });
+
+  // 只为一句话建个会话文件不值当 —— 这里钉住「用的是内存版仓库」
+  assert.equal(count(), before, "不该在 data/sessions 下新增会话文件");
 });
 
 test("清空对话后同文件不再携带旧指令，重启后也不恢复旧历史", async (t) => {
@@ -236,71 +289,5 @@ test("改稿提示词区分咨询和修改，简历排版只有一套页数字�
   assert.match(prompt, /2 页内/);
   assert.doesNotMatch(prompt, /12\.5px|单页 A4/);
   assert.equal(fs.readFileSync(path.join(dir, file), "utf8"), "<html>原样</html>");
-});
-
-test("本轮空回复不能冒充上一轮的改稿说明", async (t) => {
-  const { dir, file } = makeDoc(t);
-  const model = await scriptedModel(t, [{ text: "上一轮说明" }, { text: "" }]);
-  const agent = makeAgent(model.baseUrl);
-  await agent.revise({ kind: "resume", file, dir, instruction: "第一问" });
-  await assert.rejects(agent.revise({ kind: "resume", file, dir, instruction: "第二问" }), /未返回正文/);
-});
-
-test("提交信息：标题 + 分点要整段保留，不能被截成一行", async (t) => {
-  const { dir, file } = makeGitRepo(t);
-  const model = await scriptedModel(t, [
-    { text: "I'll check the diff.", toolCall: { name: "git_diff", arguments: {} } },
-    { text: "简历：实习压到两项\n\n- 删掉一段实习\n- 技能栏同步收敛" },
-  ]);
-
-  const message = await makeAgent(model.baseUrl).commitMessage({ file, dir, fallback: "简历：编辑器保存" });
-
-  assert.match(message, /^简历：实习压到两项/, "第一行是标题");
-  assert.match(message, /- 删掉一段实习/);
-  assert.match(message, /- 技能栏同步收敛/, "分点不能被截掉 —— 它们是历史面板悬浮时看的详情");
-});
-
-test("改稿：第 2 次显示的是本轮的回复，不是上一轮的", async (t) => {
-  const { dir, file } = makeDoc(t);
-  // 改稿 lane 按文件复用（同一份稿子的连续几轮共享上下文），所以到第 2 轮时
-  // 会话里已经有两条 assistant 文本了 —— 取错方向就会一直显示第 1 轮的回复。
-  const model = await scriptedModel(t, [{ text: "第 1 轮的回复" }, { text: "第 2 轮的回复" }]);
-  const agent = makeAgent(model.baseUrl);
-
-  const first = await agent.revise({ kind: "resume", file, dir, instruction: "第一次改" });
-  const second = await agent.revise({ kind: "resume", file, dir, instruction: "第二次改" });
-
-  assert.equal(first.reply, "第 1 轮的回复");
-  assert.equal(second.reply, "第 2 轮的回复", "第二次改稿必须显示本轮的回复");
-});
-
-test("提交信息：模型套了代码块围栏或引号，也要清干净", async (t) => {
-  const { dir, file } = makeGitRepo(t);
-  const model = await scriptedModel(t, [{ text: "```\n「简历：技能栏重排」\n```" }]);
-
-  const message = await makeAgent(model.baseUrl).commitMessage({ file, dir, fallback: "简历：编辑器保存" });
-
-  assert.equal(message, "简历：技能栏重排");
-});
-
-test("提交信息：模型连不上就退回兜底文案，不拦住保存", async (t) => {
-  const { dir, file } = makeGitRepo(t);
-  // 指向一个没人监听的端口
-  const message = await makeAgent("http://127.0.0.1:1/v1").commitMessage({ file, dir, fallback: "简历：编辑器保存" });
-
-  assert.equal(message, "简历：编辑器保存");
-});
-
-test("提交信息：不落 JSONL —— 会话只在内存里", async (t) => {
-  const { dir, file } = makeGitRepo(t);
-  const model = await scriptedModel(t, [{ text: "简历：技能栏重排" }]);
-  const sessionsRoot = path.join(config.dataDir, "sessions");
-  const count = () => (fs.existsSync(sessionsRoot) ? fs.readdirSync(sessionsRoot).length : 0);
-  const before = count();
-
-  await makeAgent(model.baseUrl).commitMessage({ file, dir, fallback: "简历：编辑器保存" });
-
-  // 只为一句话建个会话文件不值当 —— 这里钉住「用的是内存版仓库」
-  assert.equal(count(), before, "不该在 data/sessions 下新增会话文件");
 });
 

@@ -1,5 +1,5 @@
 import type { DocumentKind } from "../../../shared/routes.ts";
-import { commitFile, contentAt, discardChanges, historyOf, readFileAt, rollbackTo, writeFile, type DocTarget } from "./versioned-file.ts";
+import { commitFile, contentAt, discardChanges, historyOf, readFileAt, rollbackTo, workingDiff, writeFile, type DocTarget } from "./versioned-file.ts";
 import { listResumeGroups, resolveResumeDoc } from "./resume.ts";
 import { listSelfIntros, resolveSelfIntro, selfIntroDir, personDir } from "./self-intro.ts";
 
@@ -58,6 +58,15 @@ export function commitDocument(kind: DocumentKind, resumeDir: string, file: unkn
   const target = RESOLVERS[kind].resolve(resumeDir, file);
   if (!target) return { committed: false, reason: RESOLVERS[kind].missing(file) };
   return commitFile(target, message);
+}
+
+/**
+ * 工作区相对 HEAD 的改动，喂给模型写提交信息用；null = 拿不到（不在仓库、git 失败）。
+ * 由服务端 git 取，模型不碰命令行 —— 见 editor.commitMessage。
+ */
+export function documentWorkingDiff(kind: DocumentKind, resumeDir: string, file: unknown): string | null {
+  const target = RESOLVERS[kind].resolve(resumeDir, file);
+  return target ? workingDiff(target) : null;
 }
 
 export function documentHistory(kind: DocumentKind, resumeDir: string, file: unknown) {

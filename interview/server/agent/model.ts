@@ -23,7 +23,15 @@ export function makeModels(config: ServiceConfig) {
     input: ["text"] as ("text" | "image")[],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128_000,
-    maxTokens: 4_096,
+    /**
+     * 单次回复的输出上限。**推理与答案共用这一个预算** —— 调小了会在剪长文档时
+     * 被思考吃光：实测粘一整份简历进去，模型思考到一半就 `stopReason: "length"`，
+     * 这一轮只剩一个断掉的 thinking 块，没正文也没工具调用，用户看到的是「它没反应」。
+     *
+     * 8192 是 DeepSeek 系的上限，再大接口会直接拒。换到上限更高的服务时可以调大；
+     * 但**整份 write**（一份 18KB 的 HTML）本来就超出任何合理的输出预算，那条路该少走。
+     */
+    maxTokens: 8_192,
     compat: { supportsStrictMode: false, maxTokensField: "max_tokens", supportsUsageInStreaming: true },
   };
   const provider = createProvider({
