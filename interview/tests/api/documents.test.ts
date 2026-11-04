@@ -22,3 +22,4 @@ test("重置对话 HTTP 入口解析目标文件且不修改稿件", async (t) =
   assert.equal(fs.readFileSync(file, "utf8"), "<html>保留稿件</html>");
   assert.equal((await reset("../outside.html")).status, 404);
 });
+
